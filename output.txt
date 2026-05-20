@@ -1,0 +1,155 @@
+
+Mocha v0.5 — All Tests
+==========================
+--- 1. str-to-int cast ---
+42
+--- 2. Break ---
+0
+1
+2
+3
+4
+--- 3. char ---
+h
+h
+a
+z
+true
+--- 4. Continue ---
+1
+2
+3
+4
+6
+7
+8
+9
+10
+--- 5. Diamond Virtual Inheritance ---
+Bird breathes
+Horse breathes
+--- 6. Dictionary ---
+Shiv
+16
+Mocha
+Mocha Lang
+true
+false
+5
+name
+age
+gpa
+active
+lang
+Mocha
+16
+9.8
+true
+Mocha Lang
+4
+Shiv
+16
+--- 7. Do-While ---
+0
+1
+2
+3
+4
+--- 8. extend str ---
+true
+false
+--- 9. extends + implements ---
+...
+Quack!
+--- 10. for each ---
+1
+2
+3
+4
+5
+Shiv
+Mocha
+Lang
+1.1
+2.2
+3.3
+--- 11. from import wildcard ---
+3.14159
+2.71828
+6.28319
+1.61803
+--- 12. Inline bool return ---
+true
+false
+--- 13. MochaMath ------ abs ---
+3.5
+3.5
+0
+--- round / rdown / rup ---
+3
+-3
+3
+-4
+4
+-3
+--- pow ---
+1
+1024
+0.5
+-27
+--- sin / cos ---
+0
+1
+1
+6.12323e-17
+--- inv_sin / inv_cos / inv_tan ---
+1.5708
+0
+0.785398
+--- tan ---
+0
+1
+
+### BEWARE!! tan(1.5708) is at a pole. Mocha is returning INF.
+
+INF
+--- sqrt ---
+2
+1.41421
+0
+
+### BEWARE!! sqrt(-1) has negative input - result is imaginary.
+
+
+### BEWARE!! log(0) is negative infinity.
+
+
+### BEWARE!! log(-1) is complex.
+
+
+### BEWARE!! log2(0) is negative infinity.
+
+
+### BEWARE!! log10(0) is negative infinity.
+
+0+1i
+--- cubrot ---
+3
+2
+-3
+--- log / log2 / log10 ---
+1
+0
+INF
+0+3.14159i
+3
+INF
+2
+INF
+--- INF detection ---
+
+### BEWARE!! sqrt(-1) has negative input - result is imaginary.
+
+
+### BEWARE!! tan(1.5708) is at a pole. Mocha is returning INF.
+

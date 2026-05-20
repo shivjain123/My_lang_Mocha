@@ -1,0 +1,107 @@
+Python_AND_ExecutableFiles\mocha_codegen.py:19:    "char":    "i8*",
+Python_AND_ExecutableFiles\mocha_codegen.py:168:        length = len(value.encode('utf-8')) + 1  # byte length not char length! Not: this causes problems. so use this change everywhere
+Python_AND_ExecutableFiles\mocha_codegen.py:202:                "declare i8* @mocha_str_charat(i8*, i32)",
+Python_AND_ExecutableFiles\mocha_codegen.py:461:        if isinstance(node, CharLiteral):   return self.gen_char_literal(node)
+Python_AND_ExecutableFiles\mocha_codegen.py:536:        length = len(node.value.encode('utf-8')) + 1  # byte length, not char length
+Python_AND_ExecutableFiles\mocha_codegen.py:543:    def gen_char_literal(self, node):
+Python_AND_ExecutableFiles\mocha_codegen.py:609:        # String charAt
+Python_AND_ExecutableFiles\mocha_codegen.py:610:        if obj_type == "i8*" and node.member == "charAt":
+Python_AND_ExecutableFiles\mocha_codegen.py:817:        if op_kind in ("char_eq", "char_ne"):
+Python_AND_ExecutableFiles\mocha_codegen.py:818:            # load the actual byte from each char pointer
+Python_AND_ExecutableFiles\mocha_codegen.py:824:            instr = "icmp eq" if op_kind == "char_eq" else "icmp ne"
+Python_AND_ExecutableFiles\mocha_codegen.py:987:        # bool → str/char pointer
+Python_AND_ExecutableFiles\mocha_codegen.py:999:        # str → str or char → str (already a pointer, no-op)
+Python_AND_ExecutableFiles\mocha_codegen.py:1122:            elem_size = {"int": 4, "vast": 8, "float": 8, "str": 8, "bool": 1, "char": 8}.get(elem_mocha, 4)
+Python_AND_ExecutableFiles\mocha_codegen.py:1309:        if member == "charAt":
+Python_AND_ExecutableFiles\mocha_codegen.py:1312:            self.emit(f"  {tmp} = call i8* @mocha_str_charat(i8* {s_reg}, i32 {idx_reg})")
+Python_AND_ExecutableFiles\mocha_codegen.py:3313:            "char":     "i8*",
+Python_AND_ExecutableFiles\mocha_codegen.py:3624:            "char":  ("i8*",     1),
+Python_AND_ExecutableFiles\mocha_codegen.py:4109:            "char":  8,
+Python_AND_ExecutableFiles\mocha_compile.py:182:        "char":  "i8*",
+Python_AND_ExecutableFiles\mocha_lexer.py:194:    "char":       TokenType.TYPE_CHAR,
+Python_AND_ExecutableFiles\mocha_lexer.py:245:        self.pos     = 0           # current char index
+Python_AND_ExecutableFiles\mocha_lexer.py:272:    def match_char(self, expected: str) -> bool:
+Python_AND_ExecutableFiles\mocha_lexer.py:273:        """ Consume next char if it matches expected """
+Python_AND_ExecutableFiles\mocha_lexer.py:339:    # --- Lex char literal ---
+Python_AND_ExecutableFiles\mocha_lexer.py:341:    def lex_char(self, line, col) -> Token:
+Python_AND_ExecutableFiles\mocha_lexer.py:342:        """ Consume 'd' char literal """
+Python_AND_ExecutableFiles\mocha_lexer.py:344:            raise MochaLexError("Empty char literal", line, col)
+Python_AND_ExecutableFiles\mocha_lexer.py:350:                "Char literal must be exactly one character", line, col
+Python_AND_ExecutableFiles\mocha_lexer.py:444:                self.tokens.append(self.lex_char(line, col))
+Python_AND_ExecutableFiles\mocha_lexer.py:460:                if self.match_char("+"):
+Python_AND_ExecutableFiles\mocha_lexer.py:463:                elif self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:471:                if self.match_char("-"):
+Python_AND_ExecutableFiles\mocha_lexer.py:474:                elif self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:477:                elif self.match_char(">"):
+Python_AND_ExecutableFiles\mocha_lexer.py:485:                if self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:493:                if self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:505:                if self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:513:                if self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:521:                if self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:529:                if self.match_char("="):
+Python_AND_ExecutableFiles\mocha_lexer.py:537:                if self.match_char("&"):
+Python_AND_ExecutableFiles\mocha_lexer.py:547:                if self.match_char("|"):
+Python_AND_ExecutableFiles\mocha_lexer.py:557:                if self.match_char("."):
+Python_AND_ExecutableFiles\mocha_lexer.py:597:                    continue  # silently skip unicode chars (emojis in comments etc.)
+Python_AND_ExecutableFiles\mocha_lexer.py:599:                    f"Unexpected character: '{ch}'", line, col
+Python_AND_ExecutableFiles\mocha_parser.py:43:        TokenType.TYPE_CHAR:   "char",
+Python_AND_ExecutableFiles\mocha_typeChecker.py:111:    COMPARABLE_TYPES = {"int", "float", "char", "str", "vast"}
+Python_AND_ExecutableFiles\mocha_typeChecker.py:114:    PRIMITIVE_TYPES = {"int", "float", "str", "bool", "char", "null", "vast"}
+Python_AND_ExecutableFiles\mocha_typeChecker.py:323:            return "char"
+Python_AND_ExecutableFiles\mocha_typeChecker.py:579:            if node.member == "charAt":
+Python_AND_ExecutableFiles\mocha_typeChecker.py:580:                return "char"
+Python_AND_ExecutableFiles\mocha_typeChecker.py:687:            if left_type == "char" and right_type == "char":  # ← ADD THIS FIRST
+Python_AND_ExecutableFiles\mocha_typeChecker.py:688:                node.op_kind = f"char_{self.op_name(node.op)}"
+Python_AND_ExecutableFiles\mocha_typeChecker.py:902:            if func_name == "charAt":
+Python_AND_ExecutableFiles\mocha_typeChecker.py:903:                return "char"
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:11:     3.  char
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:212:// SECTION 3 — char
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:215:function section_char() -> null {
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:216:    print("--- 3. char ---", newLine=true);
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:219:    var c: char = s.charAt(0);
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:225:    const LOWER: char[] = ['a','b','c','d','e','f','g','h','i','j','k','l','m',
+Python_AND_ExecutableFiles\allEncompassing_v0.6_tests.mch:1334:    section_char();
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:11:     3.  char
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:173:// SECTION 3 — char
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:176:function section_char() -> null {
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:177:    print("--- 3. char ---", newLine=true);
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:180:    var c: char = s.charAt(0);
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:186:    const LOWER: char[] = ['a','b','c','d','e','f','g','h','i','j','k','l','m',
+Python_AND_ExecutableFiles\comprehensive_v0.5_tests.mch:834:    section_char();
+Python_AND_ExecutableFiles\evil_number.mch:15:            if (binString.charAt(i) == '1') { countOfOnes++; };
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:51:    function current() -> char {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:53:            return this.source.charAt(this.pos);
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:58:    function peek(offset: int) -> char {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:61:            return this.source.charAt(idx);
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:66:    function advance() -> char {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:67:        var ch: char = this.source.charAt(this.pos);
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:77:    function match_char(expected: char) -> bool {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:144:                var esc: char = this.advance();
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:162:    // Lex char literal  'x'
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:165:    function lex_char(l: int, c: int) -> Token {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:167:            puts("LexError: Empty char literal");
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:170:        var ch: char = this.advance();
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:172:            puts("LexError: Char literal must be exactly one character");
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:183:    function lex_number(first: char, l: int, c: int) -> Token {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:218:    function lex_identifier(first: char, l: int, c: int) -> Token {
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:273:        if (word == "char")       { return this.make_token(TokenType.TYPE_CHAR,  word, l, c); };
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:288:            var sc: char = word.charAt(si);
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:319:            var ch: char = this.advance();
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:342:                this.tokens.push(this.lex_char(l, c));
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:360:                if (this.match_char("+")) { this.tokens.push(this.make_token(TokenType.PLUS_PLUS,   "++", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:361:                else if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.PLUS_ASSIGN, "+=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:366:                if (this.match_char("-")) { this.tokens.push(this.make_token(TokenType.MINUS_MINUS,  "--", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:367:                else if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.MINUS_ASSIGN, "-=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:368:                else if (this.match_char(">")) { this.tokens.push(this.make_token(TokenType.ARROW,        "->", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:373:                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.STAR_ASSIGN,  "*=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:378:                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.SLASH_ASSIGN, "/=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:384:                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.EQ,     "==", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:389:                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.NEQ,    "!=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:394:                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.LTE,    "<=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:399:                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.GTE,    ">=", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:404:                if (this.match_char("&")) { this.tokens.push(this.make_token(TokenType.AND,    "&&", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:409:                if (this.match_char("|")) { this.tokens.push(this.make_token(TokenType.OR,     "||", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:414:                if (this.match_char(".")) { this.tokens.push(this.make_token(TokenType.RANGE,  "..", l, c)); }
+Python_AND_ExecutableFiles\self_hosted\lexer.mch:429:            // Unknown character — skip silently if unicode, else emit UNKNOWN
+Python_AND_ExecutableFiles\type_cast.mch:24:    // Test 5: char to int (ASCII value)
+Python_AND_ExecutableFiles\type_cast.mch:25:    var c1: char = 'A';

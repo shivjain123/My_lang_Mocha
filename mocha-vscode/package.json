@@ -1,0 +1,41 @@
+{
+  "name": "mocha-language",
+  "displayName": "Mocha Language",
+  "description": "Syntax highlighting and language support for the Mocha programming language (.mch)",
+  "version": "0.5.0",
+  "publisher": "shiv-jain",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mocha",
+        "aliases": ["Mocha", "mch"],
+        "extensions": [".mch", ".mchi"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/mocha-light.png",
+          "dark": "./icons/mocha-dark.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mocha",
+        "scopeName": "source.mch",
+        "path": "./syntaxes/mocha.tmLanguage.json"
+      }
+    ],
+    "themes": [],
+    "snippets": [
+      {
+        "language": "mocha",
+        "path": "./snippets/mocha.json"
+      }
+    ]
+  }
+}

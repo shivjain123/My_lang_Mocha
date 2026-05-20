@@ -1,0 +1,1 @@
+MochaMatVec: matrix is defective (eigenvectors are NOT linearly independent). Not diagonalisable over C. Use Jordan normal form.

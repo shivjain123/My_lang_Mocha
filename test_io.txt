@@ -1,0 +1,4 @@
+Hello from Mocha!
+Second line here.
+Third line here.
+Appended line.

@@ -1,0 +1,44 @@
+// Auto-generated manifest for mocha-math.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+const PI: float = 3.141592653589793;
+const E: float = 2.718281828459045;
+const TAU: float = 6.283185307179586;
+const PHI: float = 1.618033988749895;
+const INF: float = 999999999999999.0;
+const RAD: int = 0;
+const DEG: int = 1;
+function abs(x: float) -> float native mocha_user_abs;
+function rdown(x: float) -> float;
+function rup(x: float) -> float;
+function round(x: float) -> float native mocha_user_round;
+function fast_pow(base: float, exp: int) -> float native mocha_math_fast_pow;
+function c_pow(base: float, exp: float) -> float native mocha_math_c_pow;
+function complex_pow(base: Complex, exp: float) -> Complex native mocha_math_complex_pow;
+extend float function sin(mes: int) -> float native mocha_ext_float_sin;
+extend float function cos(mes: int) -> float native mocha_ext_float_cos;
+extend float function tan(mes: int) -> float native mocha_ext_float_tan;
+extend float function inv_sin() -> Complex native mocha_ext_float_inv_sin;
+extend float function inv_cos() -> Complex native mocha_ext_float_inv_cos;
+extend float function inv_tan() -> float native mocha_ext_float_inv_tan;
+extend float function sqrt() -> Complex native mocha_ext_float_sqrt;
+extend float function cubrot() -> float native mocha_ext_float_cubrot;
+extend float function log() -> Complex native mocha_ext_float_log;
+extend float function log2() -> Complex native mocha_ext_float_log2;
+extend float function log10() -> Complex native mocha_ext_float_log10;
+extend float function derivative(f: lambda) -> float native mocha_math_derivative;
+extend float function limit(f: lambda) -> float native mocha_math_limit;
+extend float function erf() -> float native mocha_wrap_erf;
+function integral(f: lambda, a: float, b: float) -> float native mocha_math_integral;
+function limit_inf(f: lambda) -> float native mocha_math_limit_inf;
+function rand_int(min: int, max: int) -> int native mocha_rand_int;
+function rand_float(min: float, max: float) -> float native mocha_rand_float;
+function rand_seed(seed: int) -> null native mocha_rand_seed;
+function bcrypt_rand_int(min: int, max: int) -> int native mocha_bcrypt_rand_int;
+function bcrypt_rand_float(min: float, max: float) -> float native mocha_bcrypt_rand_float;
+function bcrypt_rand_unit() -> float native mocha_bcrypt_rand_unit;
+function bcrypt_rand_ints(min: int, max: int, count: int) -> str native mocha_bcrypt_rand_ints;
+function bcrypt_rand_bool() -> bool native mocha_bcrypt_rand_bool;
+function bcrypt_rand_seed() -> int native mocha_bcrypt_rand_seed;

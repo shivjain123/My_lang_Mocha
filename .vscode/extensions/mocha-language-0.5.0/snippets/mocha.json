@@ -1,0 +1,199 @@
+{
+  "Mocha Function": {
+    "prefix": "fn",
+    "body": [
+      "function ${1:name}(${2:params}) -> ${3:null} {",
+      "\t${4:// body}",
+      "};"
+    ],
+    "description": "Mocha function declaration"
+  },
+
+  "Mocha Entry Point": {
+    "prefix": "entry",
+    "body": [
+      "function ${1:main}(didLoad, args: str[]) -> null {",
+      "\t${2:// entry point}",
+      "};"
+    ],
+    "description": "Mocha didLoad entry point"
+  },
+
+  "Mocha Class": {
+    "prefix": "cls",
+    "body": [
+      "class ${1:ClassName} {",
+      "\tvar ${2:field}: ${3:str};",
+      "",
+      "\tfunction constructor(${4:params}) -> null {",
+      "\t\tthis.${2:field} = ${4:params};",
+      "\t};",
+      "};"
+    ],
+    "description": "Mocha class declaration"
+  },
+
+  "Mocha If": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t${2:// body}",
+      "};"
+    ],
+    "description": "Mocha if statement"
+  },
+
+  "Mocha If Else": {
+    "prefix": "ife",
+    "body": [
+      "if (${1:condition}) {",
+      "\t${2:// true branch}",
+      "} else {",
+      "\t${3:// false branch}",
+      "};"
+    ],
+    "description": "Mocha if-else statement"
+  },
+
+  "Mocha Match": {
+    "prefix": "match",
+    "body": [
+      "match(${1:value}) {",
+      "\tcase ${2:pattern}: return ${3:result};",
+      "\tdefault: return ${4:default};",
+      "};"
+    ],
+    "description": "Mocha match statement"
+  },
+
+  "Mocha For Loop": {
+    "prefix": "for",
+    "body": [
+      "for (var ${1:i}: int = 0; ${1:i} < ${2:n}; ${1:i}++) {",
+      "\t${3:// body}",
+      "};"
+    ],
+    "description": "Mocha C-style for loop"
+  },
+
+  "Mocha For Each": {
+    "prefix": "foreach",
+    "body": [
+      "for each ${1:item} in ${2:arr} {",
+      "\t${3:// body}",
+      "};"
+    ],
+    "description": "Mocha for-each loop"
+  },
+
+  "Mocha While": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition}) {",
+      "\t${2:// body}",
+      "};"
+    ],
+    "description": "Mocha while loop"
+  },
+
+  "Mocha Var": {
+    "prefix": "var",
+    "body": [
+      "var ${1:name}: ${2:int} = ${3:value};"
+    ],
+    "description": "Mocha variable declaration"
+  },
+
+  "Mocha Const": {
+    "prefix": "const",
+    "body": [
+      "const ${1:NAME}: ${2:int} = ${3:value};"
+    ],
+    "description": "Mocha constant declaration (SCREAMING_CASE enforced)"
+  },
+
+  "Mocha Lambda": {
+    "prefix": "lam",
+    "body": [
+      "lambda (${1:x}: ${2:int}) -> ${3:int}: ${4:x + 1}"
+    ],
+    "description": "Mocha lambda expression"
+  },
+
+  "Mocha Native FFI": {
+    "prefix": "native",
+    "body": [
+      "function ${1:name}(${2:params}) -> ${3:int} native ${4:c_symbol};"
+    ],
+    "description": "Mocha native FFI declaration"
+  },
+
+  "Mocha Import Wildcard": {
+    "prefix": "importall",
+    "body": [
+      "from \"${1:mocha-math}\" import *;"
+    ],
+    "description": "Mocha wildcard import"
+  },
+
+  "Mocha Import Named": {
+    "prefix": "import",
+    "body": [
+      "import ${1:alias} from \"${2:library}\" as ${3:name};"
+    ],
+    "description": "Mocha named import"
+  },
+
+  "Mocha Print": {
+    "prefix": "print",
+    "body": [
+      "print(${1:\"Hello\"}, newLine=true);"
+    ],
+    "description": "Mocha print with newline"
+  },
+
+  "Mocha Array": {
+    "prefix": "arr",
+    "body": [
+      "var ${1:name}: ${2:int}[] = [${3:values}];"
+    ],
+    "description": "Mocha array declaration"
+  },
+
+  "Mocha Dict": {
+    "prefix": "dict",
+    "body": [
+      "var ${1:name}: dict = {\"${2:key}\": \"${3:value}\"};"
+    ],
+    "description": "Mocha dict declaration"
+  },
+
+  "Mocha Set": {
+    "prefix": "set",
+    "body": [
+      "var ${1:name}: set<${2:int}> = <${3:values}>;"
+    ],
+    "description": "Mocha set declaration"
+  },
+
+  "Mocha Extend": {
+    "prefix": "extend",
+    "body": [
+      "extend ${1:str} {",
+      "\tfunction ${2:methodName}(${3:params}) -> ${4:bool} {",
+      "\t\t${5:// body}",
+      "\t};",
+      "};"
+    ],
+    "description": "Mocha extension method"
+  },
+
+  "Mocha Sym Diff": {
+    "prefix": "symdiff",
+    "body": [
+      "var ${1:result}: Expr = sym_simplify(sym_diff(${2:expr}, \"${3:x}\"));",
+      "print(sym_print(${1:result}), newLine=true);"
+    ],
+    "description": "Mocha SymCha symbolic differentiation"
+  }
+}

@@ -1,0 +1,52 @@
+// Auto-generated manifest for mocha-processing.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-stats, mocha-matvec
+
+function mocha_map_float_c(arr: float[], f: lambda) -> float[] native mocha_map_float;
+function filter(arr: int[], pred: lambda) -> int[];
+function filterFloat(arr: float[], pred: lambda) -> float[];
+function filterStr(arr: str[], pred: lambda) -> str[];
+function map(arr: int[], transform: lambda) -> int[];
+function mapFloat(arr: float[], transform: lambda) -> float[];
+function mapStr(arr: str[], transform: lambda) -> str[];
+function reduce(arr: int[], combiner: lambda, init: int) -> int;
+function reduceFloat(arr: float[], combiner: lambda, init: float) -> float;
+function reduceStr(arr: str[], combiner: lambda, init: str) -> str;
+class StandardScaler;
+class StandardScaler field mean_val: float;
+class StandardScaler field std_val: float;
+class StandardScaler field fitted: bool;
+class StandardScaler function fit(data: float[]) -> null;
+class StandardScaler function transform(data: float[]) -> float[];
+class StandardScaler function fit_transform(data: float[]) -> float[];
+class MinMaxScaler;
+class MinMaxScaler field min_val: float;
+class MinMaxScaler field max_val: float;
+class MinMaxScaler field fitted: bool;
+class MinMaxScaler function fit(data: float[]) -> null;
+class MinMaxScaler function transform(data: float[]) -> float[];
+class MinMaxScaler function fit_transform(data: float[]) -> float[];
+class RobustScaler;
+class RobustScaler field median_val: float;
+class RobustScaler field iqr_val: float;
+class RobustScaler field fitted: bool;
+class RobustScaler function fit(data: float[]) -> null;
+class RobustScaler function transform(data: float[]) -> float[];
+class RobustScaler function fit_transform(data: float[]) -> float[];
+class PCAReducer;
+class PCAReducer field n_components: int;
+class PCAReducer field components: float[][];
+class PCAReducer field explained_variance: float[];
+class PCAReducer field mean_vec: float[];
+class PCAReducer field fitted: int;
+class PCAReducer field n_samples: int;
+class PCAReducer field n_features: int;
+class PCAReducer function fit(data: float[][]) -> null;
+class PCAReducer function transform(data: float[][]) -> float[][];
+class PCAReducer function fit_transform(data: float[][]) -> float[][];
+class PCAReducer function inverse_transform(data: float[][]) -> float[][];
+class PCAReducer function explained_variance_ratio() -> float[];
+class PCAReducer function n_components_for_variance(threshold: float) -> int;

@@ -1,0 +1,141 @@
+{
+  "C_Cpp.errorSquiggles": "disabled",
+  "files.associations": {
+    "*.mch": "mocha",
+    "*.mchi": "mocha"
+  },
+  "editor.tokenColorCustomizations": {
+    "textMateRules": [
+      {
+        "comment": "Functions — yellow",
+        "scope": [
+          "entity.name.function.mocha",
+          "entity.name.function.call.mocha"
+        ],
+        "settings": {
+          "foreground": "#DCDCAA"
+        }
+      },
+      {
+        "comment": "SCREAMING_CASE constants — blue",
+        "scope": "constant.other.mocha",
+        "settings": {
+          "foreground": "#4FC1FF"
+        }
+      },
+      {
+        "comment": "true/false/null constants — blue",
+        "scope": "constant.language.mocha",
+        "settings": {
+          "foreground": "#569CD6"
+        }
+      },
+      {
+        "comment": "Class names and type annotations — green",
+        "scope": [
+          "entity.name.type.class.mocha",
+          "entity.name.type.mocha"
+        ],
+        "settings": {
+          "foreground": "#4EC9B0"
+        }
+      },
+      {
+        "comment": "Primitive types — green",
+        "scope": "storage.type.primitive.mocha",
+        "settings": {
+          "foreground": "#4EC9B0"
+        }
+      },
+      {
+        "comment": "Control flow keywords — purple/pink",
+        "scope": "keyword.control.mocha",
+        "settings": {
+          "foreground": "#C586C0"
+        }
+      },
+      {
+        "comment": "Declaration keywords — blue",
+        "scope": "keyword.declaration.mocha",
+        "settings": {
+          "foreground": "#569CD6"
+        }
+      },
+      {
+        "comment": "Modifier keywords — blue",
+        "scope": "keyword.modifier.mocha",
+        "settings": {
+          "foreground": "#569CD6"
+        }
+      },
+      {
+        "comment": "Strings — orange",
+        "scope": [
+          "string.quoted.double.mocha",
+          "string.quoted.single.mocha"
+        ],
+        "settings": {
+          "foreground": "#CE9178"
+        }
+      },
+      {
+        "comment": "Numbers — light green",
+        "scope": [
+          "constant.numeric.float.mocha",
+          "constant.numeric.integer.mocha"
+        ],
+        "settings": {
+          "foreground": "#B5CEA8"
+        }
+      },
+      {
+        "comment": "Comments — grey-green",
+        "scope": [
+          "comment.line.double-slash.mocha",
+          "comment.block.mocha"
+        ],
+        "settings": {
+          "foreground": "#6A9955",
+          "fontStyle": "italic"
+        }
+      },
+      {
+        "comment": "Operators — white/light",
+        "scope": [
+          "keyword.operator.assignment.mocha",
+          "keyword.operator.comparison.mocha",
+          "keyword.operator.arithmetic.mocha",
+          "keyword.operator.arrow.mocha"
+        ],
+        "settings": {
+          "foreground": "#D4D4D4"
+        }
+      },
+      {
+        "comment": "Range and tuple operators — distinct colour",
+        "scope": [
+          "keyword.operator.range.mocha",
+          "keyword.operator.tuple.mocha"
+        ],
+        "settings": {
+          "foreground": "#F8C555"
+        }
+      },
+      {
+        "comment": "Semicolons — subtle, not distracting",
+        "scope": "punctuation.terminator.statement.mocha",
+        "settings": {
+          "foreground": "#808080"
+        }
+      }
+    ]
+  },
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  "[mocha]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false,
+    "editor.wordWrap": "off"
+  }
+}

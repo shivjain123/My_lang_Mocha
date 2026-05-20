@@ -1,0 +1,48 @@
+// Auto-generated manifest for mocha-string.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+function mocha_str_toupper_ffi(s: str) -> str native mocha_str_toupper;
+function mocha_str_tolower_ffi(s: str) -> str native mocha_str_tolower;
+function c_isalpha(c: str) -> int native mocha_wrap_isalpha_str;
+function c_isdigit(c: str) -> int native mocha_wrap_isdigit_str;
+extend str function toInt() -> int;
+extend str function toFloat() -> float;
+extend str function startsWith(prefix: str) -> bool;
+extend str function endsWith(suffix: str) -> bool;
+extend str function indexOf(sub: str) -> int;
+extend str function contains(sub: str) -> bool;
+extend str function reverse() -> str;
+extend str function isPalindrome() -> bool;
+extend str function occurs(sub: str) -> int;
+extend str function trimLeft() -> str;
+extend str function trimRight() -> str;
+extend str function rip() -> str;
+extend str function substring(startIdx: int, endIdx: int) -> str;
+extend str function replace(oldStr: str, newStr: str, occur: int) -> str;
+extend str function replaceAll(oldStr: str, newStr: str) -> str;
+extend str function toUpper() -> str;
+extend str function toLower() -> str;
+extend str function split(delim: str) -> str[];
+extend str function repeat(n: int) -> str;
+extend str function padLeft(width: int, fill: str) -> str;
+extend str function padRight(width: int, fill: str) -> str;
+extend str function isAlpha() -> bool;
+extend str function isNumeric() -> bool;
+extend str function isAlphaNumeric() -> bool;
+extend str function regex_match(pat: str) -> bool;
+extend str function regex_full(pat: str) -> bool;
+extend str function regex_find(pat: str) -> str;
+extend str function regex_find_all(pat: str) -> str[];
+extend str function regex_replace_all(pat: str, replacement: str) -> str;
+extend str function regex_split(pat: str) -> str[];
+extend str[] function join(delim: str) -> str;
+function regex_is_digit(c: str) -> bool;
+function regex_is_word(c: str) -> bool;
+function regex_is_space(c: str) -> bool;
+function regex_match_char(pat: str, pi: int, c: str) -> bool;
+function regex_token_len(pat: str, pi: int) -> int;
+function regex_match_here(pat: str, text: str, pi: int, ti: int) -> int;
+function regex_match_at(pat: str, text: str, ti: int) -> int;
+function regex_find_span(pat: str, text: str) -> int[];

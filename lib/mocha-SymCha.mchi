@@ -1,0 +1,64 @@
+// Auto-generated manifest for mocha-SymCha.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-math
+
+function c_sin(x: float) -> float native mocha_wrap_sin;
+function c_cos(x: float) -> float native mocha_wrap_cos;
+function c_log(x: float) -> float native mocha_wrap_log;
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
+const NUM: int = 0;
+const VAR: int = 1;
+const ADD: int = 2;
+const SUB: int = 3;
+const MUL: int = 4;
+const DIV: int = 5;
+const POW: int = 6;
+const NEG: int = 7;
+const SIN: int = 8;
+const COS: int = 9;
+const LN: int = 10;
+const EXP: int = 11;
+class Expr;
+class Expr field kind: int;
+class Expr field value: float;
+class Expr field name: str;
+class Expr field left: Expr;
+class Expr field right: Expr;
+function num(v: float) -> Expr;
+function var_e(name: str) -> Expr;
+function add(a: Expr, b: Expr) -> Expr;
+function sub(a: Expr, b: Expr) -> Expr;
+function mul(a: Expr, b: Expr) -> Expr;
+function div_e(a: Expr, b: Expr) -> Expr;
+function pow_e(base: Expr, exp: Expr) -> Expr;
+function neg(a: Expr) -> Expr;
+function sin_e(a: Expr) -> Expr;
+function cos_e(a: Expr) -> Expr;
+function ln_e(a: Expr) -> Expr;
+function exp_e(a: Expr) -> Expr;
+function sym_diff_pass(e: Expr, var_name: str) -> Expr;
+function sym_grad(e: Expr, var1: str, var2: str) -> Expr[];
+function sym_partial2(e: Expr, var1: str, var2: str) -> Expr;
+function to_superscript(s: str) -> str;
+function sym_precedence(e: Expr) -> int;
+function sym_print_parens(e: Expr, parent_prec: int) -> str;
+function sym_print(e: Expr) -> str;
+function is_num(e: Expr, v: float) -> bool;
+function is_zero(e: Expr) -> bool;
+function is_one(e: Expr) -> bool;
+function sym_equal(a: Expr, b: Expr) -> bool;
+function sym_simplify(e: Expr) -> Expr;
+function sym_simplify_full(e: Expr) -> Expr;
+function sym_diff(e: Expr, var_name: str) -> Expr;
+function sym_eval(e: Expr, var_name: str, val: float) -> float;
+function linear_coeff(e: Expr, var_name: str) -> float;
+function sym_antidv(e: Expr, var_name: str) -> Expr;
+function sym_print_antidv(e: Expr, var_name: str) -> str;
+function sym_integral(e: Expr, var_name: str, a: float, b: float) -> float;
+function sym_limit(e: Expr, var_name: str, point: float) -> float;
+function sym_limit_numerical(e: Expr, var_name: str, point: float) -> float;
+function sym_taylor(e: Expr, var_name: str, point: float, terms: int) -> Expr;

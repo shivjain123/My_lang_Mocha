@@ -1,0 +1,65 @@
+// Auto-generated manifest for mocha-matvec.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-math
+
+function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
+extend int[] function scalar(n: int) -> int[];
+extend int[] function vector(other: int[]) -> int;
+extend int[] function hadamard(other: int[]) -> int[];
+extend int[] function add(other: int[]) -> int[];
+extend int[] function sub(other: int[]) -> int[];
+extend int[] function magn() -> float;
+extend int[] function unit_vector() -> float[];
+extend float[] function scalar(n: float) -> float[];
+extend float[] function vector(other: float[]) -> float;
+extend float[] function hadamard(other: float[]) -> float[];
+extend float[] function add(other: float[]) -> float[];
+extend float[] function sub(other: float[]) -> float[];
+extend float[] function magn() -> float;
+extend float[] function unit_vector() -> float[];
+function newton_sqrt(x: float) -> float;
+function complex_dot(a: Complex[], b: Complex[], n: int) -> Complex;
+function complex_norm(v: Complex[], n: int) -> float;
+extend int[][] function scalar(n: int) -> int[][];
+extend int[][] function vector(other: int[][]) -> int[][];
+extend int[][] function hadamard(other: int[][]) -> int[][];
+extend int[][] function add(other: int[][]) -> int[][];
+extend int[][] function sub(other: int[][]) -> int[][];
+extend int[][] function transpose() -> int[][];
+extend int[][] function trace() -> int;
+extend int[][] function det() -> float;
+extend int[][] function rank() -> int;
+extend int[][] function minor(ri: int, ci: int) -> int[][];
+extend int[][] function cofactor() -> float[][];
+extend int[][] function inverse() -> float[][];
+extend int[][] function eigenvalues() -> Complex[];
+extend int[][] function eigenvectors() -> Complex[][];
+extend int[][] function diagonalise() -> Complex[][];
+extend int[][] function svd() -> (float[][], 3);
+extend int[][] function singular_values() -> float[];
+extend float[][] function scalar(n: float) -> float[][];
+extend float[][] function vector(other: float[][]) -> float[][];
+extend float[][] function hadamard(other: float[][]) -> float[][];
+extend float[][] function add(other: float[][]) -> float[][];
+extend float[][] function sub(other: float[][]) -> float[][];
+extend float[][] function transpose() -> float[][];
+extend float[][] function trace() -> float;
+extend float[][] function det() -> float;
+extend float[][] function rank() -> int;
+extend float[][] function minor(ri: int, ci: int) -> float[][];
+extend float[][] function cofactor() -> float[][];
+extend float[][] function inverse() -> float[][];
+extend float[][] function eigenvalues_2x2() -> Complex[];
+extend float[][] function eigenvalues_3x3() -> Complex[];
+extend float[][] function eigenvalues_qr() -> Complex[];
+extend float[][] function eigenvalues() -> Complex[];
+extend float[][] function eigenvectors() -> Complex[][];
+extend float[][] function eigenvectors_relaxed() -> Complex[][];
+extend float[][] function diagonalise() -> Complex[][];
+extend float[][] function svd() -> (float[][], 3);
+extend float[][] function singular_values() -> float[];
