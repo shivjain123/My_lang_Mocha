@@ -195,5 +195,26 @@
       "print(sym_print(${1:result}), newLine=true);"
     ],
     "description": "Mocha SymCha symbolic differentiation"
+  },
+
+  "Mocha Interface": {
+    "prefix": "iface",
+    "body": [
+      "interface ${1:InterfaceName} {",
+      "\tfunction ${2:methodName}(${3:params}) -> ${4:null};",
+      "};"
+    ],
+    "description": "Mocha interface declaration"
+  },
+
+  "Mocha Tag": {
+    "prefix": "tag",
+    "body": [
+      "tag ${1:TagName} {",
+      "\t${2:VARIANT1},",
+      "\t${3:VARIANT2},",
+      "};"
+    ],
+    "description": "Mocha tag (enum) declaration"
   }
 }

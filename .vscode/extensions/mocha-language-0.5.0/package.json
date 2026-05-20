@@ -2,8 +2,13 @@
   "name": "mocha-language",
   "displayName": "Mocha Language",
   "description": "Syntax highlighting and language support for the Mocha programming language (.mch)",
-  "version": "0.5.0",
+  "version": "0.8.0",
   "publisher": "shiv-jain",
+  "icon": "icons/mocha-dark.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shivjain123/My_lang_Mocha"
+  },
   "engines": {
     "vscode": "^1.70.0"
   },

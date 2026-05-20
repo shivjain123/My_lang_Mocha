@@ -60,7 +60,7 @@
         },
         {
           "name": "keyword.declaration.mocha",
-          "match": "\\b(function|class|interface|extends|implements|var|const|lambda|native|alloc|import|from|as|extend)\\b"
+          "match": "\\b(function|class|interface|extends|implements|var|const|lambda|native|alloc|import|from|as|extend|tag)\\b"
         },
         {
           "name": "keyword.modifier.mocha",

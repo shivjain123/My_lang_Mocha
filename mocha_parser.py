@@ -21,12 +21,6 @@ class MochaParseError(Exception):
         )
         self.token = token
 
-#Location Information
-def stamp(self, node, token):
-    node.line = token.line
-    node.col  = token.column
-    return node
-
 # ============================================================
 # PARSER
 # ============================================================
@@ -125,20 +119,28 @@ class Parser:
         """
         tok = self.current()  # capture 'var' token before consuming
 
-        # Tuple type: (float[][], 3) — homogeneous with count
         if self.check(TokenType.LPAREN):
             self.advance()
             elem_type = self.parse_type()
             count = None
             if self.match(TokenType.COMMA):
-                # Next should be an int literal (count) or error
                 if self.check(TokenType.INT_LIT):
                     count = int(self.current().value)
                     self.advance()
+                elif self.check(TokenType.RPAREN):
+                    raise MochaParseError(
+                        "Expected a count after the comma in tuple type, e.g. (float, 3)",
+                        self.current()
+                    )
+                elif self.check(TokenType.IDENTIFIER):
+                    raise MochaParseError(
+                        "Tuple count must be an integer literal, not an identifier. "
+                        "Did you mean a dict or a named type?",
+                        self.current()
+                    )
                 else:
                     raise MochaParseError(
-                        "Mocha tuples are homogeneous. Expected a count integer after type. "
-                        "For mixed types, use a dict.",
+                        f"Expected an integer count in tuple type, e.g. (float, 3)",
                         self.current()
                     )
             self.expect(TokenType.RPAREN, "Expected ')' to close tuple type")
@@ -173,7 +175,10 @@ class Parser:
                 self.advance()
                 base = tok.value
             else:
-                raise MochaParseError("Expected a type annotation", self.current())
+                raise MochaParseError(
+                        "Expected a type annotation here (e.g. int, float, str, bool, or a class name)",
+                        self.current()
+                    )
 
         # Postfix array dimensions: int[], int[5], int[][3], int[5][] etc.
         while self.check(TokenType.LBRACKET):
@@ -240,7 +245,10 @@ class Parser:
             node.col  = tok.column
             return node
 
-        raise MochaParseError("Expected a literal value", tok)
+        raise MochaParseError(
+                "Expected a literal value (int, float, complex, string, bool, or null)",
+                tok
+            )
 
     # -------------------------------------------------------
     # STEP 3: Expressions
@@ -787,7 +795,10 @@ class Parser:
             self.expect(TokenType.RPAREN, "Expected ')' to close grouped expression")
             return first
 
-        raise MochaParseError("Expected an expression", self.current())
+        raise MochaParseError(
+            "Expected an expression (literal, variable, function call, cast, or grouped expression with '(')",
+            self.current()
+        )
 
     def parse_lambda(self) -> Node:
         """
@@ -891,9 +902,10 @@ class Parser:
         if self.check(TokenType.ASSIGN):
             if not isinstance(expr, (Identifier, IndexAccess, Index2DAccess, MemberAccess)):
                 tok = self.current()
+                # Simple assignment
                 raise MochaParseError(
-                    "MochaCompileError: Invalid assignment target: "
-                    "only variables, index accesses, and member accesses are allowed",
+                    f"Invalid assignment target '{expr.__class__.__name__}' — "
+                    "only variables, index accesses, and member accesses can be assigned to",
                     tok
                 )
             self.advance()
@@ -908,9 +920,10 @@ class Parser:
         if self.check(*self.COMPOUND_OPS.keys()):
             if not isinstance(expr, (Identifier, IndexAccess, Index2DAccess, MemberAccess)):
                 tok = self.current()
+                # Compound assignment
                 raise MochaParseError(
-                    "MochaCompileError: Invalid compound assignment target: "
-                    "only variables, index accesses, and member accesses are allowed",
+                    f"Invalid compound assignment target '{expr.__class__.__name__}' — "
+                    "only variables, index accesses, and member accesses can be used with +=, -=, etc.",
                     tok
                 )
             op = self.COMPOUND_OPS[self.current().type]
@@ -965,7 +978,7 @@ class Parser:
         # Enforce SCREAMING_CASE at parse time!
         if tok.type != TokenType.CONST_IDENT:
             raise MochaParseError(
-                "MochaCompileError: Constant names must be SCREAMING_CASE "
+                "Constant names must be SCREAMING_CASE "
                 f"e.g. '{tok.value.upper()}' not '{tok.value}'",
                 tok
             )
@@ -1364,7 +1377,10 @@ class Parser:
             if self.check(TokenType.FUNCTION):
                 body.append(self.parse_function())
             else:
-                raise MochaParseError("Only function declarations allowed in extend block", self.current())
+                raise MochaParseError(
+                    f"Only function declarations are currently supported in extend blocks, got '{self.current().value}'",
+                    self.current()
+                )
         
         self.expect(TokenType.RBRACE, "Expected '}' to close extend block")
         self.expect(TokenType.SEMICOLON, "Expected ';' after extend block")
@@ -1651,16 +1667,38 @@ class Parser:
     # -------------------------------------------------------
 
     def synchronize(self):
+        depth = 0
         while not self.is_at_end():
-            if self.current().type == TokenType.SEMICOLON:
+            tok = self.current()
+
+            if tok.type == TokenType.LBRACE:
+                depth += 1
+                self.advance()
+                continue
+
+            if tok.type == TokenType.RBRACE:
+                if depth > 0:
+                    depth -= 1
+                    self.advance()
+                    continue
+                else:
+                    # We're back at the top level — consume it and return
+                    self.advance()
+                    return
+
+            if tok.type == TokenType.SEMICOLON and depth == 0:
                 self.advance()
                 return
-            if self.check(TokenType.FUNCTION) or \
-            self.check(TokenType.CLASS) or \
-            self.check(TokenType.INTERFACE) or \
-            self.check(TokenType.IMPORT) or \
-            self.check(TokenType.FROM):
+
+            if depth == 0 and (
+                self.check(TokenType.FUNCTION) or
+                self.check(TokenType.CLASS) or
+                self.check(TokenType.INTERFACE) or
+                self.check(TokenType.IMPORT) or
+                self.check(TokenType.FROM)
+            ):
                 return
+
             self.advance()
 
     def parse(self) -> Program:

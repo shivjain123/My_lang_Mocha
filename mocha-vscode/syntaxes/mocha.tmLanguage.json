@@ -7,10 +7,10 @@
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#keywords" },
-    { "include": "#constants" },
     { "include": "#types" },
-    { "include": "#functions" },
+    { "include": "#constants" },
     { "include": "#classes" },
+    { "include": "#functions" },
     { "include": "#numbers" },
     { "include": "#operators" },
     { "include": "#punctuation" }
@@ -24,9 +24,10 @@
           "match": "//.*$"
         },
         {
-          "name": "comment.block.mocha",
           "begin": "\"\"\"",
-          "end": "\"\"\""
+          "end": "\"\"\"",
+          "name": "comment.block.mocha",
+          "contentName": "comment.block.mocha"
         }
       ]
     },
@@ -60,7 +61,7 @@
         },
         {
           "name": "keyword.declaration.mocha",
-          "match": "\\b(function|class|interface|extends|implements|var|const|lambda|native|alloc|import|from|as|extend)\\b"
+          "match": "\\b(function|class|interface|extends|implements|var|const|lambda|native|alloc|import|from|as|extend|tag)\\b"
         },
         {
           "name": "keyword.modifier.mocha",
@@ -68,7 +69,7 @@
         },
         {
           "name": "keyword.operator.logical.mocha",
-          "match": "\\b(and|or|not|null|true|false)\\b"
+          "match": "\\b(and|or|not|true|false)\\b"
         },
         {
           "name": "keyword.other.mocha",
@@ -81,7 +82,7 @@
       "patterns": [
         {
           "name": "constant.language.mocha",
-          "match": "\\b(true|false|null)\\b"
+          "match": "\\b(true|false)\\b"
         },
         {
           "comment": "SCREAMING_CASE constants — blue",

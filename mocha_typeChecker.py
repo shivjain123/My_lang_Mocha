@@ -526,10 +526,6 @@ class TypeChecker:
 
         # If inner chain already failed, don't silently propagate unknown
         if obj_type == "unknown":
-            self.error(
-                f"Cannot access '.{node.member}' on unresolved type. "
-                f"Check the preceding expression for errors.", node
-            )
             return "unknown"
     
         # Dict built-in properties and methods
@@ -546,7 +542,11 @@ class TypeChecker:
                 return "str[]"
             if node.member == "merge":
                 return "dict"
-            self.error(f"Unknown dict method '.{node.member}'", node)
+            self.error(
+                f"'.{node.member}' is not a method on dict. "
+                f"Available: .length, .has, .allKeys, .allValues, .remove, .clean, .merge",
+                node
+            )
             return "unknown"
         
         # Array and string built-in properties
@@ -587,7 +587,11 @@ class TypeChecker:
                 return "bool"
             if node.member in ("union", "intersect", "xor", "rel_diff"):
                 return obj_type  # returns same set type
-            self.error(f"Unknown set method '.{node.member}'", node)
+            self.error(
+                f"'.{node.member}' is not a method on set. "
+                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff",
+                node
+            )
             return "unknown"
         
         # String built-ins
@@ -685,7 +689,7 @@ class TypeChecker:
         if node.op in ("/", "%"):
             if isinstance(node.right, (IntLiteral, FloatLiteral)):
                 if node.right.value == 0:
-                    self.error("Dividing by zero emits undefined result.", node)
+                    self.error("Dividing by zero is prohibited.", node)
         
         # Complex promotion — any arithmetic with Complex → Complex
         if left_type == "Complex" or right_type == "Complex":
@@ -1204,8 +1208,8 @@ class TypeChecker:
             elem_type = self.check_expr(elem)
             if not self.types_compatible(first_type, elem_type):
                 self.error(
-                    f"Set elements must all be the same type. "
-                    f"Expected '{first_type}' but got '{elem_type}'", node
+                    f"Set elements must all be the same type (first element is '{first_type}'), "
+                    f"but got '{elem_type}'", node
                 )
         
         # Non-primitive types are treated as object
@@ -1558,7 +1562,7 @@ class TypeChecker:
                 return #natuve functions have no body
             if not self.has_return(node.body):
                 self.error(
-                    f" : Function '{node.name}' "
+                    f"Function '{node.name}' "
                     f"declared as '{node.return_type}' "
                     f"but has no return statement. "
                     f"Clang will throw fatal error without it.", node
@@ -1643,7 +1647,7 @@ class TypeChecker:
         for interface_name in node.interfaces:  # ← node.interfaces not implements
             if interface_name not in self.interface_methods:
                 self.error(
-                    f" : Unknown interface '{interface_name}'", node
+                    f"Unknown interface '{interface_name}'", node
                 )
                 continue
 
@@ -1676,14 +1680,14 @@ class TypeChecker:
                     # Check return type
                     if actual["return_type"] != sig["return_type"]:
                         self.error(
-                            f" : '{node.name}.{method_name}' "
+                            f"'{node.name}.{method_name}' "
                             f"return type '{actual['return_type']}' doesn't "
                             f"match interface '{sig['return_type']}'", node
                         )
                     # Check param types
                     if len(actual["params"]) != len(sig["params"]):
                         self.error(
-                            f" : '{node.name}.{method_name}' "
+                            f"'{node.name}.{method_name}' "
                             f"wrong number of parameters for "
                             f"interface '{interface_name}'", node
                         )
@@ -1693,7 +1697,7 @@ class TypeChecker:
                         ):
                             if at != it:
                                 self.error(
-                                    f" : "
+                                    f""
                                     f"'{node.name}.{method_name}' "
                                     f"parameter '{an}: {at}' doesn't "
                                     f"match interface type '{it}'", node

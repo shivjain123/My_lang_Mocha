@@ -1,7 +1,7 @@
 import sys, os, subprocess, shutil, io
 from typing import Optional, Set
-from mocha_lexer import Lexer
-from mocha_parser import Parser
+from mocha_lexer import Lexer, MochaLexError
+from mocha_parser import Parser, MochaParseError
 from mocha_typeChecker import TypeChecker
 from mocha_codegen import CodeGen, MochaCodeGenError, mangle_function_name, C_STDLIB_NAMES, LLVM_TYPES, to_llvm_type
 from mocha_ast import (
@@ -702,8 +702,17 @@ def compile_lib(source_file: str) -> bool:
     with open(source_file, 'r', encoding='utf-8') as f:
         source = f.read()
 
-    tokens = Lexer(source).tokenise()
-    ast    = Parser(tokens).parse()
+    try:
+        tokens = Lexer(source).tokenise()
+    except MochaLexError as e:
+        print(f"❌ {e}")
+        return False
+
+    try:
+        ast = Parser(tokens).parse()
+    except MochaParseError as e:
+        print(f"❌ {e}")
+        return False
 
     # Resolve imports so dependencies are known during lib compilation
     link_objects, native_libs, class_decls, injected_stmts = resolve_imports(ast, LIB_DIR, current_file=source_file)
@@ -962,11 +971,19 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug=False) -> 
         source = f.read()
 
     print("Step 1: Lexing...")
-    tokens = Lexer(source).tokenise()
+    try:
+        tokens = Lexer(source).tokenise()
+    except MochaLexError as e:
+        print(f"  ❌ {e}")
+        sys.exit(1)
     print(f"  ✅ {len(tokens)} tokens\n")
 
     print("Step 2: Parsing...")
-    ast = Parser(tokens).parse()
+    try:
+        ast = Parser(tokens).parse()
+    except MochaParseError as e:
+        print(f"  ❌ {e}")
+        sys.exit(1)
     print(f"  ✅ AST generated\n")
 
     # Debug mode — dump tokens and AST
