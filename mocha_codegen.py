@@ -559,9 +559,9 @@ class CodeGen:
         if isinstance(node, Identifier):    return self.gen_identifier(node)
         if isinstance(node, BinaryOp):      return self.gen_binary_op(node)
         if isinstance(node, UnaryOp):       return self.gen_unary_op(node)
-        if isinstance(node, PostIncrement): return self.gen_post_increment(node)
-        if isinstance(node, PreIncrement):  return self.gen_pre_increment(node)
-        if isinstance(node, PreDecrement):  return self.gen_pre_increment(node)
+        if isinstance(node, PostIncrement): return self.gen_post_increment(node) # type: ignore
+        if isinstance(node, PreIncrement):  return self.gen_pre_increment(node) # type: ignore
+        if isinstance(node, PreDecrement):  return self.gen_pre_increment(node) # type: ignore
         if isinstance(node, TypeCast):      return self.gen_type_cast(node)
         if isinstance(node, FunctionCall):  return self.gen_function_call(node)
         if isinstance(node, QualifiedMethodCall): return self.gen_qualified_method_call(node)
@@ -1072,29 +1072,88 @@ class CodeGen:
             return (tmp, right_type)
         raise MochaCodeGenError(f"Unknown unary operator: '{node.op}'", node.line, node.col)
 
-    def gen_post_increment(self, node):
-        if not isinstance(node.operand, Identifier):
-            raise MochaCodeGenError("Can only increment/decrement variables", node.line, node.col)
-        ptr, llvm_type = self.locals[node.operand.name]
-        old = self.fresh_temp()
-        self.emit(f"  {old} = load {llvm_type}, {llvm_type}* {ptr}")
-        new = self.fresh_temp()
+    def resolve_lvalue_ptr(self, node):
+        """
+        Returns one of:
+        ("local", ptr, llvm_type)          — simple variable
+        ("field", ptr, llvm_type)          — struct field via GEP
+        ("array", arr_reg, idx_reg, elem_llvm)  — runtime-managed array element
+        """
+        if isinstance(node, Identifier):
+            ptr, llvm_type = self.locals[node.name]
+            return ("local", ptr, llvm_type)
+
+        if isinstance(node, MemberAccess):
+            obj_val, obj_llvm = self.gen_expr(node.obj)
+            class_name = obj_llvm.replace("%struct.", "").replace("*", "").strip()
+            fields = self.class_fields.get(class_name, [])
+            idx = next((i for i, (n, _) in enumerate(fields) if n == node.member), None)
+            if idx is None:
+                raise MochaCodeGenError(
+                    f"Internal compiler error: field '{node.member}' not found on '{class_name}'",
+                    node.line, node.col
+                )
+            field_type = to_llvm_type(fields[idx][1])
+            ptr = self.fresh_temp()
+            self.emit(f"  {ptr} = getelementptr %struct.{class_name}, %struct.{class_name}* {obj_val}, i32 0, i32 {idx}")
+            return ("field", ptr, field_type)
+
+        if isinstance(node, IndexAccess):
+            arr_reg, _ = self.gen_expr(node.obj)
+            idx_reg, _ = self.gen_expr(node.index)
+            # Resolve element llvm type same way gen_index_access does
+            mocha_type = self.infer_mocha_type(node.obj)
+            if not mocha_type and isinstance(node.obj, Identifier):
+                mocha_type = self.local_mocha_types.get(node.obj.name, "") or \
+                            self.global_mocha_types.get(node.obj.name, "")
+            elem_llvm = "i32"
+            if mocha_type:
+                bracket = mocha_type.rfind("[")
+                if bracket != -1:
+                    elem_mocha = mocha_type[:bracket]
+                    elem_llvm = to_llvm_type(elem_mocha)
+            return ("array", arr_reg, idx_reg, elem_llvm)
+
+        raise MochaCodeGenError(
+            "Internal compiler error: invalid increment/decrement target",
+            node.line, node.col
+        )
+
+
+    def _emit_increment(self, node, return_old: bool):
+        lval = self.resolve_lvalue_ptr(node.operand)
         op = "add" if node.op == "++" else "sub"
-        self.emit(f"  {new} = {op} {llvm_type} {old}, 1")
-        self.emit(f"  store {llvm_type} {new}, {llvm_type}* {ptr}")
-        return (old, llvm_type)
+
+        if lval[0] in ("local", "field"):
+            ptr, llvm_type = lval[1], lval[2]
+            old = self.fresh_temp()
+            self.emit(f"  {old} = load {llvm_type}, {llvm_type}* {ptr}")
+            new = self.fresh_temp()
+            self.emit(f"  {new} = {op} {llvm_type} {old}, 1")
+            self.emit(f"  store {llvm_type} {new}, {llvm_type}* {ptr}")
+            return (old if return_old else new, llvm_type)
+
+        if lval[0] == "array":
+            arr_reg, idx_reg, elem_llvm = lval[1], lval[2], lval[3]
+            slot = self.alloca_at_entry(elem_llvm)
+            cast = self.fresh_temp()
+            self.emit(f"  {cast} = bitcast {elem_llvm}* {slot} to i8*")
+            self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {cast})")
+            old = self.fresh_temp()
+            self.emit(f"  {old} = load {elem_llvm}, {elem_llvm}* {slot}")
+            new = self.fresh_temp()
+            self.emit(f"  {new} = {op} {elem_llvm} {old}, 1")
+            self.emit(f"  store {elem_llvm} {new}, {elem_llvm}* {slot}")
+            cast2 = self.fresh_temp()
+            self.emit(f"  {cast2} = bitcast {elem_llvm}* {slot} to i8*")
+            self.emit(f"  call void @mocha_array_set(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {cast2})")
+            return (old if return_old else new, elem_llvm)
+
+    def gen_post_increment(self, node):
+        return self._emit_increment(node, return_old=True)
 
     def gen_pre_increment(self, node):
-        if not isinstance(node.operand, Identifier):
-            raise MochaCodeGenError("Can only increment/decrement variables", node.line, node.col)
-        ptr, llvm_type = self.locals[node.operand.name]
-        old = self.fresh_temp()
-        self.emit(f"  {old} = load {llvm_type}, {llvm_type}* {ptr}")
-        new = self.fresh_temp()
-        op = "add" if node.op == "++" else "sub"
-        self.emit(f"  {new} = {op} {llvm_type} {old}, 1")
-        self.emit(f"  store {llvm_type} {new}, {llvm_type}* {ptr}")
-        return (new, llvm_type)
+        return self._emit_increment(node, return_old=False)
 
     def gen_type_cast(self, node):
         val_reg, val_type = self.gen_expr(node.value)
@@ -1543,6 +1602,16 @@ class CodeGen:
                 return (tmp, ret_type)
         return None
 
+    def get_return_type(self, name, node=None):
+        if name not in self.method_return_types:
+            line = getattr(node, 'line', '?')
+            col  = getattr(node, 'col', '?')
+            raise MochaCodeGenError(
+                f"Unknown function or method '{name}' — did you forget to import a library?",
+                line, col # type: ignore
+            )
+        return self.method_return_types[name]
+
     def gen_struct_method_call(self, obj_ptr, obj_llvm_type, member, node):
         class_name = obj_llvm_type[len("%struct."):-1]
         found = False
@@ -1562,7 +1631,7 @@ class CodeGen:
                 if found:
                     break
 
-        ret_type = self.method_return_types.get(func_name, "i32")
+        ret_type = self.get_return_type(func_name, node)
         obj_reg = self.fresh_temp()
         self.emit(f"  {obj_reg} = load {obj_llvm_type}, {obj_llvm_type}* {obj_ptr}")
         args = self._collect_args(node)
@@ -1614,8 +1683,7 @@ class CodeGen:
             # Shared/static method call: ClassName.method()
             if obj_name in self.class_nodes:
                 mangled  = f"{obj_name}_{member}"
-                print("Here it is Shared Method call from Class: ", self.method_return_types)
-                ret_type = self.method_return_types.get(mangled, "i32")
+                ret_type = self.get_return_type(mangled, node)
                 args     = self._collect_args(node)
                 arg_str  = ", ".join(f"{t} {r}" for r, t in args)
                 tmp      = self.fresh_temp()
@@ -1824,8 +1892,7 @@ class CodeGen:
                 class_name = obj_type[len("%struct."):-1]
                 if class_name in self.class_nodes:
                     mangled  = f"{class_name}_{member}"
-                    print("Here it is an index or member access call: ", self.method_return_types)
-                    ret_type = self.method_return_types.get(mangled, "i32")
+                    ret_type = self.get_return_type(mangled, node)
                     args     = self._collect_args(node)
                     all_args = [(obj_reg, obj_type)] + args
                     return self._emit_call(ret_type, mangled, all_args)
