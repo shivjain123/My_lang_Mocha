@@ -744,7 +744,7 @@ def compile_lib(source_file: str) -> bool:
             print(f"   {e}")
         return False
 
-    codegen = CodeGen(is_lib=True, lib_name=lib_name)
+    codegen = CodeGen(is_lib=True, lib_name=lib_name, source_file=source_file)
 
     # Register dep functions in codegen
     for node in ast.statements:
@@ -1031,7 +1031,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug=False) -> 
     print(f"  ✅ Type check passed\n")
 
     print("Step 4: Code Generation...")
-    codegen = CodeGen()
+    codegen = CodeGen(source_file=source_file)
 
     for node in ast.statements:
         if isinstance(node, ImportStmt):
@@ -1091,7 +1091,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug=False) -> 
          "--sysroot", MINGW_SYSROOT,
          f"-I{LUA_INCLUDE}",
          f"-I{WREN_INCLUDE}"],
-        capture_output=True, text=True, encoding='utf-8' # type: ignore
+        capture_output=True, text=True, encoding='utf-8'
     )
     if result.returncode != 0:
         print(f"  ❌ runtime compile failed:\n{result.stderr}")
@@ -1179,7 +1179,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug=False) -> 
     # Link everything
     exe_file = f"{output_name}.exe"
     link_cmd = [
-        CLANG_PATH, "-O3", "-march=native", "-flto",
+        CLANG_PATH, "-O3", "-march=native", "-flto", "-fexceptions",
         obj_file, RUNTIME_OBJ, SQLITE3_OBJ,
     ]
 

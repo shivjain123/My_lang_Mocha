@@ -133,6 +133,12 @@ class TokenType(Enum):
     DOT          = auto()   # .
     HASH         = auto()   # #
 
+    # --- Exception Handling ---
+    TRY          = auto()
+    RESCUE       = auto()
+    FAIL         = auto()
+    RETHROW      = auto()
+
     # --- Special ---
     EOF          = auto()
     UNKNOWN      = auto()
@@ -197,6 +203,10 @@ KEYWORDS = {
     "extend":     TokenType.EXTEND,
     "native":     TokenType.NATIVE,
     "tag":        TokenType.TAG,
+    "try":        TokenType.TRY,
+    "rescue":     TokenType.RESCUE,
+    "fail":       TokenType.FAIL,
+    "rethrow":    TokenType.RETHROW,
 }
 
 # ============================================================

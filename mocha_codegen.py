@@ -3,7 +3,8 @@
 # ============================================================
 
 from mocha_ast import *
-from typing import Optional
+from typing import Optional, cast
+import os
 
 class MochaCodeGenError(Exception):
     def __init__(self, message, line=0, col=0):
@@ -113,7 +114,9 @@ STDLIB_NAMES = {
 }
 
 class CodeGen:
-    def __init__(self, is_lib=False, lib_name=""):
+    def __init__(self, is_lib=False, lib_name="", source_file="unknown.mch"):
+        self.source_file           = os.path.basename(source_file)
+        self.current_emitted_line  = -1
         self.output        = []
         self.temp_count    = 0
         self.str_count     = 0
@@ -198,6 +201,9 @@ class CodeGen:
         self.method_return_types["HashTable_keys"]   = "%MochaArray*"
         self.method_return_types["HashTable_values"] = "%MochaArray*"
         self.method_return_types["HashTable_free"]   = "void"
+
+        #Built-in Format for strings
+        self.method_return_types["mocha_ext_str_format"] = "i8*"
 
     # -------------------------------------------------------
     # Helpers
@@ -286,6 +292,8 @@ class CodeGen:
                 "declare i32 @mocha_str_to_int(i8*)",
                 "declare double @mocha_str_to_float(i8*)",
                 "declare i8* @mocha_vast_to_str(i64)",
+                "declare i8* @mocha_str_format(i8*, i8**, i32)",
+                "declare i8* @mocha_str_format_named(i8*, i8**, i8**, i32)",
             ],
 
             "Print Runtime": [
@@ -477,6 +485,23 @@ class CodeGen:
                 "declare %MochaArray* @mocha_ht_keys(%struct.MochaHashTable*)",
                 "declare %MochaArray* @mocha_ht_values(%struct.MochaHashTable*)",
                 "declare void @mocha_ht_free(%struct.MochaHashTable*)",
+            ],
+
+            "Exception-Handling Runtime": [
+                "%MochaExFrame = type opaque",
+                "declare %MochaExFrame* @mocha_ex_push() nounwind",
+                "declare void @mocha_ex_enter(%MochaExFrame*)",
+                "declare i32 @mocha_ex_did_land() nounwind",
+                "declare void @mocha_ex_throw(i8*) noreturn",
+                "declare i8* @mocha_ex_pop() nounwind",
+                "declare void @mocha_ex_rethrow() noreturn",
+            ],
+
+            "Runtime Stack Tracking": [
+                "declare void @mocha_stack_push(i8*, i8*, i32) nounwind",
+                "declare void @mocha_stack_pop() nounwind",
+                "declare void @mocha_stack_update_line(i32) nounwind",
+                "declare void @mocha_stack_print() nounwind",
             ],
         }
 
@@ -1578,29 +1603,117 @@ class CodeGen:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call double @mocha_str_to_float(i8* {s_reg})")
             return (tmp, "double")
+        elif member == "format":
+            # Separate positional and named args
+            positional = [a for a in node.args if not isinstance(a, Assignment)]
+            named      = [a for a in node.args if isinstance(a, Assignment)]
 
-        # Extension method fallback
-        ext_key = f"mocha_ext_str_{member}"
-        #print(f"DEBUG str method lookup: ext_key={ext_key}, found={ext_key in self.method_return_types}")
-        if ext_key in self.method_return_types:
-            args_regs  = [s_reg]
-            args_types = ["i8*"]
-            for arg in node.args:
-                if isinstance(arg, Assignment):
-                    continue
-                r, t = self.gen_expr(arg)
-                args_regs.append(r)
-                args_types.append(t)
-            arg_str  = ", ".join(f"{t} {r}" for t, r in zip(args_types, args_regs))
-            ret_type = self.method_return_types[ext_key]
-            if ret_type == "void":
-                self.emit(f"  call void @{ext_key}({arg_str})")
-                return ("void", "void")
-            else:
+            # Compile-time mixing error
+            if positional and named:
+                raise MochaCodeGenError(
+                    "format() does not allow mixing positional and named arguments",
+                    node.line, node.col
+                )
+
+            if named:
+                # ── Named mode ──
+                to_str_fns = {
+                    "i32":    ("mocha_int_to_str",   "i32"),
+                    "i64":    ("mocha_vast_to_str",  "i64"),
+                    "double": ("mocha_float_to_str", "double"),
+                    "i8":     ("mocha_bool_to_str",  "i8"),
+                    "i1":     ("mocha_bool_to_str",  "i8"),
+                }
+
+                key_regs = []
+                val_regs = []
+
+                for arg in named:
+                    # key → i8*
+                    key_str = cast(Identifier, arg.target).name
+                    key_global = self.fresh_str_global(key_str)
+                    key_len = len(key_str.encode('utf-8')) + 1
+                    key_reg = self.fresh_temp()
+                    self.emit(f"  {key_reg} = getelementptr [{key_len} x i8], [{key_len} x i8]* {key_global}, i32 0, i32 0")
+                    # no mocha_str_literal call needed — just raw i8* pointer is fine for key comparison in C
+                    key_regs.append(key_reg)
+
+                    # value → i8*
+                    r, t = self.gen_expr(arg.value)
+                    if t == "i8*":
+                        val_regs.append(r)
+                    elif t == "i1":
+                        w = self.fresh_temp()
+                        self.emit(f"  {w} = zext i1 {r} to i8")
+                        s = self.fresh_temp()
+                        self.emit(f"  {s} = call i8* @mocha_bool_to_str(i8 {w})")
+                        val_regs.append(s)
+                    else:
+                        fn, llvm_t = to_str_fns.get(t, ("mocha_int_to_str", "i32"))
+                        s = self.fresh_temp()
+                        self.emit(f"  {s} = call i8* @{fn}({llvm_t} {r})")
+                        val_regs.append(s)
+
+                argc = len(named)
+
+                # build keys array on stack
+                keys_ptr = self.fresh_temp()
+                self.emit(f"  {keys_ptr} = alloca i8*, i32 {argc}")
+                for i, kr in enumerate(key_regs):
+                    ep = self.fresh_temp()
+                    self.emit(f"  {ep} = getelementptr i8*, i8** {keys_ptr}, i32 {i}")
+                    self.emit(f"  store i8* {kr}, i8** {ep}")
+
+                # build values array on stack
+                vals_ptr = self.fresh_temp()
+                self.emit(f"  {vals_ptr} = alloca i8*, i32 {argc}")
+                for i, vr in enumerate(val_regs):
+                    ep = self.fresh_temp()
+                    self.emit(f"  {ep} = getelementptr i8*, i8** {vals_ptr}, i32 {i}")
+                    self.emit(f"  store i8* {vr}, i8** {ep}")
+
                 tmp = self.fresh_temp()
-                self.emit(f"  {tmp} = call {ret_type} @{ext_key}({arg_str})")
-                return (tmp, ret_type)
-        return None
+                self.emit(f"  {tmp} = call i8* @mocha_str_format_named(i8* {s_reg}, i8** {keys_ptr}, i8** {vals_ptr}, i32 {argc})")
+                return (tmp, "i8*")
+
+            else:
+                # ── Positional mode (existing code) ──
+                to_str_fns = {
+                    "i32":    ("mocha_int_to_str",   "i32"),
+                    "i64":    ("mocha_vast_to_str",  "i64"),
+                    "double": ("mocha_float_to_str", "double"),
+                    "i8":     ("mocha_bool_to_str",  "i8"),
+                    "i1":     ("mocha_bool_to_str",  "i8"),
+                }
+
+                str_regs = []
+                for arg in positional:
+                    r, t = self.gen_expr(arg)
+                    if t == "i8*":
+                        str_regs.append(r)
+                    elif t == "i1":
+                        w = self.fresh_temp()
+                        self.emit(f"  {w} = zext i1 {r} to i8")
+                        s = self.fresh_temp()
+                        self.emit(f"  {s} = call i8* @mocha_bool_to_str(i8 {w})")
+                        str_regs.append(s)
+                    else:
+                        fn, llvm_t = to_str_fns.get(t, ("mocha_int_to_str", "i32"))
+                        s = self.fresh_temp()
+                        self.emit(f"  {s} = call i8* @{fn}({llvm_t} {r})")
+                        str_regs.append(s)
+
+                argc = len(str_regs)
+                arr_ptr = self.fresh_temp()
+                self.emit(f"  {arr_ptr} = alloca i8*, i32 {argc}")
+                for i, sr in enumerate(str_regs):
+                    ep = self.fresh_temp()
+                    self.emit(f"  {ep} = getelementptr i8*, i8** {arr_ptr}, i32 {i}")
+                    self.emit(f"  store i8* {sr}, i8** {ep}")
+                
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = call i8* @mocha_str_format(i8* {s_reg}, i8** {arr_ptr}, i32 {argc})")
+                return (tmp, "i8*")
 
     def get_return_type(self, name, node=None):
         if name not in self.method_return_types:
@@ -2533,6 +2646,9 @@ class CodeGen:
     # -------------------------------------------------------
 
     def gen_stmt(self, node: Node):
+        if hasattr(node, 'line') and node.line:
+            self.emit_line_update(node.line)
+
         if isinstance(node, VarDecl):              self.gen_var_decl(node)
 
         elif isinstance(node, ConstDecl):          self.gen_const_decl(node)
@@ -2568,6 +2684,13 @@ class CodeGen:
         elif isinstance(node, ContinueStmt):
             if hasattr(self, 'continue_label'):
                 self.emit(f"  br label %{self.continue_label}")
+
+        elif isinstance(node, TryRescue):          self.gen_try_rescue(node)
+
+        elif isinstance(node, FailStmt):           self.gen_fail(node)
+
+        elif isinstance(node, RethrowStmt):        self.gen_rethrow(node)
+
         elif isinstance(node, TagDecl):
             pass #Handled in main generate()
         else:
@@ -2859,17 +2982,18 @@ class CodeGen:
 
     def gen_return(self, node):
         if node.value is None or self.current_return_type == "void":
+            self.emit("  call void @mocha_stack_pop()")
             self.emit("  ret void")
             return
 
         val_reg, val_type = self.gen_expr(node.value)
 
-        # If the expression returned void, only ret void if function also returns void!
         if val_type == "void" or val_reg == "void":
             if self.current_return_type == "void":
+                self.emit("  call void @mocha_stack_pop()")
                 self.emit("  ret void")
             else:
-                # Function returns something but expression was void - return null/0
+                self.emit("  call void @mocha_stack_pop()")
                 if self.current_return_type == "i8*":
                     self.emit("  ret i8* null")
                 elif self.current_return_type.endswith("*"):
@@ -2904,12 +3028,13 @@ class CodeGen:
             self.emit(f"  {p} = inttoptr i32 {val_reg} to {self.current_return_type}")
             val_reg = p
         
-        # i1 → i8 (bool comparison result → Mocha bool)
+        # i1 → i8
         if self.current_return_type == "i8" and val_type == "i1":
             p = self.fresh_temp()
             self.emit(f"  {p} = zext i1 {val_reg} to i8")
             val_reg = p
             
+        self.emit("  call void @mocha_stack_pop()")
         if self.current_return_type.endswith("*") and val_reg == "null":
             self.emit(f"  ret {self.current_return_type} null")
         else:
@@ -3494,12 +3619,16 @@ class CodeGen:
         # Terminator
         if not self.last_is_terminator():
             if ret_llvm == "void":
+                self.emit("  call void @mocha_stack_pop()")
                 self.emit("  ret void")
             elif ret_llvm == "i8*" or ret_llvm.endswith("*"):
+                self.emit("  call void @mocha_stack_pop()")
                 self.emit(f"  ret {ret_llvm} null")
             elif ret_llvm == "double":
+                self.emit("  call void @mocha_stack_pop()")
                 self.emit("  ret double 0.0")
             else:
+                self.emit("  call void @mocha_stack_pop()")
                 self.emit(f"  ret {ret_llvm} 0")
 
         body_lines = self.output          # capture body
@@ -3507,11 +3636,19 @@ class CodeGen:
 
         # ── Now emit in correct order ──
         mangled = mangle_function_name(node.name)
-        self.emit(f"define {ret_llvm} @{mangled}({param_str}) {{")
+        self.emit(f"define {ret_llvm} @{mangled}({param_str}) uwtable {{")
         self.emit("entry:")
         # All allocas first
         for line in self.entry_allocas:
             self.output.append(line)
+        #Strip mocha_entry_ before displaying
+        display_name = node.name
+        if display_name.startswith("mocha_entry_"):
+            display_name = display_name[len("mocha_entry_"):]
+        func_ptr = self.get_func_name_ptr(display_name)
+        # Stack push
+        file_ptr = self.get_source_file_ptr()
+        self.emit(f"  call void @mocha_stack_push(i8* {func_ptr}, i8* {file_ptr}, i32 {node.line})")
         # Then body (stores, operations, etc.)
         for line in body_lines:
             self.output.append(line)
@@ -3533,6 +3670,7 @@ class CodeGen:
             self.entry_allocas.append(f"  {name} = alloca {llvm_type}")
         return name
 
+    #This if for extend block for arrays since [] is not a valid IR Symbol
     def sanitize_type_name(self, type_name: str) -> str:
         return type_name.replace("[]", "_arr").replace("[", "_").replace("]", "")
     
@@ -4413,7 +4551,6 @@ class CodeGen:
             self.globals[f"{node.name}.{member}"] = (global_name, "i32")
 
         # Emit .name() lookup function
-        # define i8* @TokenType__name(i32 %v) { switch ... }
         self.emit(f"define i8* @{node.name}__name(i32 %v) {{")
         self.emit(f"entry:")
         self.emit(f"  switch i32 %v, label %tag_default [")
@@ -4432,7 +4569,89 @@ class CodeGen:
                 f"([8 x i8], [8 x i8]* {unk_name}, i32 0, i32 0)")
         self.emit(f"}}")
         self.emit_blank()
+
+    def gen_fail(self, node: FailStmt):
+        msg_reg, msg_type = self.gen_expr(node.message)
+        if msg_type != "i8*":
+            raise MochaCodeGenError(
+                f"'fail' expects a str expression, got LLVM type '{msg_type}'",
+                node.line, node.col
+            )
+        self.emit(f"  call void @mocha_ex_throw(i8* {msg_reg})")
+        self.emit(f"  unreachable")
+
+    def gen_rethrow(self, node: RethrowStmt):
+        self.emit(f"  call void @mocha_ex_rethrow()")
+        self.emit(f"  unreachable")
+
+    def gen_try_rescue(self, node: TryRescue):
+        if not self.in_function:
+            raise MochaCodeGenError(
+                "'try/rescue' block must be inside a function",
+                node.line, node.col
+            )
+
+        try_lbl    = self.fresh_label("try_body")
+        rescue_lbl = self.fresh_label("rescue_body")
+        after_lbl  = self.fresh_label("after_try")
+
+        # push frame
+        frame_reg = self.fresh_temp()
+        self.emit(f"  {frame_reg} = call %MochaExFrame* @mocha_ex_push()")
+
+        # enter — C handles setjmp and sets internal flag
+        self.emit(f"  call void @mocha_ex_enter(%MochaExFrame* {frame_reg})")
+
+        # query flag — did longjmp land?
+        landed_reg = self.fresh_temp()
+        self.emit(f"  {landed_reg} = call i32 @mocha_ex_did_land()")
+        is_throw = self.fresh_temp()
+        self.emit(f"  {is_throw} = icmp ne i32 {landed_reg}, 0")
+        self.emit(f"  br i1 {is_throw}, label %{rescue_lbl}, label %{try_lbl}")
+
+        # try body
+        self.emit(f"{try_lbl}:")
+        for stmt in node.try_body:
+            self.gen_stmt(stmt)
+        if not self.last_is_terminator():
+            self.emit(f"  call i8* @mocha_ex_pop()")
+            self.emit(f"  br label %{after_lbl}")
+
+        # rescue body
+        self.emit(f"{rescue_lbl}:")
+        msg_reg = self.fresh_temp()
+        self.emit(f"  {msg_reg} = call i8* @mocha_ex_pop()")
+        if node.binding:
+            bind_ptr = self.unique_ptr_name(node.binding)
+            self.entry_allocas.append(f"  {bind_ptr} = alloca i8*")
+            self.emit(f"  store i8* {msg_reg}, i8** {bind_ptr}")
+            self.locals[node.binding] = (bind_ptr, "i8*")
+            self.local_mocha_types[node.binding] = "str"
+        for stmt in node.rescue_body:
+            self.gen_stmt(stmt)
+        if not self.last_is_terminator():
+            self.emit(f"  br label %{after_lbl}")
+
+        # after
+        self.emit(f"{after_lbl}:")
     
+    def emit_line_update(self, line: int):
+        if line > 0 and line != self.current_emitted_line:
+            self.emit(f"  call void @mocha_stack_update_line(i32 {line})")
+            self.current_emitted_line = line
+
+    def get_source_file_ptr(self) -> str:
+        if not hasattr(self, '_source_file_global'):
+            self._source_file_global = self.fresh_str_global(self.source_file)
+        name   = self._source_file_global
+        length = len(self.source_file) + 1
+        return f"getelementptr ([{length} x i8], [{length} x i8]* {name}, i32 0, i32 0)"
+
+    def get_func_name_ptr(self, func_name: str) -> str:
+        name   = self.fresh_str_global(func_name)
+        length = len(func_name) + 1
+        return f"getelementptr ([{length} x i8], [{length} x i8]* {name}, i32 0, i32 0)"
+
     # -------------------------------------------------------
     # Top-level entry point
     # -------------------------------------------------------
@@ -4574,11 +4793,23 @@ class CodeGen:
                     method_name = f"mocha_ext_{sanitized}_{func.name}"
                     self.method_return_types[method_name] = ret_llvm
                     self.method_return_types[method_name] = ret_llvm
-                    #self.method_return_types[func.name] = ret_llvm
+
+                    # ← ADD THIS BLOCK
+                    if getattr(func, 'is_native', False) and func.native_name:
+                        safe_name = self.sanitize_type_name(func.native_name)
+                        ret_llvm_native = "i8*" if func.return_type == "null" else to_llvm_type(func.return_type)
+                        this_llvm = to_llvm_param_type(raw_type)
+                        params_str = ", ".join(to_llvm_param_type(p.type) for p in func.params)
+                        params_str = f"{this_llvm}, {params_str}" if params_str else this_llvm
+                        declare = f"declare {ret_llvm_native} @{safe_name}({params_str})"
+                        if declare not in self.extra_declares and safe_name not in STDLIB_NAMES:
+                            self.extra_declares.append(declare)
+                        self.method_return_types[safe_name] = ret_llvm_native
         
         # ============================================================
         # PASS 1.5: Emit all struct type definitions before any code
         # ============================================================
+
         for node in program.statements:
             if isinstance(node, ClassDecl):
                 all_fields = self.get_all_fields_for_class(node.name)
@@ -4637,7 +4868,7 @@ class CodeGen:
         ]
 
         if top_level:
-            self.emit("define void @mocha_main() {")
+            self.emit("define void @mocha_main() uwtable {")
             self.emit("entry:")
             self.in_function = True
             for node in top_level:
@@ -4651,7 +4882,7 @@ class CodeGen:
         # Generate main() entry point
         # ============================================================
         if not self.is_lib:
-            self.emit("define i32 @main(i32 %argc, i8** %argv) {")
+            self.emit("define i32 @main(i32 %argc, i8** %argv) uwtable {")
             self.emit("entry:")
             self.emit("  call i32 @SetConsoleOutputCP(i32 65001)")
             self.emit("  call void @mocha_gc_init()")

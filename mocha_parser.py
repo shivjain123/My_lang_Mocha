@@ -601,7 +601,7 @@ class Parser:
         # Lib qualified call: "mocha-math".sin(45.0)
         if self.check(TokenType.STR_LIT):
             # Peek ahead to see if followed by .
-            if self.peek(1).type == TokenType.DOT:
+            if self.peek(1).type == TokenType.DOT and self.peek(0).value.startswith("mocha-"):
                 source = self.advance().value  # consume "mocha-math"
                 self.advance()                 # consume .
                 method = self.expect(TokenType.IDENTIFIER, "Expected function name after '.'").value
@@ -882,6 +882,24 @@ class Parser:
             self.advance()
             self.expect(TokenType.SEMICOLON, "Expected ';' after 'continue'")
             node = ContinueStmt()
+            node.line = tok.line
+            node.col  = tok.column
+            return node
+
+        # try/rescue
+        if self.check(TokenType.TRY):
+            return self.parse_try_rescue()
+
+        # fail
+        if self.check(TokenType.FAIL):
+            return self.parse_fail()
+
+        # rescue bare rethrow (inside rescue block)
+        if self.check(TokenType.RETHROW):
+            tok = self.current()
+            self.advance()
+            self.expect(TokenType.SEMICOLON, "Expected ';' after 'rethrow'")
+            node = RethrowStmt()
             node.line = tok.line
             node.col  = tok.column
             return node
@@ -1661,6 +1679,48 @@ class Parser:
         self.expect(TokenType.RBRACE, "Expected '}' to close tag body")
         self.expect(TokenType.SEMICOLON, "Expected ';' after tag")
         return TagDecl(name=name, members=members)
+
+    # ---------- Exception Handling ----------- #
+        
+    def parse_try_rescue(self) -> Node:
+        """
+        try { } rescue, e { };   -- with binding
+        try { } rescue { };      -- without binding
+        """
+        tok = self.current()
+        self.expect(TokenType.TRY, "Expected 'try'")
+        try_body = self.parse_block()
+
+        self.expect(TokenType.RESCUE, "Expected 'rescue' after try block")
+
+        # optional binding: rescue, e
+        binding = None
+        if self.check(TokenType.COMMA):
+            self.advance()
+            binding = self.expect(TokenType.IDENTIFIER, "Expected binding name after ','").value
+
+        rescue_body = self.parse_block()
+        self.expect(TokenType.SEMICOLON, "Expected ';' after try/rescue")
+
+        node = TryRescue(try_body=try_body, rescue_body=rescue_body, binding=binding)
+        node.line = tok.line
+        node.col  = tok.column
+        return node
+
+    def parse_fail(self) -> Node:
+        """
+        fail "message";
+        fail some_str_expr;
+        """
+        tok = self.current()
+        self.expect(TokenType.FAIL, "Expected 'fail'")
+        message = self.parse_expression()
+        self.expect(TokenType.SEMICOLON, "Expected ';' after 'fail'")
+
+        node = FailStmt(message=message)
+        node.line = tok.line
+        node.col  = tok.column
+        return node
 
     # -------------------------------------------------------
     # STEP 8: Top-level parse - the entry point!

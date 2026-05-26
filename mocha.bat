@@ -1,7 +1,14 @@
 @echo off
 if "%1"=="" (
     echo Usage: mocha ^<file.mch^>
+    echo        mocha --lib ^<libfile.mch^>
+    echo        mocha repl
     exit /b 1
+)
+
+if "%1"=="repl" (
+    python "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\mocha_repl.py"
+    exit /b
 )
 
 if "%1"=="--lib" (

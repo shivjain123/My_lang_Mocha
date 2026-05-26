@@ -1,8 +1,21 @@
 """
-   MochaMath v0.4 — Mocha Standard Math Library
+   MochaMath v0.5 — Mocha Standard Math Library
    Save as: lib/mocha-math.mch
    Compile with: mocha --lib lib/mocha-math.mch
 """
+//FFI
+function mocha_ext_float_cosec_ffi(x: float, mes: int) -> float native mocha_ext_float_cosec_impl;
+function mocha_ext_float_sec_ffi(x: float, mes: int) -> float native mocha_ext_float_sec_impl;
+function mocha_ext_float_cot_ffi(x: float, mes: int) -> float native mocha_ext_float_cot_impl;
+function mocha_ext_float_inv_cosec_ffi(x: float) -> Complex native mocha_ext_float_inv_cosec_impl;
+function mocha_ext_float_inv_sec_ffi(x: float) -> Complex native mocha_ext_float_inv_sec_impl;
+function mocha_ext_float_inv_cot_ffi(x: float) -> float native mocha_ext_float_inv_cot_impl;
+function mocha_ext_float_cosech_ffi(x: float) -> float native mocha_ext_float_cosech_c;
+function mocha_ext_float_sech_ffi(x: float) -> float native mocha_ext_float_sech_c;
+function mocha_ext_float_coth_ffi(x: float) -> float native mocha_ext_float_coth_c;
+function mocha_ext_float_inv_cosech_ffi(x: float) -> float native mocha_ext_float_inv_cosech_c;
+function mocha_ext_float_inv_sech_ffi(x: float) -> float native mocha_ext_float_inv_sech_c;
+function mocha_ext_float_inv_coth_ffi(x: float) -> float native mocha_ext_float_inv_coth_c;
 
 // =============================================
 // CONSTANTS
@@ -12,7 +25,7 @@ const PI: float = 3.14159265358979323846;
 const E: float = 2.71828182845904523536;
 const TAU: float = 6.28318530717958647692;
 const PHI: float = 1.61803398874989484820;
-const INF: float = 999999999999999.0;
+const INF: float = 99999999999999999.0;
 
 // Measurement units for trig functions
 const RAD: int = 0;
@@ -72,6 +85,12 @@ extend float {
     function inv_sin() -> Complex native mocha_ext_float_inv_sin;
     function inv_cos() -> Complex native mocha_ext_float_inv_cos;
     function inv_tan() -> float native mocha_ext_float_inv_tan;
+    function sinh() -> float native mocha_ext_float_sinh;
+    function cosh() -> float native mocha_ext_float_cosh;
+    function tanh() -> float native mocha_ext_float_tanh;
+    function inv_sinh() -> float native mocha_ext_float_inv_sinh;
+    function inv_cosh() -> Complex native mocha_ext_float_inv_cosh;
+    function inv_tanh() -> float native mocha_ext_float_inv_tanh;
     function sqrt() -> Complex native mocha_ext_float_sqrt;
     function cubrot() -> float native mocha_ext_float_cubrot;
     function log() -> Complex native mocha_ext_float_log;
@@ -80,6 +99,42 @@ extend float {
     function derivative(f: lambda) -> float native mocha_math_derivative;
     function limit(f: lambda) -> float native mocha_math_limit;
     function erf() -> float native mocha_wrap_erf;
+    function cosec(mes: int) -> float {
+        return mocha_ext_float_cosec_ffi(this, mes);
+    };
+    function sec(mes: int) -> float {
+        return mocha_ext_float_sec_ffi(this, mes);
+    };
+    function cot(mes: int) -> float {
+        return mocha_ext_float_cot_ffi(this, mes);
+    };
+    function inv_cosec() -> Complex {
+        return mocha_ext_float_inv_cosec_ffi(this);
+    };
+    function inv_sec() -> Complex {
+        return mocha_ext_float_inv_sec_ffi(this);
+    };
+    function inv_cot() -> float {
+        return mocha_ext_float_inv_cot_ffi(this);
+    };
+    function cosech() -> float {
+        return mocha_ext_float_cosech_ffi(this);
+    };
+    function sech() -> float {
+        return mocha_ext_float_sech_ffi(this);
+    };
+    function coth() -> float {
+        return mocha_ext_float_coth_ffi(this);
+    };
+    function inv_cosech() -> float {
+        return mocha_ext_float_inv_cosech_ffi(this);
+    };
+    function inv_sech() -> float {
+        return mocha_ext_float_inv_sech_ffi(this);
+    };
+    function inv_coth() -> float {
+        return mocha_ext_float_inv_coth_ffi(this);
+    };
 };
 
 // integral needs a and b — standalone function

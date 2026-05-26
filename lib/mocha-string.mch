@@ -318,6 +318,11 @@ extend str {
         };
         return true;
     };
+
+    //
+    //REGEX START
+    //
+
     // does pattern match anywhere in string?
     function regex_match(pat: str) -> bool {
         var span: int[] = regex_find_span(pat, this);

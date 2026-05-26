@@ -1,5 +1,6 @@
 """
-mocha-SymCha v0.3 — Symbolic Mathematics Library
+mocha-SymCha v0.5 — Symbolic Mathematics Library
+UPDATE % WAS BREAKING CHANGE WHEN TAN, INV_TRIG, and HYPERBOLIC_TRIG NODES WERE ADDED
 Pure Mocha 🐶 (almost)
 """
 
@@ -8,6 +9,15 @@ from "mocha-math" import *;
 function c_sin(x: float) -> float native mocha_wrap_sin;
 function c_cos(x: float) -> float native mocha_wrap_cos;
 function c_log(x: float) -> float native mocha_wrap_log;
+function c_tan(x: float) -> float native mocha_wrap_tan;
+function c_asin(x: float) -> float native mocha_wrap_asin;
+function c_acos(x: float) -> float native mocha_wrap_acos;
+function c_atan(x: float) -> float native mocha_wrap_atan;
+function c_sinh(x: float) -> float native mocha_wrap_sinh;
+function c_cosh(x: float) -> float native mocha_wrap_cosh;
+function c_tanh(x: float) -> float native mocha_wrap_tanh;
+function c_asinh(x: float) -> float native mocha_wrap_asinh;
+function c_atanh(x: float) -> float native mocha_wrap_atanh;
 function c_print_err(msg: str) -> null native mocha_print_stderr;
 function c_exit(code: int) -> null native mocha_exit;
 // =============================================
@@ -26,7 +36,13 @@ const SIN: int = 8;
 const COS: int = 9;
 const LN:  int = 10;
 const EXP: int = 11;
-
+const TAN:  int = 12;
+const ASIN: int = 13;
+const ACOS: int = 14;
+const ATAN: int = 15;
+const SINH: int = 16;
+const COSH: int = 17;
+const TANH: int = 18;
 
 // =============================================
 // EXPRESSION NODE
@@ -101,6 +117,33 @@ function exp_e(a: Expr) -> Expr {
     return Expr(EXP, 0.0, "", a, null);
 };
 
+function tan_e(a: Expr) -> Expr {
+    return Expr(TAN, 0.0, "", a, null);
+};
+
+function asin_e(a: Expr) -> Expr {
+    return Expr(ASIN, 0.0, "", a, null);
+};
+
+function acos_e(a: Expr) -> Expr {
+    return Expr(ACOS, 0.0, "", a, null);
+};
+
+function atan_e(a: Expr) -> Expr {
+    return Expr(ATAN, 0.0, "", a, null);
+};
+
+function sinh_e(a: Expr) -> Expr {
+    return Expr(SINH, 0.0, "", a, null);
+};
+
+function cosh_e(a: Expr) -> Expr {
+    return Expr(COSH, 0.0, "", a, null);
+};
+
+function tanh_e(a: Expr) -> Expr {
+    return Expr(TANH, 0.0, "", a, null);
+};
 
 // =============================================
 // SYMBOLIC DIFFERENTIATION
@@ -182,6 +225,43 @@ function sym_diff_pass(e: Expr, var_name: str) -> Expr {
         // d/dx(e^f) = e^f * f'
         case EXP:
             return mul(exp_e(e.left), sym_diff(e.left, var_name));
+        
+        // d/dx(tan(f)) = f' / cos²(f)
+        case TAN:
+            return div_e(sym_diff(e.left, var_name), pow_e(cos_e(e.left), num(2.0)));
+
+        // d/dx(asin(f)) = f' / sqrt(1 - f²)
+        case ASIN:
+            return div_e(
+                sym_diff(e.left, var_name),
+                pow_e(sub(num(1.0), pow_e(e.left, num(2.0))), num(0.5))
+            );
+
+        // d/dx(acos(f)) = -f' / sqrt(1 - f²)
+        case ACOS:
+            return neg(div_e(
+                sym_diff(e.left, var_name),
+                pow_e(sub(num(1.0), pow_e(e.left, num(2.0))), num(0.5))
+            ));
+
+        // d/dx(atan(f)) = f' / (1 + f²)
+        case ATAN:
+            return div_e(
+                sym_diff(e.left, var_name),
+                add(num(1.0), pow_e(e.left, num(2.0)))
+            );
+
+        // d/dx(sinh(f)) = cosh(f) * f'
+        case SINH:
+            return mul(cosh_e(e.left), sym_diff(e.left, var_name));
+
+        // d/dx(cosh(f)) = sinh(f) * f'
+        case COSH:
+            return mul(sinh_e(e.left), sym_diff(e.left, var_name));
+
+        // d/dx(tanh(f)) = f' / cosh²(f)
+        case TANH:
+            return div_e(sym_diff(e.left, var_name), pow_e(cosh_e(e.left), num(2.0)));
 
         default: return num(0.0);
     };
@@ -246,6 +326,13 @@ function sym_precedence(e: Expr) -> int {
     if (e.kind == COS) { return 5; };
     if (e.kind == LN)  { return 5; };
     if (e.kind == EXP) { return 5; };
+    if (e.kind == TAN)  { return 5; };
+    if (e.kind == ASIN) { return 5; };
+    if (e.kind == ACOS) { return 5; };
+    if (e.kind == ATAN) { return 5; };
+    if (e.kind == SINH) { return 5; };
+    if (e.kind == COSH) { return 5; };
+    if (e.kind == TANH) { return 5; };
     if (e.kind == POW) { return 4; };
     if (e.kind == MUL) { return 3; };
     if (e.kind == DIV) { return 3; };
@@ -342,6 +429,27 @@ function sym_print(e: Expr) -> str {
 
         case EXP:
             return "exp(" + sym_print(e.left) + ")";
+        
+        case TAN:
+            return "tan(" + sym_print(e.left) + ")";
+
+        case ASIN:
+            return "asin(" + sym_print(e.left) + ")";
+
+        case ACOS:
+            return "acos(" + sym_print(e.left) + ")";
+
+        case ATAN:
+            return "atan(" + sym_print(e.left) + ")";
+
+        case SINH:
+            return "sinh(" + sym_print(e.left) + ")";
+
+        case COSH:
+            return "cosh(" + sym_print(e.left) + ")";
+
+        case TANH:
+            return "tanh(" + sym_print(e.left) + ")";
 
         default: return "?";
     };
@@ -415,7 +523,9 @@ function sym_equal(a: Expr, b: Expr) -> bool {
     if (a.kind == VAR) { return a.name == b.name; };
 
     // Unary nodes
-    if (a.kind == NEG || a.kind == SIN || a.kind == COS || a.kind == LN || a.kind == EXP) {
+    if (a.kind == NEG || a.kind == SIN || a.kind == COS || a.kind == LN || a.kind == EXP ||
+        a.kind == TAN || a.kind == ASIN || a.kind == ACOS || a.kind == ATAN ||
+        a.kind == SINH || a.kind == COSH || a.kind == TANH) {
         return sym_equal(a.left, b.left);
     };
 
@@ -505,6 +615,26 @@ function sym_simplify(e: Expr) -> Expr {
             if (is_zero(ml) || is_zero(mr)) { return num(0.0); };
             if (is_one(mr)) { return ml; };
             if (is_one(ml)) { return mr; };
+
+            // (f / x^n) * x^n → f
+            if (ml.kind == DIV && mr.kind == POW) {
+                if (sym_equal(ml.right, mr)) {
+                    return sym_simplify(ml.left);
+                };
+            };
+            if (mr.kind == DIV && ml.kind == POW) {
+                if (sym_equal(mr.right, ml)) {
+                    return sym_simplify(mr.left);
+                };
+            };
+            // (f / x) * x → f
+            if (ml.kind == DIV && sym_equal(ml.right, mr)) {
+                return sym_simplify(ml.left);
+            };
+            if (mr.kind == DIV && sym_equal(mr.right, ml)) {
+                return sym_simplify(mr.left);
+            };
+
             return mul(ml, mr);
 
         case DIV:
@@ -515,6 +645,40 @@ function sym_simplify(e: Expr) -> Expr {
             if (is_one(dr)) { return dl; };
             // f/f = 1
             if (sym_equal(dl, dr)) { return num(1.0); };
+            // x^n / x → x^(n-1)
+            if (dl.kind == POW && sym_equal(dl.left, dr)) {
+                return sym_simplify(pow_e(dl.left, sub(dl.right, num(1.0))));
+            };
+            // x^n / x^m → x^(n-m)
+            if (dl.kind == POW && dr.kind == POW && sym_equal(dl.left, dr.left)) {
+                return sym_simplify(pow_e(dl.left, sub(dl.right, dr.right)));
+            };
+            // x / x^n → x^(1-n)
+            if (dr.kind == POW && sym_equal(dl, dr.left)) {
+                return sym_simplify(pow_e(dl, sub(num(1.0), dr.right)));
+            };
+            // c*x^n / x → c*x^(n-1)
+            if (dl.kind == MUL && dl.right.kind == POW && sym_equal(dl.right.left, dr)) {
+                return sym_simplify(mul(dl.left, pow_e(dl.right.left, sub(dl.right.right, num(1.0)))));
+            };
+            // c*x^n / x^m → c*x^(n-m)
+            if (dl.kind == MUL && dl.right.kind == POW && dr.kind == POW && sym_equal(dl.right.left, dr.left)) {
+                return sym_simplify(mul(dl.left, pow_e(dl.right.left, sub(dl.right.right, dr.right))));
+            };
+            // (a + b) / c → a/c + b/c
+            if (dl.kind == ADD) {
+                return sym_simplify(add(
+                    div_e(dl.left, dr),
+                    div_e(dl.right, dr)
+                ));
+            };
+            // (a - b) / c → a/c - b/c
+            if (dl.kind == SUB) {
+                return sym_simplify(sub(
+                    div_e(dl.left, dr),
+                    div_e(dl.right, dr)
+                ));
+            };
             return div_e(dl, dr);
 
         case POW:
@@ -626,6 +790,62 @@ function sym_simplify(e: Expr) -> Expr {
             };
             return exp_e(exp_inner);
 
+        case TAN:
+            var tan_inner: Expr = sym_simplify(e.left);
+            // tan(0) → 0
+            if (is_zero(tan_inner)) { return num(0.0); };
+            // tan(-x) → -tan(x)
+            if (tan_inner.kind == NEG) { return neg(tan_e(tan_inner.left)); };
+            return tan_e(tan_inner);
+
+        case ASIN:
+            var asin_inner: Expr = sym_simplify(e.left);
+            // asin(0) → 0
+            if (is_zero(asin_inner)) { return num(0.0); };
+            // asin(1) → π/2
+            if (is_one(asin_inner)) { return num(1.5707963267948966); };
+            return asin_e(asin_inner);
+
+        case ACOS:
+            var acos_inner: Expr = sym_simplify(e.left);
+            // acos(1) → 0
+            if (is_one(acos_inner)) { return num(0.0); };
+            // acos(0) → π/2
+            if (is_zero(acos_inner)) { return num(1.5707963267948966); };
+            return acos_e(acos_inner);
+
+        case ATAN:
+            var atan_inner: Expr = sym_simplify(e.left);
+            // atan(0) → 0
+            if (is_zero(atan_inner)) { return num(0.0); };
+            // atan(-x) → -atan(x)
+            if (atan_inner.kind == NEG) { return neg(atan_e(atan_inner.left)); };
+            return atan_e(atan_inner);
+
+        case SINH:
+            var sinh_inner: Expr = sym_simplify(e.left);
+            // sinh(0) → 0
+            if (is_zero(sinh_inner)) { return num(0.0); };
+            // sinh(-x) → -sinh(x)
+            if (sinh_inner.kind == NEG) { return neg(sinh_e(sinh_inner.left)); };
+            return sinh_e(sinh_inner);
+
+        case COSH:
+            var cosh_inner: Expr = sym_simplify(e.left);
+            // cosh(0) → 1
+            if (is_zero(cosh_inner)) { return num(1.0); };
+            // cosh(-x) → cosh(x)
+            if (cosh_inner.kind == NEG) { return cosh_e(cosh_inner.left); };
+            return cosh_e(cosh_inner);
+
+        case TANH:
+            var tanh_inner: Expr = sym_simplify(e.left);
+            // tanh(0) → 0
+            if (is_zero(tanh_inner)) { return num(0.0); };
+            // tanh(-x) → -tanh(x)
+            if (tanh_inner.kind == NEG) { return neg(tanh_e(tanh_inner.left)); };
+            return tanh_e(tanh_inner);
+
         default: return e;
     };
 };
@@ -678,6 +898,9 @@ function sym_eval(e: Expr, var_name: str, val: float) -> float {
         case POW:
             var pbase: float = sym_eval(e.left, var_name, val);
             var pexp: float = sym_eval(e.right, var_name, val);
+            if (pexp == float(int(pexp))) {
+                return fast_pow(pbase, int(pexp));
+            };
             return c_pow(pbase, pexp);
 
         case NEG:
@@ -698,6 +921,34 @@ function sym_eval(e: Expr, var_name: str, val: float) -> float {
         case EXP:
             var exponent: float = sym_eval(e.left, var_name, val);
             return c_pow(2.71828182845904523536, exponent);
+        
+        case TAN:
+            var tv: float = sym_eval(e.left, var_name, val);
+            return c_tan(tv);
+
+        case ASIN:
+            var asv: float = sym_eval(e.left, var_name, val);
+            return c_asin(asv);
+
+        case ACOS:
+            var acv: float = sym_eval(e.left, var_name, val);
+            return c_acos(acv);
+
+        case ATAN:
+            var atv: float = sym_eval(e.left, var_name, val);
+            return c_atan(atv);
+
+        case SINH:
+            var shv: float = sym_eval(e.left, var_name, val);
+            return c_sinh(shv);
+
+        case COSH:
+            var chv: float = sym_eval(e.left, var_name, val);
+            return c_cosh(chv);
+
+        case TANH:
+            var thv: float = sym_eval(e.left, var_name, val);
+            return c_tanh(thv);
 
         default: return 0.0;
     };
@@ -816,9 +1067,36 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
 
                 // ── BASE CASES — no recursion ──
                 if (ibp_degree == 1) {
-                    if (ibp_func.kind == SIN) { return add(neg(mul(xv, cos_e(xv))), sin_e(xv)); };
-                    if (ibp_func.kind == COS) { return add(mul(xv, sin_e(xv)), cos_e(xv)); };
-                    if (ibp_func.kind == EXP) { return sub(mul(xv, exp_e(xv)), exp_e(xv)); };
+                    if (ibp_func.kind == SIN) {
+                        var sin_arg: Expr = ibp_func.left;
+                        var sin_a2: float = linear_coeff(sin_arg, var_name);
+                        if (sin_a2 == 0.0) { sin_a2 = 1.0; };
+                        // ∫x·sin(ax) = -x·cos(ax)/a + sin(ax)/a²
+                        return add(
+                            div_e(neg(mul(xv, cos_e(sin_arg))), num(sin_a2)),
+                            div_e(sin_e(sin_arg), num(sin_a2 * sin_a2))
+                        );
+                    };
+                    if (ibp_func.kind == COS) {
+                        var cos_arg: Expr = ibp_func.left;
+                        var cos_a2: float = linear_coeff(cos_arg, var_name);
+                        if (cos_a2 == 0.0) { cos_a2 = 1.0; };
+                        // ∫x·cos(ax) = x·sin(ax)/a + cos(ax)/a²
+                        return add(
+                            div_e(mul(xv, sin_e(cos_arg)), num(cos_a2)),
+                            div_e(cos_e(cos_arg), num(cos_a2 * cos_a2))
+                        );
+                    };
+                    if (ibp_func.kind == EXP) {
+                        var exp_arg: Expr = ibp_func.left;
+                        var exp_a2: float = linear_coeff(exp_arg, var_name);
+                        if (exp_a2 == 0.0) { exp_a2 = 1.0; };
+                        // ∫x·e^(ax) = x·e^(ax)/a - e^(ax)/a²
+                        return sub(
+                            div_e(mul(xv, exp_e(exp_arg)), num(exp_a2)),
+                            div_e(exp_e(exp_arg), num(exp_a2 * exp_a2))
+                        );
+                    };
                 };
 
                 if (ibp_degree == 2) {
@@ -919,6 +1197,80 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
                 );
             };
             return mul(e, var_e(var_name));  // fallback
+        
+        // ∫tan(f) dx
+        case TAN:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return neg(ln_e(cos_e(e.left)));  // -ln|cos(x)|
+            };
+            var tan_a: float = linear_coeff(e.left, var_name);
+            if (tan_a != 0.0) {
+                return div_e(neg(ln_e(cos_e(e.left))), num(tan_a));
+            };
+            return mul(e, var_e(var_name));
+
+        // ∫asin(x) dx = x·asin(x) + sqrt(1-x²) + C
+        case ASIN:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return add(
+                    mul(e.left, asin_e(e.left)),
+                    pow_e(sub(num(1.0), pow_e(e.left, num(2.0))), num(0.5))
+                );
+            };
+            return mul(e, var_e(var_name));
+
+        // ∫acos(x) dx = x·acos(x) - sqrt(1-x²) + C
+        case ACOS:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return sub(
+                    mul(e.left, acos_e(e.left)),
+                    pow_e(sub(num(1.0), pow_e(e.left, num(2.0))), num(0.5))
+                );
+            };
+            return mul(e, var_e(var_name));
+
+        // ∫atan(x) dx = x·atan(x) - ln(1+x²)/2 + C
+        case ATAN:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return sub(
+                    mul(e.left, atan_e(e.left)),
+                    div_e(ln_e(add(num(1.0), pow_e(e.left, num(2.0)))), num(2.0))
+                );
+            };
+            return mul(e, var_e(var_name));
+
+        // ∫sinh(f) dx = cosh(f) + C
+        case SINH:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return cosh_e(e.left);
+            };
+            var sinh_a: float = linear_coeff(e.left, var_name);
+            if (sinh_a != 0.0) {
+                return div_e(cosh_e(e.left), num(sinh_a));
+            };
+            return mul(e, var_e(var_name));
+
+        // ∫cosh(f) dx = sinh(f) + C
+        case COSH:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return sinh_e(e.left);
+            };
+            var cosh_a: float = linear_coeff(e.left, var_name);
+            if (cosh_a != 0.0) {
+                return div_e(sinh_e(e.left), num(cosh_a));
+            };
+            return mul(e, var_e(var_name));
+
+        // ∫tanh(f) dx = ln(cosh(f)) + C
+        case TANH:
+            if (e.left.kind == VAR && e.left.name == var_name) {
+                return ln_e(cosh_e(e.left));
+            };
+            var tanh_a: float = linear_coeff(e.left, var_name);
+            if (tanh_a != 0.0) {
+                return div_e(ln_e(cosh_e(e.left)), num(tanh_a));
+            };
+            return mul(e, var_e(var_name));
 
         default: return mul(e, var_e(var_name));
     };
@@ -1094,6 +1446,223 @@ function sym_taylor(e: Expr, var_name: str, point: float, terms: int) -> Expr {
         );
         result = add(result, term);
         current = sym_diff(current, var_name);
+        i = i + 1;
+    };
+    return sym_simplify_full(result);
+};
+
+// =============================================
+// EQUATION SOLVING — Newton-Raphson
+// sym_solve(expr, "x", initial_guess) -> float
+// Finds x such that expr = 0
+// e.g. sym_solve(sub(pow_e(var_e("x"), num(2.0)), num(2.0)), "x", 1.0)
+//      → √2 ≈ 1.41421
+// =============================================
+
+function sym_solve(e: Expr, var_name: str, initial: float) -> float {
+    var x: float = initial;
+    var deriv: Expr = sym_diff(e, var_name);
+    var i: int = 0;
+    while (i < 100) {
+        var fx: float = sym_eval(e, var_name, x);
+        var fpx: float = sym_eval(deriv, var_name, x);
+        if (fpx == 0.0) {
+            c_print_err("MochaSymCha: derivative is zero, Newton-Raphson failed.");
+            return x;
+        };
+        var x_new: float = x - fx / fpx;
+        var diff: float = x_new - x;
+        if (diff < 0.0) { diff = 0.0 - diff; };
+        if (diff < 0.000001) { return x_new; };
+        x = x_new;
+        i = i + 1;
+    };
+    c_print_err("MochaSymCha: Newton-Raphson did not converge in 100 iterations.");
+    return x;
+};
+
+// =============================================
+// LAGRANGE INTERPOLATION
+// sym_lagrange(xs, ys, n, var_name) -> Expr
+// Returns polynomial passing through all n points
+// e.g. 3 points → quadratic, 4 points → cubic
+// =============================================
+
+function sym_lagrange(xs: float[], ys: float[], n: int, var_name: str) -> Expr {
+    var result: Expr = num(0.0);
+    var i: int = 0;
+    while (i < n) {
+        // Build basis polynomial Li(x) = Π (x - xj)/(xi - xj) for j ≠ i
+        var basis: Expr = num(1.0);
+        var j: int = 0;
+        while (j < n) {
+            if (j != i) {
+                var num_part: Expr = sub(var_e(var_name), num(xs[j]));
+                var den_part: float = xs[i] - xs[j];
+                basis = mul(basis, div_e(num_part, num(den_part)));
+            };
+            j = j + 1;
+        };
+        // Add yi * Li(x) to result
+        result = add(result, mul(num(ys[i]), basis));
+        i = i + 1;
+    };
+    return sym_simplify_full(result);
+};
+
+// =============================================
+// FOURIER SERIES
+// sym_fourier(e, var_name, l, terms) -> Expr
+// Returns partial Fourier series of f on [-l, l]
+// a0/2 + Σ(an·cos(nπx/l) + bn·sin(nπx/l))
+// =============================================
+
+function sym_fourier(e: Expr, var_name: str, l: float, terms: int) -> Expr {
+    var pi: float = 3.14159265358979;
+    // a0 = (1/l) * ∫f(x)dx on [-l, l]
+    var a0: float = sym_integral(e, var_name, 0.0 - l, l) / l;
+    var result: Expr = num(a0 / 2.0);
+    var n: int = 1;
+    while (n <= terms) {
+        var nf: float = float(n);
+        var freq: float = nf * pi / l;
+        var cos_term: Expr = cos_e(mul(num(freq), var_e(var_name)));
+        var sin_term: Expr = sin_e(mul(num(freq), var_e(var_name)));
+        // an = (1/l) * ∫f(x)·cos(nπx/l)dx on [-l, l]
+        var an: float = sym_integral(mul(e, cos_term), var_name, 0.0 - l, l) / l;
+        // bn = (1/l) * ∫f(x)·sin(nπx/l)dx on [-l, l]
+        var bn: float = sym_integral(mul(e, sin_term), var_name, 0.0 - l, l) / l;
+        // only add non-negligible terms
+        if (an * an > 0.000001 || bn * bn > 0.000001) {
+            if (an * an > 0.000001) {
+                result = add(result, mul(num(an), cos_term));
+            };
+            if (bn * bn > 0.000001) {
+                result = add(result, mul(num(bn), sin_term));
+            };
+        };
+        n = n + 1;
+    };
+    return sym_simplify_full(result);
+};
+
+// =============================================
+// LAURENT SERIES (Restricted)
+// sym_laurent(e, var_name, terms) -> Expr
+// Handles poles at x=0 of the form f(x)/x^n
+// e.g. sin(x)/x, 1/x², cos(x)/x
+// For functions analytic at 0, reduces to Taylor
+// =============================================
+
+function detect_pole_order(e: Expr, var_name: str) -> int {
+    // DIV case: f(x) / x^n or f(x) / x
+    if (e.kind == DIV) {
+        // denominator is x
+        if (e.right.kind == VAR && e.right.name == var_name) {
+            return 1;
+        };
+        // denominator is x^n
+        if (e.right.kind == POW) {
+            if (e.right.left.kind == VAR && e.right.left.name == var_name) {
+                if (e.right.right.kind == NUM) {
+                    return int(e.right.right.value);
+                };
+            };
+        };
+    };
+    // no pole detected
+    return 0;
+};
+
+function sym_laurent(e: Expr, var_name: str, terms: int) -> Expr {
+    var order: int = detect_pole_order(e, var_name);
+
+    // no pole — just do Taylor
+    if (order == 0) {
+        return sym_taylor(e, var_name, 0.0, terms);
+    };
+
+    // multiply by x^order to remove pole
+    var analytic: Expr = mul(e, pow_e(var_e(var_name), num(float(order))));
+    analytic = sym_simplify_full(analytic);
+
+    // Taylor expand the analytic part around 0
+    var taylor_part: Expr = sym_taylor(analytic, var_name, 0.0, terms + order);
+
+    // divide back by x^order to restore pole
+    var result: Expr = div_e(taylor_part, pow_e(var_e(var_name), num(float(order))));
+    return sym_simplify_full(result);
+};
+
+// =============================================
+// CHEBYSHEV SERIES
+// sym_chebyshev(e, var_name, terms) -> Expr
+// Approximates f on [-1, 1] using Chebyshev basis
+// More numerically stable than Taylor for [-1,1]
+// =============================================
+
+// Evaluate Chebyshev polynomial Tn(x) numerically
+function cheby_T(n: int, x: float) -> float {
+    if (n == 0) { return 1.0; };
+    if (n == 1) { return x; };
+    var t_prev: float = 1.0;
+    var t_curr: float = x;
+    var i: int = 2;
+    while (i <= n) {
+        var t_next: float = 2.0 * x * t_curr - t_prev;
+        t_prev = t_curr;
+        t_curr = t_next;
+        i = i + 1;
+    };
+    return t_curr;
+};
+
+// Build Chebyshev polynomial Tn(x) as Expr
+function cheby_T_expr(n: int, var_name: str) -> Expr {
+    if (n == 0) { return num(1.0); };
+    if (n == 1) { return var_e(var_name); };
+    var t_prev: Expr = num(1.0);
+    var t_curr: Expr = var_e(var_name);
+    var i: int = 2;
+    while (i <= n) {
+        // T_n(x) = 2x*T_{n-1}(x) - T_{n-2}(x)
+        var t_next: Expr = sym_simplify_full(sub(
+            mul(mul(num(2.0), var_e(var_name)), t_curr),
+            t_prev
+        ));
+        t_prev = t_curr;
+        t_curr = t_next;
+        i = i + 1;
+    };
+    return t_curr;
+};
+
+// Compute Chebyshev coefficients numerically using N sample points
+function cheby_coeff(e: Expr, var_name: str, n: int, num_points: int) -> float {
+    // Use Chebyshev nodes: xk = cos((2k+1)π / 2N)
+    var pi: float = 3.14159265358979;
+    var sum: float = 0.0;
+    var k: int = 0;
+    while (k < num_points) {
+        var xk: float = c_cos((2.0 * float(k) + 1.0) * pi / (2.0 * float(num_points)));
+        var fxk: float = sym_eval(e, var_name, xk);
+        sum = sum + fxk * cheby_T(n, xk);
+        k = k + 1;
+    };
+    if (n == 0) { return sum / float(num_points); };
+    return 2.0 * sum / float(num_points);
+};
+
+function sym_chebyshev(e: Expr, var_name: str, terms: int) -> Expr {
+    var n: int = 50;  // sample points for coefficient computation
+    var result: Expr = num(0.0);
+    var i: int = 0;
+    while (i < terms) {
+        var ci: float = cheby_coeff(e, var_name, i, n);
+        if (ci * ci > 0.000001) {
+            var ti: Expr = cheby_T_expr(i, var_name);
+            result = add(result, mul(num(ci), ti));
+        };
         i = i + 1;
     };
     return sym_simplify_full(result);

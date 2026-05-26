@@ -49,10 +49,20 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <windows.h>
+#include <setjmp.h>
 
-//RANDOM
+//RANDOM NUMBER
 #include <bcrypt.h>
 #pragma comment(lib, "bcrypt.lib")
+
+/* ===============================================================
+   Override exit to always print stack trace first
+   =============================================================== */
+/* Forward declaration for exit override */
+void mocha_stack_print(void);
+
+#define exit(code) do { mocha_stack_print(); _Exit(code); } while(0)
+
 
 /* ============================================================
  * TYPE DEFINITIONS
@@ -89,8 +99,6 @@ typedef struct MochaArray2D {
 } MochaArray2D;
 
 typedef struct MochaTuple { void **slots; int32_t count; } MochaTuple;
-
-typedef int8_t (*MochaCmpFn)(void *, void *);
 
 typedef struct { char *key; void *value; int value_type; } MochaDictEntry;
 typedef struct { MochaDictEntry *entries; int32_t size, capacity; } MochaDict;
@@ -341,7 +349,6 @@ void mocha_gc_stats() {
     printf("[GC] live objects: %zu | roots: %d\n", total, gc_root_count);
 }
 
-
 /* ============================================================
  * STRING OPERATIONS
  * ============================================================ */
@@ -438,6 +445,275 @@ char* mocha_str_tolower(char *s) {
     return result;
 }
 
+static char* mocha_format_float(const char* val_str, int decimals) {
+    // parse the string back to double, apply half-up rounding, reformat
+    double val = atof(val_str);
+    double factor = pow(10.0, decimals);
+    double rounded = floor(val * factor + 0.5) / factor;
+    char* buf = gc_alloc_string(32);
+    snprintf(buf, 32, "%.*f", decimals, rounded);
+    return buf;
+}
+
+static int mocha_parse_pipe_spec(const char* p, int* out_decimals) {
+    // p points to char after '|'
+    // format: Nf where N is digits
+    int n = 0;
+    int has_digits = 0;
+    while (*p && isdigit(*p)) {
+        n = n * 10 + (*p - '0');
+        p++;
+        has_digits = 1;
+    }
+    if (!has_digits || *p != 'f') return 0;  // not a valid specifier
+    *out_decimals = n;
+    return 1;  // valid
+}
+
+char* mocha_str_format(const char* template, char** args, int argc) {
+    // Phase 1: calculate output length
+    size_t out_len = 0;
+    const char* p = template;
+
+    while (*p) {
+        if (*p == '\\' && *(p + 1) == '$') {
+            out_len++;
+            p += 2;
+        } else if (*p == '$' && (isalpha(*(p+1)) || *(p+1) == '_')) {
+            fprintf(stderr,
+                "[Mocha] format error: positional format string contains named "
+                "placeholder '$%c...'. Do not mix positional and named placeholders.\n",
+                *(p+1));
+            exit(1);
+        } else if (*p == '$' && !isdigit(*(p+1))) {
+            fprintf(stderr,
+                "MochaRuntimeError (.format): invalid placeholder '$%c': "
+                "'$' must be followed by a digit (positional) or letter/underscore (named)\n",
+                *(p+1));
+            exit(1);
+        } else if (*p == '$' && isdigit(*(p+1))) {
+            p++;
+            int idx = 0;
+            while (isdigit(*p)) {
+                idx = idx * 10 + (*p - '0');
+                p++;
+            }
+            if (isalpha(*p) || *p == '_') {
+                fprintf(stderr,
+                    "MochaRuntimeError (.format): invalid placeholder '$%d%c...': "
+                    "positional index cannot be followed by letters.\n",
+                    idx, *p);
+                exit(1);
+            }
+            if (idx >= argc) {
+                fprintf(stderr,
+                    "MochaRuntimeError (.format): index $%d out of range "
+                    "(%d argument%s provided)\n",
+                    idx, argc, argc == 1 ? "" : "s");
+                exit(1);
+            }
+            // check for pipe specifier
+            if (*p == '|') {
+                p++;
+                int decimals = 0;
+                if (!mocha_parse_pipe_spec(p, &decimals)) {
+                    fprintf(stderr,
+                        "MochaRuntimeError (.format): invalid format specifier after '|'. "
+                        "Expected format: Nf (e.g. |2f)\n");
+                    exit(1);
+                }
+                // skip past Nf
+                while (isdigit(*p)) p++;
+                p++;  // skip 'f'
+                char* formatted = mocha_format_float(args[idx], decimals);
+                out_len += strlen(formatted);
+            } else {
+                out_len += strlen(args[idx]);
+            }
+        } else {
+            out_len++;
+            p++;
+        }
+    }
+
+    // Phase 2: build output
+    char* out = gc_alloc_string(out_len + 1);
+    char* q = out;
+    p = template;
+
+    while (*p) {
+        if (*p == '\\' && *(p + 1) == '$') {
+            *q++ = '$';
+            p += 2;
+        } else if (*p == '$' && isdigit(*(p+1))) {
+            p++;
+            int idx = 0;
+            while (isdigit(*p)) {
+                idx = idx * 10 + (*p - '0');
+                p++;
+            }
+            if (*p == '|') {
+                p++;
+                int decimals = 0;
+                mocha_parse_pipe_spec(p, &decimals);
+                while (isdigit(*p)) p++;
+                p++;  // skip 'f'
+                char* formatted = mocha_format_float(args[idx], decimals);
+                size_t slen = strlen(formatted);
+                memcpy(q, formatted, slen);
+                q += slen;
+            } else {
+                size_t slen = strlen(args[idx]);
+                memcpy(q, args[idx], slen);
+                q += slen;
+            }
+        } else {
+            *q++ = *p++;
+        }
+    }
+    *q = '\0';
+
+    return out;
+}
+
+char* mocha_str_format_named(const char* template, char** keys, char** values, int argc) {
+    // Phase 1: calculate output length
+    size_t out_len = 0;
+    const char* p = template;
+
+    while (*p) {
+        if (*p == '\\' && *(p + 1) == '$') {
+            out_len++;
+            p += 2;
+        } else if (*p == '$') {
+            p++;
+            if (isdigit(*p)) {
+                int idx = 0;
+                while (isdigit(*p)) {
+                    idx = idx * 10 + (*p - '0');
+                    p++;
+                }
+                if (isalpha(*p) || *p == '_') {
+                    fprintf(stderr,
+                        "MochaRuntimeError (.format): invalid placeholder '$%d%c...': "
+                        "positional index cannot be followed by letters.\n",
+                        idx, *p);
+                    exit(1);
+                }
+                fprintf(stderr,
+                    "MochaRuntimeError (.format): named format string contains positional "
+                    "placeholder '$%d'. Do not mix positional and named placeholders.\n",
+                    idx);
+                exit(1);
+            } else if (isalpha(*p) || *p == '_') {
+                char name[256]; int ni = 0;
+                while (isalnum(*p) || *p == '_') {
+                    if (ni >= 255) {
+                        fprintf(stderr, "MochaRuntimeError (.format): placeholder name too long.\n");
+                        exit(1);
+                    }
+                    name[ni++] = *p++;
+                }
+                name[ni] = '\0';
+
+                // check for pipe specifier
+                int decimals = -1;
+                if (*p == '|') {
+                    p++;
+                    if (!mocha_parse_pipe_spec(p, &decimals)) {
+                        fprintf(stderr,
+                            "MochaRuntimeError (.format): invalid format specifier after '|'. "
+                            "Expected format: Nf (e.g. |2f)\n");
+                        exit(1);
+                    }
+                    while (isdigit(*p)) p++;
+                    p++;  // skip 'f'
+                }
+
+                // look up key
+                int found = 0;
+                for (int i = 0; i < argc; i++) {
+                    if (strcmp(keys[i], name) == 0) {
+                        if (decimals >= 0) {
+                            char* formatted = mocha_format_float(values[i], decimals);
+                            out_len += strlen(formatted);
+                        } else {
+                            out_len += strlen(values[i]);
+                        }
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found) {
+                    fprintf(stderr,
+                        "MochaRuntimeError (.format): unknown named placeholder '$%s': "
+                        "no matching argument provided\n", name);
+                    exit(1);
+                }
+            } else {
+                fprintf(stderr,
+                    "MochaRuntimeError (.format): invalid placeholder '$%c': "
+                    "'$' must be followed by a digit (positional) or letter/underscore (named)\n",
+                    *p);
+                exit(1);
+            }
+        } else {
+            out_len++;
+            p++;
+        }
+    }
+
+    // Phase 2: build output
+    char* out = gc_alloc_string(out_len + 1);
+    char* q = out;
+    p = template;
+
+    while (*p) {
+        if (*p == '\\' && *(p + 1) == '$') {
+            *q++ = '$';
+            p += 2;
+        } else if (*p == '$') {
+            p++;
+            if (isalpha(*p) || *p == '_') {
+                char name[256]; int ni = 0;
+                while (isalnum(*p) || *p == '_') {
+                    name[ni++] = *p++;
+                }
+                name[ni] = '\0';
+
+                int decimals = -1;
+                if (*p == '|') {
+                    p++;
+                    mocha_parse_pipe_spec(p, &decimals);
+                    while (isdigit(*p)) p++;
+                    p++;  // skip 'f'
+                }
+
+                for (int i = 0; i < argc; i++) {
+                    if (strcmp(keys[i], name) == 0) {
+                        char* val;
+                        if (decimals >= 0) {
+                            val = mocha_format_float(values[i], decimals);
+                        } else {
+                            val = values[i];
+                        }
+                        size_t slen = strlen(val);
+                        memcpy(q, val, slen);
+                        q += slen;
+                        break;
+                    }
+                }
+            }
+            // positional/invalid already errored in phase 1
+        } else {
+            *q++ = *p++;
+        }
+    }
+    *q = '\0';
+
+    return out;
+}
+
 // ============================================================
 // COMPLEX NUMBERS
 // ============================================================
@@ -516,8 +792,15 @@ void mocha_print_int(int32_t n, int8_t newline) {
 
 void mocha_print_float(double f, int8_t newline) {
     if (newline) printf("\n");
-    if (f == (int64_t)f && f >= -1e15 && f <= 1e15) printf("%.1f", f);
-    else printf("%g", f);
+    if (isinf(f)) {
+        printf("%s", f > 0 ? "Inf" : "-Inf");
+    } else if (isnan(f)) {
+        printf("NaN");
+    } else if (f == (int64_t)f && f >= -1e15 && f <= 1e15) {
+        printf("%.1f", f);
+    } else {
+        printf("%g", f);
+    }
     fflush(stdout);
 }
 
@@ -1362,34 +1645,162 @@ double mocha_ext_float_cos(double x, int32_t mes) {
 
 double mocha_ext_float_tan(double x, int32_t mes) {
     if (mes == 1) x = x * MOCHA_MATH_PI / 180.0;
-    if (fabs(cos(x)) < MOCHA_EPSILON) return INFINITY;
+    if (fabs(cos(x)) < MOCHA_EPSILON) {
+        fprintf(stderr, "MochaWarning (tan): argument %.6g is at a pole (cos = 0), returning Inf\n", x);
+        return INFINITY;
+    }
     double r = tan(x);
     return fabs(r) < MOCHA_EPSILON ? 0.0 : r;
+}
+
+double mocha_ext_float_cosec_impl(double x, int32_t mes) {
+    return 1.0 / mocha_ext_float_sin(x, mes);
+}
+double mocha_ext_float_sec_impl(double x, int32_t mes) {
+    return 1.0 / mocha_ext_float_cos(x, mes);
+}
+double mocha_ext_float_cot_impl(double x, int32_t mes) {
+    return 1.0 / mocha_ext_float_tan(x, mes);
 }
 
 MochaComplex* mocha_ext_float_inv_sin(double x) {
     if (x >= -1.0 && x <= 1.0)
         return mocha_complex_new(asin(x), 0.0);
-
+    fprintf(stderr, "MochaWarning (inv_sin): argument %.6g is outside real domain [-1, 1], returning complex result\n", x);
     double inner = x + sqrt(x * x - 1.0);
-
     if (x > 1.0)
-        // inner > 0
         return mocha_complex_new(MOCHA_MATH_PI / 2.0, -log(inner));
     else
-        // x < -1, inner < 0
         return mocha_complex_new(3.0 * MOCHA_MATH_PI / 2.0, -log(-inner));
 }
 
 MochaComplex* mocha_ext_float_inv_cos(double x) {
     if (x >= -1.0 && x <= 1.0)
         return mocha_complex_new(acos(x), 0.0);
-
+    fprintf(stderr, "MochaWarning (inv_cos): argument %.6g is outside real domain [-1, 1], returning complex result\n", x);
     MochaComplex* s = mocha_ext_float_inv_sin(x);
     return mocha_complex_new(MOCHA_MATH_PI / 2.0 - s->real, -s->imag);
 }
 
 double mocha_ext_float_inv_tan(double x) { return atan(x); }
+
+MochaComplex* mocha_ext_float_inv_cosec_impl(double x) {
+    double recip = 1.0 / x;
+    return mocha_ext_float_inv_sin(recip);
+}
+
+MochaComplex* mocha_ext_float_inv_sec_impl(double x) {
+    double recip = 1.0 / x;
+    return mocha_ext_float_inv_cos(recip);
+}
+
+double mocha_ext_float_inv_cot_impl(double x) {
+    double recip = 1.0 / x;
+    return mocha_ext_float_inv_tan(recip);
+}
+
+/* ── Hyperbolic Trig ── */
+
+double mocha_ext_float_sinh(double x) {
+    return sinh(x);
+}
+
+double mocha_ext_float_cosh(double x) {
+    return cosh(x);
+}
+
+double mocha_ext_float_tanh(double x) {
+    return tanh(x);
+}
+
+double mocha_ext_float_inv_sinh(double x) {
+    // defined for all real x — no domain restriction
+    return asinh(x);
+}
+
+MochaComplex* mocha_ext_float_inv_cosh(double x) {
+    if (x >= 1.0)
+        return mocha_complex_new(acosh(x), 0.0);
+    fprintf(stderr, "MochaWarning (inv_cosh): argument %.6g is outside real domain (x >= 1), returning complex result\n", x);
+    return mocha_complex_new(0.0, acos(x));
+}
+
+double mocha_ext_float_inv_tanh(double x) {
+    if (x <= -1.0) {
+        fprintf(stderr, "MochaWarning (inv_tanh): argument %.6g is outside domain |x| < 1, returning -Inf\n", x);
+        return -INFINITY;
+    }
+    if (x >= 1.0) {
+        fprintf(stderr, "MochaWarning (inv_tanh): argument %.6g is outside domain |x| < 1, returning Inf\n", x);
+        return INFINITY;
+    }
+    return atanh(x);
+}
+
+/* ── Reciprocal Hyperbolic ── */
+
+double mocha_ext_float_cosech_c(double x) {
+    if (x == 0.0) {
+        fprintf(stderr, "MochaRuntimeError (cosech): argument is 0, cosech is undefined at 0.\n");
+        exit(1);
+    }
+    return 1.0 / sinh(x);
+}
+
+double mocha_ext_float_sech_c(double x) {
+    // cosh(x) >= 1 always, never zero — no domain error possible
+    return 1.0 / cosh(x);
+}
+
+double mocha_ext_float_coth_c(double x) {
+    if (x == 0.0) {
+        fprintf(stderr, "MochaRuntimeError (coth): argument is 0, coth is undefined at 0.\n");
+        exit(1);
+    }
+    return 1.0 / tanh(x);
+}
+
+/* ── Inverse Reciprocal Hyperbolic ── */
+
+double mocha_ext_float_inv_cosech_c(double x) {
+    if (x == 0.0) {
+        fprintf(stderr, "MochaRuntimeError (inv_cosech): argument is 0, inv_cosech is undefined at 0.\n");
+        exit(1);
+    }
+    // inv_cosech(x) = asinh(1/x) — defined for all x != 0
+    return asinh(1.0 / x);
+}
+
+MochaComplex* mocha_ext_float_inv_sech_c(double x) {
+    if (x == 0.0) {
+        fprintf(stderr, "MochaRuntimeError (inv_sech): argument is 0, inv_sech is undefined at 0.\n");
+        exit(1);
+    }
+    // inv_sech(x) = inv_cosh(1/x), real only for 0 < x <= 1
+    double arg = 1.0 / x;
+    if (arg >= 1.0)
+        return mocha_complex_new(acosh(arg), 0.0);
+    fprintf(stderr, "MochaWarning (inv_sech): argument %.6g is outside real domain (0 < x <= 1), returning complex result\n", x);
+    return mocha_complex_new(0.0, acos(arg));
+}
+
+double mocha_ext_float_inv_coth_c(double x) {
+    if (x == 0.0) {
+        fprintf(stderr, "MochaRuntimeError (inv_coth): argument is 0, inv_coth is undefined at 0.\n");
+        exit(1);
+    }
+    // inv_coth(x) = inv_tanh(1/x), real only for |x| > 1
+    double arg = 1.0 / x;
+    if (arg <= -1.0) {
+        fprintf(stderr, "MochaWarning (inv_coth): argument %.6g is outside domain |x| > 1, returning -Inf\n", x);
+        return -INFINITY;
+    }
+    if (arg >= 1.0) {
+        fprintf(stderr, "MochaWarning (inv_coth): argument %.6g is outside domain |x| > 1, returning Inf\n", x);
+        return INFINITY;
+    }
+    return atanh(arg);
+}
 
 MochaComplex* mocha_ext_float_sqrt(double x) {
     if (x >= 0.0) {
@@ -1608,6 +2019,15 @@ int mocha_bcrypt_rand_seed() {
 double mocha_wrap_sin(double x)  { return sin(x);  }
 double mocha_wrap_cos(double x)  { return cos(x);  }
 double mocha_wrap_log(double x)  { return log(x);  }
+double mocha_wrap_tan(double x)  { return tan(x); }
+double mocha_wrap_asin(double x) { return asin(x); }
+double mocha_wrap_acos(double x) { return acos(x); }
+double mocha_wrap_atan(double x) { return atan(x); }
+double mocha_wrap_sinh(double x) { return sinh(x); }
+double mocha_wrap_cosh(double x) { return cosh(x); }
+double mocha_wrap_tanh(double x) { return tanh(x); }
+double mocha_wrap_asinh(double x) { return asinh(x); }
+double mocha_wrap_atanh(double x) { return atanh(x); }
 double mocha_wrap_sqrt_f(double x) { return sqrt(x); }
 
 /* ============================================================
@@ -3375,4 +3795,203 @@ void mocha_ht_free(MochaHashTable *ht) {
     mocha_ht_clear(ht);
     free(ht->entries);
     free(ht);
+}
+
+/* ===============================================================================
+   Mocha Exception Handling Runtime — setjmp/longjmp based
+   Supports: try/rescue, fail (Java's throw and Python's raise) nesting, re-throw
+   =============================================================================== */
+
+#ifdef _WIN32
+#include <windows.h>
+
+typedef struct MochaExFrame {
+    CONTEXT              ctx;
+    const char*          message;
+    int                  active;
+    struct MochaExFrame* prev;
+} MochaExFrame;
+
+static volatile MochaExFrame* mocha_ex_top = NULL;
+static volatile int mocha_ex_landed = 0;
+
+__attribute__((noinline)) void mocha_ex_enter(MochaExFrame* frame) {
+    mocha_ex_landed = 0;
+    RtlCaptureContext(&frame->ctx);
+    // when RtlRestoreContext brings us back, landed will be 1
+    // then we set it to 2 to avoid infinite loop
+    if (mocha_ex_landed == 1) {
+        mocha_ex_landed = 2;
+    }
+}
+
+int mocha_ex_did_land(void) {
+    return (mocha_ex_landed == 2) ? 1 : 0;
+}
+
+void mocha_ex_throw(const char* msg) {
+    if (!mocha_ex_top) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        exit(1);
+    }
+    MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
+    frame->message = msg;
+    frame->active  = 1;
+    mocha_ex_landed = 1;
+    RtlRestoreContext(&frame->ctx, NULL);
+}
+
+void mocha_ex_rethrow(void) {
+    if (!mocha_ex_top) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): rethrow with no active exception.\n");
+        exit(1);
+    }
+    const char* msg = ((MochaExFrame*)mocha_ex_top)->message;
+    mocha_ex_top = ((MochaExFrame*)mocha_ex_top)->prev;
+    if (!mocha_ex_top) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        exit(1);
+    }
+    MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
+    frame->message = msg;
+    frame->active  = 1;
+    mocha_ex_landed = 1;
+    RtlRestoreContext(&frame->ctx, NULL);
+}
+
+const char* mocha_ex_pop(void) {
+    if (!mocha_ex_top) return NULL;
+    MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
+    const char*   msg   = frame->message;
+    mocha_ex_top        = frame->prev;
+    return msg;
+}
+
+MochaExFrame* mocha_ex_push(void) {
+    MochaExFrame* frame = (MochaExFrame*)malloc(sizeof(MochaExFrame));
+    if (!frame) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): Out of memory.\n");
+        exit(1);
+    }
+    frame->message = NULL;
+    frame->active  = 0;
+    frame->prev    = (MochaExFrame*)mocha_ex_top;
+    mocha_ex_top   = frame;
+    return frame;
+}
+
+#else
+// ── Linux / macOS ──────────────────────────────────────────
+#include <setjmp.h>
+
+typedef struct MochaExFrame {
+    jmp_buf              env;
+    const char*          message;
+    int                  active;
+    struct MochaExFrame* prev;
+} MochaExFrame;
+
+static volatile MochaExFrame* mocha_ex_top = NULL;
+static volatile int mocha_ex_landed = 0;
+
+__attribute__((noinline)) void mocha_ex_enter(MochaExFrame* frame) {
+    mocha_ex_landed = 0;
+    if (setjmp(frame->env) != 0) {
+        mocha_ex_landed = 1;
+    }
+}
+
+int mocha_ex_did_land(void) {
+    return mocha_ex_landed;
+}
+
+void mocha_ex_throw(const char* msg) {
+    if (!mocha_ex_top) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        exit(1);
+    }
+    MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
+    frame->message = msg;
+    frame->active  = 1;
+    longjmp(frame->env, 1);
+}
+
+void mocha_ex_rethrow(void) {
+    if (!mocha_ex_top) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): rethrow with no active exception.\n");
+        exit(1);
+    }
+    const char* msg = ((MochaExFrame*)mocha_ex_top)->message;
+    mocha_ex_top = ((MochaExFrame*)mocha_ex_top)->prev;
+    if (!mocha_ex_top) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        exit(1);
+    }
+    MocrafFrame* frame = (MochaExFrame*)mocha_ex_top;
+    frame->message = msg;
+    frame->active  = 1;
+    longjmp(frame->env, 1);
+}
+
+const char* mocha_ex_pop(void) {
+    if (!mocha_ex_top) return NULL;
+    MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
+    const char*   msg   = frame->message;
+    mocha_ex_top        = frame->prev;
+    return msg;
+}
+
+MochaExFrame* mocha_ex_push(void) {
+    MochaExFrame* frame = (MochaExFrame*)malloc(sizeof(MochaExFrame));
+    if (!frame) {
+        fprintf(stderr, "MochaRuntimeError (try/rescue): Out of memory.\n");
+        exit(1);
+    }
+    frame->message = NULL;
+    frame->active  = 0;
+    frame->prev    = (MochaExFrame*)mocha_ex_top;
+    mocha_ex_top   = frame;
+    return frame;
+}
+#endif
+
+/* ===============================================================
+   Mocha Runtime Stack Tracking
+   =============================================================== */
+
+typedef struct {
+    const char* func_name;
+    const char* file_name;
+    int         line;
+} MochaStackFrame;
+
+static MochaStackFrame mocha_call_stack[256];
+static int             mocha_call_stack_top = 0;
+
+void mocha_stack_push(const char* func_name, const char* file_name, int line) {
+    if (mocha_call_stack_top >= 256) return;
+    mocha_call_stack[mocha_call_stack_top].func_name = func_name;
+    mocha_call_stack[mocha_call_stack_top].file_name = file_name;
+    mocha_call_stack[mocha_call_stack_top].line      = line;
+    mocha_call_stack_top++;
+}
+
+void mocha_stack_pop(void) {
+    if (mocha_call_stack_top > 0)
+        mocha_call_stack_top--;
+}
+
+void mocha_stack_update_line(int line) {
+    if (mocha_call_stack_top > 0)
+        mocha_call_stack[mocha_call_stack_top - 1].line = line;
+}
+
+void mocha_stack_print(void) {
+    fprintf(stderr, "Mocha's Traceback (this error resulted from the following calls):\n");
+    for (int i = 0; i < mocha_call_stack_top; i++) {
+        fprintf(stderr, "  at %s (%s:%d)\n",
+            mocha_call_stack[i].func_name,
+            mocha_call_stack[i].file_name,
+            mocha_call_stack[i].line);
+    }
 }

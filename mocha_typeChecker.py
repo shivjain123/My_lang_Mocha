@@ -67,7 +67,8 @@ class SymbolTable:
         current = self.scopes[-1]
         if name in current:
             raise MochaTypeError(
-                f"'{name}' is already declared in this scope"
+                f"'{name}' is already declared in this scope."
+                f"Mocha prohibits variable redeclaration."
             )
         current[name] = {
             "type":        type_,
@@ -96,7 +97,6 @@ class SymbolTable:
             if name in scope:
                 return scope[name]
         return None
-
 
 # ============================================================
 # TYPE CHECKER
@@ -139,6 +139,9 @@ class TypeChecker:
         self.symbols.declare("Complex", "Complex", is_class=True)
         self.symbols.declare("File", "File", is_class=True)
         self.symbols.declare("HashTable", "HashTable", is_class=True)
+
+        self.try_depth    = 0
+        self.rescue_depth = 0
 
     # -------------------------------------------------------
     # Error collection
@@ -238,6 +241,13 @@ class TypeChecker:
         # Arithmetic: + - * /
         if op in ("+", "-", "*", "/", "%"):
 
+            if left in self.tag_types or right in self.tag_types:
+                self.error(
+                    f"Arithmetic on tag types is not allowed. "
+                    f"Tags are not integers. Use match() for tag logic.", node
+                )
+                return "int"
+
             # String concatenation with +
             if op == "+" and left == "str" and right == "str":
                 return "str"
@@ -267,7 +277,8 @@ class TypeChecker:
         if op in ("<", ">", "<=", ">="):
             if left in self.tag_types or right in self.tag_types:
                 self.error(
-                    f"Tag types cannot be ordered. "
+                    f"Tag types cannot be ordered."
+                    f"They are not ints underneath like Python's Enum"
                     f"Use '==' or '!=' for tag comparison.", node
                 )
                 return "bool"
@@ -387,6 +398,7 @@ class TypeChecker:
             self.symbols.pop_scope()
             return "lambda"
 
+        """ These have been abandoned. START """
         if isinstance(node, AwaitExpr):
             return self.check_expr(node.value)
 
@@ -397,6 +409,7 @@ class TypeChecker:
         if isinstance(node, ErrorExpr):
             self.check_expr(node.value)
             return "Result"
+        """ END """
         
         if isinstance(node, ArrayLiteral):
             return self.check_array_literal(node)
@@ -1027,7 +1040,16 @@ class TypeChecker:
 
         elif isinstance(node, TupleAccess):
             self.check_tuple_access(node)
+        
+        elif isinstance(node, TryRescue):
+            self.check_try_rescue(node)
 
+        elif isinstance(node, FailStmt):
+            self.check_fail(node)
+
+        elif isinstance(node, RethrowStmt):
+            if self.rescue_depth == 0:
+                self.error("'rethrow' used outside of a rescue block", node)
         else:
             # Expression used as statement
             self.check_expr(node)
@@ -1777,6 +1799,33 @@ class TypeChecker:
 
     def get_class_node(self, name: str):
         return self.class_nodes.get(name, None)
+    
+    def check_try_rescue(self, node: TryRescue):
+        # try body in its own scope
+        self.try_depth += 1
+        self.symbols.push_scope()
+        for stmt in node.try_body:
+            self.check_stmt(stmt)
+        self.symbols.pop_scope()
+        self.try_depth -= 1
+
+        # rescue body in its own scope
+        self.rescue_depth += 1
+        self.symbols.push_scope()
+        if node.binding:
+            self.symbols.declare(node.binding, "str")
+        for stmt in node.rescue_body:
+            self.check_stmt(stmt)
+        self.symbols.pop_scope()
+        self.rescue_depth -= 1
+
+    def check_fail(self, node: FailStmt):
+        msg_type = self.check_expr(node.message)
+        if msg_type != "str":
+            self.error(
+                f"'fail' expects a str message, got '{msg_type}'",
+                node
+            )
 
     # -------------------------------------------------------
     # STEP 8: Top-level check - the entry point!

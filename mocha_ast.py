@@ -369,6 +369,21 @@ class TagAccess(Node):
     tag_name:    str   # "TokenType"
     member_name: str   # "IDENTIFIER"
 
+# --- Exception Handling ---
+@dataclass
+class TryRescue(Node):
+    try_body:    list
+    rescue_body: list
+    binding:     Optional[str]   # 'e' in rescue, e — None if no binding
+
+@dataclass
+class FailStmt(Node):
+    message: Node                # expression — must resolve to str
+
+@dataclass
+class RethrowStmt(Node):
+    pass
+
 # --- Program (root node) ---
 @dataclass
 class Program(Node):
