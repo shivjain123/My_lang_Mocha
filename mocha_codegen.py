@@ -1714,6 +1714,22 @@ class CodeGen:
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call i8* @mocha_str_format(i8* {s_reg}, i8** {arr_ptr}, i32 {argc})")
                 return (tmp, "i8*")
+            
+        # fallthrough — extended str method from mocha-string or other lib
+        else:
+            func_name = f"mocha_ext_str_{member}"
+            # look up return type
+            ret_type = self.method_return_types.get(func_name, "i8*")
+            ret_llvm = ret_type
+            # compile args
+            args = [f"i8* {s_reg}"]  # this is always first arg
+            for arg in node.args:
+                arg_reg, arg_type = self.gen_expr(arg)
+                args.append(f"{arg_type} {arg_reg}")
+            arg_str = ", ".join(args)
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call {ret_llvm} @{func_name}({arg_str})")
+            return (tmp, ret_llvm)
 
     def get_return_type(self, name, node=None):
         if name not in self.method_return_types:
@@ -1744,6 +1760,19 @@ class CodeGen:
                 if found:
                     break
 
+        # ── extend method fallback ──
+        if not found:
+            ext_candidate = f"mocha_ext_{class_name}_{member}"
+            if ext_candidate in self.method_return_types:
+                func_name = ext_candidate
+                found = True
+
+        if not found:
+            raise MochaCodeGenError(
+                f"Unknown function or method '{func_name}' — did you forget to import a library?",
+                node.line, node.col
+            )
+
         ret_type = self.get_return_type(func_name, node)
         obj_reg = self.fresh_temp()
         self.emit(f"  {obj_reg} = load {obj_llvm_type}, {obj_llvm_type}* {obj_ptr}")
@@ -1763,6 +1792,9 @@ class CodeGen:
 
     def _emit_call(self, ret_type, c_func, all_args):
         """Emit a call and return (reg, type). Handles void vs non-void."""
+        # resolve native name if this is an extend method with a native mapping
+        c_func = self.ext_native_names.get(c_func, c_func)
+        
         arg_str = ", ".join(f"{t} {r}" for r, t in all_args)
         if ret_type == "void":
             self.emit(f"  call void @{c_func}({arg_str})")

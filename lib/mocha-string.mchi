@@ -11,6 +11,7 @@ extend str function toInt() -> int;
 extend str function toFloat() -> float;
 extend str function startsWith(prefix: str) -> bool;
 extend str function endsWith(suffix: str) -> bool;
+extend str function charEqual(i: int, other: str, j: int) -> bool;
 extend str function indexOf(sub: str) -> int;
 extend str function contains(sub: str) -> bool;
 extend str function reverse() -> str;

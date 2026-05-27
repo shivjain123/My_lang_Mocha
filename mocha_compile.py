@@ -58,7 +58,7 @@ LUA_LIB     = os.path.join(LUA_DIR, "liblua55.a")
 LUA_INCLUDE = os.path.join(LUA_DIR, "include")
 RUST_LIB    = os.path.join(SCRIPT_DIR, "rust_ffi.a")
 ZIG_LIB  = os.path.join(SCRIPT_DIR, "zig_ffi.lib")
-ZIG_PATH = os.path.join(SCRIPT_DIR, "zig-x86_64-windows-0.17.0-dev.313+27be3b069", "zig.exe")
+ZIG_PATH = os.path.join(SCRIPT_DIR, "zig.exe")
 WREN_DIR     = os.path.join(SCRIPT_DIR, "wren")
 WREN_C       = os.path.join(SCRIPT_DIR, "build", "wren.c")
 WREN_OBJ     = os.path.join(SCRIPT_DIR, "build", "wren.o")
@@ -1146,9 +1146,11 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug=False) -> 
     if needs_recompile("zig_ffi.zig", "zig_ffi.lib"):
         result = subprocess.run(
             [ZIG_PATH, "build-lib", "zig_ffi.zig",
+            "--zig-lib-dir", os.path.join(SCRIPT_DIR, "zig-lib"),
             "-target", "x86_64-windows-gnu",
             "-O", "ReleaseFast"],
-            capture_output=True, text=True, encoding='utf-8'
+            capture_output=True, text=True, encoding='utf-8',
+            cwd=SCRIPT_DIR
         )
         if result.returncode != 0:
             print(f"  ❌ zig compile failed:\n{result.stderr}")

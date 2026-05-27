@@ -24,7 +24,7 @@ function main(didLoad) -> null {
         sum = sum + i;
         i++;
     };
-
+    print("sum is: ", sum); //We have to do this otherwise my optimisor gets rid of the loop LoL
     print("elapsed while running: " + str(sw.elapsed_ms()) + "ms", newLine=true);
     sw.end();
     print("elapsed after end:    " + str(sw.elapsed_ms()) + "ms", newLine=true);

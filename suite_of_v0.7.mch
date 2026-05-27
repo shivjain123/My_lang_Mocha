@@ -617,7 +617,6 @@ function test_string_builder() -> null {
     print(sb.toString(), newLine=true);  // After clear: still works!
 };
 
-
 // =============================================================================
 // SECTION 9 — mocha-stats
 // =============================================================================

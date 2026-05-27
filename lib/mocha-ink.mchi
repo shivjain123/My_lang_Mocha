@@ -1,0 +1,41 @@
+// Auto-generated manifest for mocha-ink.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+class LinePlot;
+class ScatterPlot;
+class BarChart;
+function line(x: float[], y: float[]) -> LinePlot native ink_new_line_mocha;
+function scatter(x: float[], y: float[]) -> ScatterPlot native ink_new_scatter_mocha;
+function bar(labels: str[], values: float[]) -> BarChart native ink_new_bar_mocha;
+extend LinePlot function title(t: str) -> null native ink_lp_set_title;
+extend LinePlot function xlabel(l: str) -> null native ink_lp_set_xlabel;
+extend LinePlot function ylabel(l: str) -> null native ink_lp_set_ylabel;
+extend LinePlot function color(c: str) -> null native ink_lp_set_color;
+extend LinePlot function label(l: str) -> null native ink_lp_set_label;
+extend LinePlot function grid(on: bool) -> null native ink_lp_set_grid;
+extend LinePlot function add_line(x: float[], y: float[]) -> null native ink_lp_add_line;
+extend LinePlot function add_scatter(x: float[], y: float[]) -> null native ink_lp_add_scatter;
+extend LinePlot function save(path: str) -> null native ink_lp_save;
+extend LinePlot function show() -> null native ink_lp_show;
+extend ScatterPlot function title(t: str) -> null native ink_sp_set_title;
+extend ScatterPlot function xlabel(l: str) -> null native ink_sp_set_xlabel;
+extend ScatterPlot function ylabel(l: str) -> null native ink_sp_set_ylabel;
+extend ScatterPlot function color(c: str) -> null native ink_sp_set_color;
+extend ScatterPlot function label(l: str) -> null native ink_sp_set_label;
+extend ScatterPlot function grid(on: bool) -> null native ink_sp_set_grid;
+extend ScatterPlot function add_line(x: float[], y: float[]) -> null native ink_sp_add_line;
+extend ScatterPlot function add_scatter(x: float[], y: float[]) -> null native ink_sp_add_scatter;
+extend ScatterPlot function save(path: str) -> null native ink_sp_save;
+extend ScatterPlot function show() -> null native ink_sp_show;
+extend BarChart function title(t: str) -> null native ink_bc_set_title;
+extend BarChart function xlabel(l: str) -> null native ink_bc_set_xlabel;
+extend BarChart function ylabel(l: str) -> null native ink_bc_set_ylabel;
+extend BarChart function color(c: str) -> null native ink_bc_set_color;
+extend BarChart function label(l: str) -> null native ink_bc_set_label;
+extend BarChart function grid(on: bool) -> null native ink_bc_set_grid;
+extend BarChart function horizontal() -> null native ink_bc_set_horizontal;
+extend BarChart function add_series(values: float[]) -> null native ink_bc_add_series;
+extend BarChart function save(path: str) -> null native ink_bc_save;
+extend BarChart function show() -> null native ink_bc_show;

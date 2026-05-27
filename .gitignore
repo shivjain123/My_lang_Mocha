@@ -8,6 +8,9 @@ zig.exe
 *.a
 *.dll
 
+#Graphs made
+*.svg
+
 # Python cache
 __pycache__/
 

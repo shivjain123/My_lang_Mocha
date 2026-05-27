@@ -45,6 +45,10 @@ extend str {
         return true;
     };
 
+    function charEqual(i: int, other: str, j: int) -> bool {
+        return this.charAt(i) == other.charAt(j);
+    };
+
     function indexOf(sub: str) -> int {
         var subLen: int = sub.length;
         var tLen: int = this.length;
@@ -53,14 +57,13 @@ extend str {
             var j: int = 0;
             var found: bool = true;
             while (j < subLen) {
-                if (str(this.charAt(i + j)) != str(sub.charAt(j))) {
+                if (!this.charEqual(i + j, sub, j)) {
                     found = false;
+                    j = subLen;
                 };
                 j = j + 1;
             };
-            if (found) {
-                return i;
-            };
+            if (found) { return i; };
             i = i + 1;
         };
         return -1;
@@ -154,6 +157,7 @@ extend str {
         var i: int = startIdx;
         while (i <= endIdx) {
             result = result + str(this.charAt(i));
+            //My substrings are inclusive of end, think Lua-like
             i = i + 1;
         };
         return result;
@@ -245,9 +249,11 @@ extend str {
             while (j < dLen) {
                 if (i + j >= tLen) {
                     found = false;
+                    j = dLen;
                 };
-                if (found && str(this.charAt(i + j)) != str(delim.charAt(j))) {
+                if (found && !this.charEqual(i + j, delim, j)) {
                     found = false;
+                    j = dLen;
                 };
                 j = j + 1;
             };
@@ -257,7 +263,7 @@ extend str {
                 i = i + dLen;
             };
             if (!found) {
-                current = current + str(this.charAt(i));
+                current = current + this.charAt(i);
                 i = i + 1;
             };
         };
