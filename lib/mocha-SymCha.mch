@@ -282,6 +282,8 @@ function sym_partial2(e: Expr, var1: str, var2: str) -> Expr {
 // UNICODE SUPERSCRIPT HELPER
 // Converts digit string to superscript Unicode
 // e.g. "23" → "²³", "-1" → "⁻¹"
+// Since Unicode only resolves 0-9 by default,
+// I made a loop to compensate
 // =============================================
 
 function to_superscript(s: str) -> str {
@@ -307,7 +309,6 @@ function to_superscript(s: str) -> str {
     };
     return result;
 };
-
 
 // =============================================
 // SYMBOLIC PRINT

@@ -1254,9 +1254,18 @@ class Parser:
     # STEP 5: Functions
     # -------------------------------------------------------
 
+    def collect_doc(self) -> list:
+        """Collect any preceding DOC_COMMENT tokens."""
+        lines = []
+        while self.check(TokenType.DOC_COMMENT):
+            lines.append(self.advance().value)
+        return lines or None # type: ignore
+
     def parse_param(self) -> Param:
         """
         Parses a single function parameter: name: type
+        optional: must name: type
+        optional: name: type = default
         """
         if self.check(TokenType.DID_LOAD):
             raise MochaParseError(
@@ -1265,18 +1274,29 @@ class Parser:
                 self.current()
             )
         
-        tok = self.current()  # capture 'var' token before consuming
+        tok = self.current()
+        
+        is_required = False
+        if self.check(TokenType.MUST):
+            self.advance()
+            is_required = True
+        
         name = self.expect(TokenType.IDENTIFIER,
                            "Expected parameter name").value
         self.expect(TokenType.COLON, "Expected ':' after parameter name")
         type_ = self.parse_type()
-        node = Param(name=name, type=type_)
+        
+        default = None
+        if self.match(TokenType.ASSIGN):
+            default = self.parse_expression()
+        
+        node = Param(name=name, type=type_, is_required=is_required, default=default) # type: ignore
         node.line = tok.line
         node.col  = tok.column
         return node
 
     def parse_function(self, visibility="public",
-                       is_shared=False, is_async=False) -> Node:
+                   is_shared=False, is_async=False, doc=None) -> Node:
         """
         function add(a: int, b: int) -> int { ... };
         async function fetch(url: str) -> Result { ... };
@@ -1344,7 +1364,8 @@ class Parser:
                 has_didLoad=has_didLoad,
                 is_native=True,
                 native_name=native_name,
-                is_variadic=is_variadic
+                is_variadic=is_variadic,
+                doc=doc # type: ignore
             )
             node.line = tok.line
             node.col  = tok.column
@@ -1362,7 +1383,8 @@ class Parser:
                 body=body,
                 visibility=visibility,
                 is_shared=is_shared,
-                is_async=is_async
+                is_async=is_async,
+                doc=doc #type:ignore
             )
             node.line = tok.line
             node.col  = tok.column
@@ -1375,7 +1397,8 @@ class Parser:
             body=body,
             is_async=is_async,
             has_didLoad=has_didLoad,
-            is_variadic=is_variadic
+            is_variadic=is_variadic,
+            doc =doc #type:ignore
         )
         node.line = tok.line
         node.col  = tok.column
@@ -1420,6 +1443,7 @@ class Parser:
         - shared method: shared function create() -> Animal { }
         """
         tok = self.current()  # capture 'var' token before consuming
+        doc = self.collect_doc()
         visibility = "public"
         is_shared  = False
         is_async   = False
@@ -1447,7 +1471,8 @@ class Parser:
             method = self.parse_function(
                 visibility=visibility,
                 is_shared=is_shared,
-                is_async=is_async
+                is_async=is_async,
+                doc=doc
             )
             # Always return as MethodDecl inside a class
             if isinstance(method, FunctionDecl):
@@ -1459,7 +1484,8 @@ class Parser:
                     visibility=visibility,
                     is_shared=is_shared,
                     is_async=is_async,
-                    has_didLoad=method.has_didLoad
+                    has_didLoad=method.has_didLoad,
+                    doc=doc
                 )
                 node.line = tok.line
                 node.col = tok.column
@@ -1481,7 +1507,7 @@ class Parser:
 
             self.expect(TokenType.SEMICOLON, "Expected ';' after field")
             node = FieldDecl(name=name, type=type_,
-                             visibility=visibility, value=value)
+                    visibility=visibility, value=value, is_shared=is_shared)
             node.line = tok.line
             node.col = tok.column
             return node
@@ -1490,12 +1516,13 @@ class Parser:
             "Expected a field or method declaration", self.current()
         )
 
-    def parse_class(self) -> Node:
+    def parse_class(self, doc=None) -> Node:
         """
         class Dog extends Animal implements Swimmable { ... };
         class Pegasus extends Bird, Horse implements Flyable { ... };
         """
         tok = self.current()  # capture 'var' token before consuming
+        #doc = self.collect_doc()
         self.expect(TokenType.CLASS, "Expected 'class'")
         name = self.expect(TokenType.IDENTIFIER,
                            "Expected class name").value
@@ -1531,7 +1558,7 @@ class Parser:
         self.expect(TokenType.SEMICOLON, "Expected ';' after class")
 
         node = ClassDecl(name=name, parents=parents,
-                         interfaces=interfaces, body=body)
+                         interfaces=interfaces, body=body, doc=doc) # type: ignore
         node.line = tok.line
         node.col  = tok.column
         return node
@@ -1767,20 +1794,21 @@ class Parser:
 
         while not self.is_at_end():
             try:
+                doc = self.collect_doc()
                 if self.check(TokenType.IMPORT):
                     statements.append(self.parse_import())
                 elif self.check(TokenType.FROM):
                     statements.append(self.parse_from_import())
                 elif self.check(TokenType.CLASS):
-                    statements.append(self.parse_class())
+                    statements.append(self.parse_class(doc=doc))
                 elif self.check(TokenType.INTERFACE):
                     statements.append(self.parse_interface())
                 elif self.check(TokenType.ASYNC):
                     self.advance()
-                    func = self.parse_function(is_async=True)
+                    func = self.parse_function(is_async=True, doc=doc)
                     statements.append(func)
                 elif self.check(TokenType.FUNCTION):
-                    statements.append(self.parse_function())
+                    statements.append(self.parse_function(doc=doc))
                 elif self.check(TokenType.EXTEND):
                     statements.append(self.parse_extend())
                 elif self.check(TokenType.TAG):

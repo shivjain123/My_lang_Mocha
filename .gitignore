@@ -1,20 +1,31 @@
-# Zig compiler binary
+# ─── Compiler & Toolchain Binaries ───────────────────────────────────────────
 zig.exe
 
-# Compiled outputs
+# ─── Compiled & Intermediate Outputs ─────────────────────────────────────────
 *.exe
-*.o
 *.ll
+*.o
 *.a
+*.obj
+*.lib
 *.dll
+*.pdb
 
-#Graphs made
+# ─── Mocha Build Artifacts ────────────────────────────────────────────────────
+*_msvc.*
+mocha_cuda_runtime.lib
+mocha_cuda_runtime.obj
+
+# ─── Generated Data Files ─────────────────────────────────────────────────────
+*.db
+
+# ─── Generated Media ──────────────────────────────────────────────────────────
 *.svg
 
-# Python cache
+# ─── Python Cache ─────────────────────────────────────────────────────────────
 __pycache__/
 
-# Third party source dumps
+# ─── Third-Party Source Dumps ────────────────────────────────────────────────
 lua-5.5.0_Win64_dllw6_lib/
 sqlite-amalgamation-3510300/
 zig-lib/

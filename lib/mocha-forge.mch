@@ -1,5 +1,155 @@
 // mocha-lib-deps: mocha-stats, mocha-string
+
+//Const
 const RAND: int = -999999;
+
+// =============================================
+// NATIVE WRAPPERS FOR SQLite3
+// =============================================
+
+function sqlite3_open(path: str) -> null native mocha_sqlite3_open;
+function sqlite3_exec(db: null, sql: str) -> int native mocha_sqlite3_exec;
+function sqlite3_query(db: null, sql: str) -> int native mocha_sqlite3_query;
+function sqlite3_close(db: null) -> null native mocha_sqlite3_close;
+function sqlite3_query_run(db: null, sql: str) -> int native mocha_sqlite3_query_run;
+function sqlite3_query_rows(db: null) -> int native mocha_sqlite3_query_rows;
+function sqlite3_query_cols(db: null) -> int native mocha_sqlite3_query_cols;
+function sqlite3_query_cell(db: null, row: int, col: int) -> str native mocha_sqlite3_query_cell;
+function sqlite3_query_colname(db: null, col: int) -> str native mocha_sqlite3_query_colname;
+function sqlite3_errmsg(db: null) -> str native mocha_sqlite3_errmsg;
+function sqlite3_last_rowid(db: null) -> int native mocha_sqlite3_last_rowid;
+function sqlite3_changes(db: null) -> int native mocha_sqlite3_changes;
+function sqlite3_table_exists(db: null, table: str) -> int native mocha_sqlite3_table_exists;
+
+// =============================================
+// Helpers for .save()/.load()
+// =============================================
+
+function forge_db_open(path: str) -> null {
+    var db: null = sqlite3_open(path);
+    return db;
+};
+
+function forge_db_setup(db: null) -> null {
+    sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);");
+    sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS arrays (name TEXT, idx INT, value TEXT);");
+    sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS trees (name TEXT, node_id INT, is_leaf INT, value REAL, feature INT, threshold REAL, left_id INT, right_id INT);");
+};
+
+function forge_db_write_meta(db: null, key: str, value: str) -> null {
+    sqlite3_exec(db, "INSERT OR REPLACE INTO meta (key, value) VALUES ('" + key + "', '" + value + "');");
+};
+
+function forge_db_read_meta(db: null, key: str) -> str {
+    sqlite3_query_run(db, "SELECT value FROM meta WHERE key = '" + key + "';");
+    return sqlite3_query_cell(db, 0, 0);
+};
+
+function forge_db_write_array(db: null, name: str, idx: int, value: str) -> null {
+    sqlite3_exec(db, "INSERT INTO arrays (name, idx, value) VALUES ('" + name + "', " + str(idx) + ", '" + value + "');");
+};
+
+function forge_db_read_array_len(db: null, name: str) -> int {
+    sqlite3_query_run(db, "SELECT COUNT(*) FROM arrays WHERE name = '" + name + "';");
+    return sqlite3_query_cell(db, 0, 0).toInt();
+};
+
+function forge_db_read_array_cell(db: null, name: str, idx: int) -> str {
+    sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' AND idx = " + str(idx) + ";");
+    return sqlite3_query_cell(db, 0, 0);
+};
+
+function forge_db_write_tree_node(db: null, name: str, node_id: int, is_leaf: int, value: float, feature: int, threshold: float, left_id: int, right_id: int) -> null {
+    sqlite3_exec(db, "INSERT INTO trees (name, node_id, is_leaf, value, feature, threshold, left_id, right_id) VALUES ('" + name + "', " + str(node_id) + ", " + str(is_leaf) + ", " + str(value) + ", " + str(feature) + ", " + str(threshold) + ", " + str(left_id) + ", " + str(right_id) + ");");
+};
+
+function forge_db_read_tree_node_isleaf(db: null, name: str, node_id: int) -> int {
+    sqlite3_query_run(db, "SELECT is_leaf FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    return sqlite3_query_cell(db, 0, 0).toInt();
+};
+
+function forge_db_read_tree_node_value(db: null, name: str, node_id: int) -> float {
+    sqlite3_query_run(db, "SELECT value FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    return sqlite3_query_cell(db, 0, 0).toFloat();
+};
+
+function forge_db_read_tree_node_feature(db: null, name: str, node_id: int) -> int {
+    sqlite3_query_run(db, "SELECT feature FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    return sqlite3_query_cell(db, 0, 0).toInt();
+};
+
+function forge_db_read_tree_node_threshold(db: null, name: str, node_id: int) -> float {
+    sqlite3_query_run(db, "SELECT threshold FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    return sqlite3_query_cell(db, 0, 0).toFloat();
+};
+
+function forge_db_read_tree_node_leftid(db: null, name: str, node_id: int) -> int {
+    sqlite3_query_run(db, "SELECT left_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    return sqlite3_query_cell(db, 0, 0).toInt();
+};
+
+function forge_db_read_tree_node_rightid(db: null, name: str, node_id: int) -> int {
+    sqlite3_query_run(db, "SELECT right_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    return sqlite3_query_cell(db, 0, 0).toInt();
+};
+
+function forge_serialize_dtnode(db: null, name: str, node: DTNode, node_id: int, counter: int[]) -> null {
+    if (node.is_leaf == 1) {
+        forge_db_write_tree_node(db, name, node_id, 1, float(node.label), 0, 0.0, -1, -1);
+        return;
+    };
+    var left_id: int = counter[0];
+    counter[0]++;
+    var right_id: int = counter[0];
+    counter[0]++;
+    forge_db_write_tree_node(db, name, node_id, 0, 0.0, node.feature_idx, node.threshold, left_id, right_id);
+    forge_serialize_dtnode(db, name, node.left, left_id, counter);
+    forge_serialize_dtnode(db, name, node.right, right_id, counter);
+};
+
+function forge_serialize_surrogatenode(db: null, name: str, node: SurrogateNode, node_id: int, counter: int[]) -> null {
+    if (node.is_leaf == 1) {
+        forge_db_write_tree_node(db, name, node_id, 1, node.value, 0, 0.0, -1, -1);
+        return;
+    };
+    var left_id: int = counter[0];
+    counter[0]++;
+    var right_id: int = counter[0];
+    counter[0]++;
+    forge_db_write_tree_node(db, name, node_id, 0, 0.0, node.feature_idx, node.threshold, left_id, right_id);
+    forge_serialize_surrogatenode(db, name, node.left, left_id, counter);
+    forge_serialize_surrogatenode(db, name, node.right, right_id, counter);
+};
+
+function forge_deserialize_dtnode(db: null, name: str, node_id: int) -> DTNode {
+    var is_leaf: int = forge_db_read_tree_node_isleaf(db, name, node_id);
+    if (is_leaf == 1) {
+        var label: int = int(forge_db_read_tree_node_value(db, name, node_id));
+        return dt_leaf(label);
+    };
+    var feature: int = forge_db_read_tree_node_feature(db, name, node_id);
+    var threshold: float = forge_db_read_tree_node_threshold(db, name, node_id);
+    var left_id: int = forge_db_read_tree_node_leftid(db, name, node_id);
+    var right_id: int = forge_db_read_tree_node_rightid(db, name, node_id);
+    var left_node: DTNode = forge_deserialize_dtnode(db, name, left_id);
+    var right_node: DTNode = forge_deserialize_dtnode(db, name, right_id);
+    return dt_node(feature, threshold, left_node, right_node);
+};
+
+function forge_deserialize_surrogatenode(db: null, name: str, node_id: int) -> SurrogateNode {
+    var is_leaf: int = forge_db_read_tree_node_isleaf(db, name, node_id);
+    if (is_leaf == 1) {
+        var value: float = forge_db_read_tree_node_value(db, name, node_id);
+        return surrogate_leaf(value);
+    };
+    var feature: int = forge_db_read_tree_node_feature(db, name, node_id);
+    var threshold: float = forge_db_read_tree_node_threshold(db, name, node_id);
+    var left_id: int = forge_db_read_tree_node_leftid(db, name, node_id);
+    var right_id: int = forge_db_read_tree_node_rightid(db, name, node_id);
+    var left_node: SurrogateNode = forge_deserialize_surrogatenode(db, name, left_id);
+    var right_node: SurrogateNode = forge_deserialize_surrogatenode(db, name, right_id);
+    return surrogate_node(feature, threshold, left_node, right_node);
+};
 
 class OneHotEncoder {
     var categories: str[];
@@ -41,32 +191,32 @@ class OneHotEncoder {
     // ─────────────────────────────────────────
     function transform(data: str[]) -> int[][] {
         if (this.fitted == 0) {
-        c_print_err("MochaForgeError (OneHotEncoder): transform called before fit.");
-        c_exit(2);
-    };
-    var result: int[][] = alloc int[data.length][this.n_categories];
-        var i: int = 0;
-        while (i < data.length) {
-            // find category index
-            var idx: int = -1;
-            var j: int = 0;
-            while (j < this.n_categories) {
-                if (this.categories[j] == data[i]) { idx = j; };
-                j++;
-            };
-            if (idx == -1) {
-                c_print_err("MochaForgeError (OneHotEncoder): unknown category '" + data[i] + "' — fit did not see this value.");
-                c_exit(2);
-            };
-            // fill row with zeros then set the hot index
-            var k: int = 0;
-            while (k < this.n_categories) {
-                result[i][k] = 0;
-                k++;
-            };
-            result[i][idx] = 1;
-            i++;
+            c_print_err("MochaForgeError (OneHotEncoder): transform called before fit.");
+            c_exit(2);
         };
+        var result: int[][] = alloc int[data.length][this.n_categories];
+            var i: int = 0;
+            while (i < data.length) {
+                // find category index
+                var idx: int = -1;
+                var j: int = 0;
+                while (j < this.n_categories) {
+                    if (this.categories[j] == data[i]) { idx = j; };
+                    j++;
+                };
+                if (idx == -1) {
+                    c_print_err("MochaForgeError (OneHotEncoder): unknown category '" + data[i] + "' — fit did not see this value.");
+                    c_exit(2);
+                };
+                // fill row with zeros then set the hot index
+                var k: int = 0;
+                while (k < this.n_categories) {
+                    result[i][k] = 0;
+                    k++;
+                };
+                result[i][idx] = 1;
+                i++;
+            };
         return result;
     };
 
@@ -107,6 +257,34 @@ class OneHotEncoder {
             c_exit(2);
         };
         return this.categories;
+    };
+
+    // OneHotEncoder
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "OneHotEncoder");
+        forge_db_write_meta(db, "n_categories", str(this.n_categories));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        var i: int = 0;
+        while (i < this.n_categories) {
+            forge_db_write_array(db, "categories", i, this.categories[i]);
+            i++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.n_categories = forge_db_read_meta(db, "n_categories").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.categories = alloc str[this.n_categories];
+        var i: int = 0;
+        while (i < this.n_categories) {
+            this.categories[i] = forge_db_read_array_cell(db, "categories", i);
+            i++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -203,6 +381,33 @@ class OrdinalEncoder {
         };
         return this.order;
     };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "OrdinalEncoder");
+        forge_db_write_meta(db, "n_categories", str(this.n_categories));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        var i: int = 0;
+        while (i < this.n_categories) {
+            forge_db_write_array(db, "order", i, this.order[i]);
+            i++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.n_categories = forge_db_read_meta(db, "n_categories").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.order = alloc str[this.n_categories];
+        var i: int = 0;
+        while (i < this.n_categories) {
+            this.order[i] = forge_db_read_array_cell(db, "order", i);
+            i++;
+        };
+        sqlite3_close(db);
+    };
 };
 
 class TargetEncoder {
@@ -296,6 +501,33 @@ class TargetEncoder {
             c_exit(2);
         };
         return this.categories;
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "TargetEncoder");
+        forge_db_write_meta(db, "n_categories", str(this.n_categories));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        var i: int = 0;
+        while (i < this.n_categories) {
+            forge_db_write_array(db, "categories", i, this.categories[i]);
+            i++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.n_categories = forge_db_read_meta(db, "n_categories").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.categories = alloc str[this.n_categories];
+        var i: int = 0;
+        while (i < this.n_categories) {
+            this.categories[i] = forge_db_read_array_cell(db, "categories", i);
+            i++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -508,6 +740,82 @@ class LinearRegression {
 
         if (ss_tot == 0.0) { return 1.0; };
         return 1.0 - (ss_res / ss_tot);
+    };
+    // ─────────────────────────────────────────
+    // summary: OLS results table
+    // ─────────────────────────────────────────
+    function summary(x: float[][], y: float[]) -> null {
+        if (this.fitted == 0) {
+            c_print_err("MochaForgeError (LinearRegression): summary called before fit.");
+            c_exit(2);
+        };
+        var r2_val: float = this.r2(x, y);
+        var n: int = y.length;
+        var n_features: int = x.cols;
+        var adj_r2: float = 1.0 - (1.0 - r2_val) * float(n - 1) / float(n - n_features - 1);
+        var mse_val: float = this.mse(x, y);
+        var rmse_val: float = this.rmse(x, y);
+
+        print("==============================================");
+        print("        OLS Regression Results");
+        print("==============================================");
+        print("R²:          " + str(r2_val));
+        print("Adj. R²:     " + str(adj_r2));
+        print("MSE:         " + str(mse_val));
+        print("RMSE:        " + str(rmse_val));
+        print("n:           " + str(n));
+        print("Features:    " + str(n_features));
+        print("----------------------------------------------");
+        print("Coef         Value");
+        print("----------------------------------------------");
+        print("bias         " + str(this.bias));
+        var wi: int = 0;
+        while (wi < n_features) {
+            print("w[" + str(wi) + "]          " + str(this.weights[wi]));
+            wi++;
+        };
+        if (this.reg_type != "none") {
+            print("----------------------------------------------");
+            print("Regularization: " + this.reg_type + "  λ=" + str(this.reg_lambda));
+        };
+        print("==============================================");
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "LinearRegression");
+        forge_db_write_meta(db, "bias", str(this.bias));
+        forge_db_write_meta(db, "lr", str(this.lr));
+        forge_db_write_meta(db, "iterations", str(this.iterations));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "reg_type", this.reg_type);
+        forge_db_write_meta(db, "reg_lambda", str(this.reg_lambda));
+        forge_db_write_meta(db, "weights_len", str(this.weights.length));
+        var i: int = 0;
+        while (i < this.weights.length) {
+            forge_db_write_array(db, "weights", i, str(this.weights[i]));
+            i++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.bias = forge_db_read_meta(db, "bias").toFloat();
+        this.lr = forge_db_read_meta(db, "lr").toFloat();
+        this.iterations = forge_db_read_meta(db, "iterations").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.reg_type = forge_db_read_meta(db, "reg_type");
+        this.reg_lambda = forge_db_read_meta(db, "reg_lambda").toFloat();
+        var wlen: int = forge_db_read_meta(db, "weights_len").toInt();
+        this.weights = alloc float[wlen];
+        var i: int = 0;
+        while (i < wlen) {
+            this.weights[i] = forge_db_read_array_cell(db, "weights", i).toFloat();
+            i++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -724,6 +1032,87 @@ class LogisticClassification {
         if (tp + fn_count > 0) { r = float(tp) / float(tp + fn_count); };
         if (p + r == 0.0) { return 0.0; };
         return 2.0 * p * r / (p + r);
+    };
+
+    // ─────────────────────────────────────────
+    // summary: classification report
+    // ─────────────────────────────────────────
+    function summary(x: float[][], y: int[]) -> null {
+        if (this.fitted == 0) {
+            c_print_err("MochaForgeError (LogisticClassification): summary called before fit.");
+            c_exit(2);
+        };
+
+        var c: int[] = this.confusion(x, y);
+        var tp: int = c[0];
+        var fp: int = c[1];
+        var fn_count: int = c[2];
+        var n: int = y.length;
+        var tn: int = n - tp - fp - fn_count;
+        var n_features: int = x.cols;
+
+        var acc: float = this.accuracy(x, y);
+        var prec: float = this.precision(x, y);
+        var rec: float = this.recall(x, y);
+        var f1_val: float = this.f1(x, y);
+
+        print("==============================================");
+        print("     Classification Report");
+        print("==============================================");
+        print("Accuracy:    " + str(acc));
+        print("Precision:   " + str(prec));
+        print("Recall:      " + str(rec));
+        print("F1 Score:    " + str(f1_val));
+        print("n:           " + str(n));
+        print("Features:    " + str(n_features));
+        print("----------------------------------------------");
+        print("Confusion Matrix:");
+        print("                 Predicted 0   Predicted 1");
+        print("Actual 0         " + str(tn) + "             " + str(fp));
+        print("Actual 1         " + str(fn_count) + "             " + str(tp));
+        print("----------------------------------------------");
+        print("Coef         Value");
+        print("----------------------------------------------");
+        print("bias         " + str(this.bias));
+        var wi: int = 0;
+        while (wi < n_features) {
+            print("w[" + str(wi) + "]          " + str(this.weights[wi]));
+            wi++;
+        };
+        print("==============================================");
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "LogisticClassification");
+        forge_db_write_meta(db, "bias", str(this.bias));
+        forge_db_write_meta(db, "lr", str(this.lr));
+        forge_db_write_meta(db, "iterations", str(this.iterations));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "weights_len", str(this.weights.length));
+        var i: int = 0;
+        while (i < this.weights.length) {
+            forge_db_write_array(db, "weights", i, str(this.weights[i]));
+            i++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.bias = forge_db_read_meta(db, "bias").toFloat();
+        this.lr = forge_db_read_meta(db, "lr").toFloat();
+        this.iterations = forge_db_read_meta(db, "iterations").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        var wlen: int = forge_db_read_meta(db, "weights_len").toInt();
+        this.weights = alloc float[wlen];
+        var i: int = 0;
+        while (i < wlen) {
+            this.weights[i] = forge_db_read_array_cell(db, "weights", i).toFloat();
+            i++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -1002,6 +1391,52 @@ class KNNClassifier {
         };
         return preds;
     };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "KNNClassifier");
+        forge_db_write_meta(db, "k", str(this.k));
+        forge_db_write_meta(db, "n_train", str(this.n_train));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "distance_metric", this.distance_metric);
+        forge_db_write_meta(db, "reg_mode", str(this.reg_mode));
+        forge_db_write_meta(db, "n_features", str(this.x_train.cols));
+        var i: int = 0;
+        while (i < this.n_train) {
+            forge_db_write_array(db, "y_train", i, str(this.y_train[i]));
+            var fi: int = 0;
+            while (fi < this.x_train.cols) {
+                forge_db_write_array(db, "x_train_" + str(i), fi, str(this.x_train[i][fi]));
+                fi++;
+            };
+            i++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.k = forge_db_read_meta(db, "k").toInt();
+        this.n_train = forge_db_read_meta(db, "n_train").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.distance_metric = forge_db_read_meta(db, "distance_metric");
+        this.reg_mode = forge_db_read_meta(db, "reg_mode").toInt();
+        var n_features: int = forge_db_read_meta(db, "n_features").toInt();
+        this.x_train = alloc float[this.n_train][n_features];
+        this.y_train = alloc int[this.n_train];
+        var i: int = 0;
+        while (i < this.n_train) {
+            this.y_train[i] = forge_db_read_array_cell(db, "y_train", i).toInt();
+            var fi: int = 0;
+            while (fi < n_features) {
+                this.x_train[i][fi] = forge_db_read_array_cell(db, "x_train_" + str(i), fi).toFloat();
+                fi++;
+            };
+            i++;
+        };
+        sqlite3_close(db);
+    };
 };
 
 class KMeans {
@@ -1204,6 +1639,60 @@ class KMeans {
             i++;
         };
         return total;
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "KMeans");
+        forge_db_write_meta(db, "k", str(this.k));
+        forge_db_write_meta(db, "n_samples", str(this.n_samples));
+        forge_db_write_meta(db, "n_features", str(this.n_features));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "threshold", str(this.threshold));
+        forge_db_write_meta(db, "labels_len", str(this.cluster_labels.length));
+        var i: int = 0;
+        while (i < this.cluster_labels.length) {
+            forge_db_write_array(db, "labels", i, str(this.cluster_labels[i]));
+            i++;
+        };
+        var ci: int = 0;
+        while (ci < this.k) {
+            var fi: int = 0;
+            while (fi < this.n_features) {
+                forge_db_write_array(db, "centroids_" + str(ci), fi, str(this.centroids[ci][fi]));
+                fi++;
+            };
+            ci++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.k = forge_db_read_meta(db, "k").toInt();
+        this.n_samples = forge_db_read_meta(db, "n_samples").toInt();
+        this.n_features = forge_db_read_meta(db, "n_features").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.threshold = forge_db_read_meta(db, "threshold").toFloat();
+        var llen: int = forge_db_read_meta(db, "labels_len").toInt();
+        this.cluster_labels = alloc int[llen];
+        var i: int = 0;
+        while (i < llen) {
+            this.cluster_labels[i] = forge_db_read_array_cell(db, "labels", i).toInt();
+            i++;
+        };
+        this.centroids = alloc float[this.k][this.n_features];
+        var ci: int = 0;
+        while (ci < this.k) {
+            var fi: int = 0;
+            while (fi < this.n_features) {
+                this.centroids[ci][fi] = forge_db_read_array_cell(db, "centroids_" + str(ci), fi).toFloat();
+                fi++;
+            };
+            ci++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -1468,27 +1957,27 @@ class DecisionTree {
     // predict
     // ─────────────────────────────────────────
     function predict(x: float[][]) -> int[] {
-    if (this.fitted == 0) {
-        c_print_err("MochaForgeError (DecisionTree): predict called before fit.");
-        c_exit(2);
-    };
-    var n: int = x.length;
-    var n_features: int = x.cols;
-    var preds: int[] = alloc int[n];
-    var x_r: float[][] = x;
-    var i: int = 0;
-    while (i < n) {
-        var sample: float[] = alloc float[n_features];
-        var j: int = 0;
-        while (j < n_features) {
-            sample[j] = x_r[i][j];
-            j++;
+        if (this.fitted == 0) {
+            c_print_err("MochaForgeError (DecisionTree): predict called before fit.");
+            c_exit(2);
         };
-        preds[i] = this.predict_one(sample, this.root);
-        i++;
+        var n: int = x.length;
+        var n_features: int = x.cols;
+        var preds: int[] = alloc int[n];
+        var x_r: float[][] = x;
+        var i: int = 0;
+        while (i < n) {
+            var sample: float[] = alloc float[n_features];
+            var j: int = 0;
+            while (j < n_features) {
+                sample[j] = x_r[i][j];
+                j++;
+            };
+            preds[i] = this.predict_one(sample, this.root);
+            i++;
+        };
+        return preds;
     };
-    return preds;
-};
 
     // ─────────────────────────────────────────
     // confusion helper
@@ -1569,6 +2058,28 @@ class DecisionTree {
         if (tp + fn_count > 0) { r = float(tp) / float(tp + fn_count); };
         if (p + r == 0.0) { return 0.0; };
         return 2.0 * p * r / (p + r);
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "DecisionTree");
+        forge_db_write_meta(db, "max_depth", str(this.max_depth));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "use_gini", str(this.use_gini));
+        var counter: int[] = alloc int[1];
+        counter[0] = 1;
+        forge_serialize_dtnode(db, "root", this.root, 0, counter);
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.max_depth = forge_db_read_meta(db, "max_depth").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.use_gini = forge_db_read_meta(db, "use_gini").toInt();
+        this.root = forge_deserialize_dtnode(db, "root", 0);
+        sqlite3_close(db);
     };
 };
 
@@ -1945,6 +2456,42 @@ class RandomForest {
         if (tp + fn_count > 0) { r = float(tp) / float(tp + fn_count); };
         if (p + r == 0.0) { return 0.0; };
         return 2.0 * p * r / (p + r);
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "RandomForest");
+        forge_db_write_meta(db, "n_trees", str(this.n_trees));
+        forge_db_write_meta(db, "max_depth", str(this.max_depth));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "use_gini", str(this.use_gini));
+        forge_db_write_meta(db, "n_features_total", str(this.n_features_total));
+        var ti: int = 0;
+        while (ti < this.n_trees) {
+            var counter: int[] = alloc int[1];
+            counter[0] = 1;
+            var root: DTNode = this.roots[ti];
+            forge_serialize_dtnode(db, "tree_" + str(ti), root, 0, counter);
+            ti++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.n_trees = forge_db_read_meta(db, "n_trees").toInt();
+        this.max_depth = forge_db_read_meta(db, "max_depth").toInt();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.use_gini = forge_db_read_meta(db, "use_gini").toInt();
+        this.n_features_total = forge_db_read_meta(db, "n_features_total").toInt();
+        this.roots = alloc DTNode[this.n_trees];
+        var ti: int = 0;
+        while (ti < this.n_trees) {
+            this.roots[ti] = forge_deserialize_dtnode(db, "tree_" + str(ti), 0);
+            ti++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -2428,6 +2975,86 @@ class Svm {
         if (tp + fn_count > 0) { r = float(tp) / float(tp + fn_count); };
         if (p + r == 0.0) { return 0.0; };
         return 2.0 * p * r / (p + r);
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "Svm");
+        forge_db_write_meta(db, "mode", this.mode);
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "max_iter", str(this.max_iter));
+        forge_db_write_meta(db, "bias", str(this.bias));
+        forge_db_write_meta(db, "lr", str(this.lr));
+        forge_db_write_meta(db, "reg_lamb_da", str(this.reg_lamb_da));
+        forge_db_write_meta(db, "n_train", str(this.n_train));
+        forge_db_write_meta(db, "c_param", str(this.c_param));
+        forge_db_write_meta(db, "gamma", str(this.gamma));
+        forge_db_write_meta(db, "weights_len", str(this.weights.length));
+        forge_db_write_meta(db, "n_support", str(this.support_y.length));
+        forge_db_write_meta(db, "n_features", str(this.support_x.cols));
+        var i: int = 0;
+        while (i < this.weights.length) {
+            forge_db_write_array(db, "weights", i, str(this.weights[i]));
+            i++;
+        };
+        var ai: int = 0;
+        while (ai < this.alphas.length) {
+            forge_db_write_array(db, "alphas", ai, str(this.alphas[ai]));
+            ai++;
+        };
+        var si: int = 0;
+        while (si < this.support_y.length) {
+            forge_db_write_array(db, "support_y", si, str(this.support_y[si]));
+            var fi: int = 0;
+            while (fi < this.support_x.cols) {
+                forge_db_write_array(db, "support_x_" + str(si), fi, str(this.support_x[si][fi]));
+                fi++;
+            };
+            si++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.mode = forge_db_read_meta(db, "mode");
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.max_iter = forge_db_read_meta(db, "max_iter").toInt();
+        this.bias = forge_db_read_meta(db, "bias").toFloat();
+        this.lr = forge_db_read_meta(db, "lr").toFloat();
+        this.reg_lamb_da = forge_db_read_meta(db, "reg_lamb_da").toFloat();
+        this.n_train = forge_db_read_meta(db, "n_train").toInt();
+        this.c_param = forge_db_read_meta(db, "c_param").toFloat();
+        this.gamma = forge_db_read_meta(db, "gamma").toFloat();
+        var wlen: int = forge_db_read_meta(db, "weights_len").toInt();
+        var n_support: int = forge_db_read_meta(db, "n_support").toInt();
+        var n_features: int = forge_db_read_meta(db, "n_features").toInt();
+        this.weights = alloc float[wlen];
+        this.alphas = alloc float[n_support];
+        this.support_y = alloc float[n_support];
+        this.support_x = alloc float[n_support][n_features];
+        var i: int = 0;
+        while (i < wlen) {
+            this.weights[i] = forge_db_read_array_cell(db, "weights", i).toFloat();
+            i++;
+        };
+        var ai: int = 0;
+        while (ai < n_support) {
+            this.alphas[ai] = forge_db_read_array_cell(db, "alphas", ai).toFloat();
+            ai++;
+        };
+        var si: int = 0;
+        while (si < n_support) {
+            this.support_y[si] = forge_db_read_array_cell(db, "support_y", si).toFloat();
+            var fi: int = 0;
+            while (fi < n_features) {
+                this.support_x[si][fi] = forge_db_read_array_cell(db, "support_x_" + str(si), fi).toFloat();
+                fi++;
+            };
+            si++;
+        };
+        sqlite3_close(db);
     };
 };
 
@@ -3385,5 +4012,426 @@ class BayesianSearch {
 
     function search_svm(x: float[][], y: int[], folds: TrainTestSplit[]) -> SearchResult {
         return this.run_search(x, y, folds, 2);
+    };
+};
+
+function subsample_indices(n: int, k: int) -> int[] {
+    var indices: int[] = alloc int[n];
+    var i: int = 0;
+    while (i < n) { indices[i] = i; i++; };
+
+    // Fisher-Yates shuffle first k elements
+    var j: int = 0;
+    while (j < k) {
+        var r: int = rand_int(j, n - 1);
+        var tmp: int = indices[j];
+        indices[j] = indices[r];
+        indices[r] = tmp;
+        j++;
+    };
+
+    var result: int[] = alloc int[k];
+    var ri: int = 0;
+    while (ri < k) { result[ri] = indices[ri]; ri++; };
+    return result;
+};
+
+function gb_build_tree(x: float[][], y: float[], n: int, max_depth: int, depth: int) -> SurrogateNode {
+    var n_features: int = x.cols;
+
+    if (n <= 1 || depth >= max_depth) {
+        var sum: float = 0.0;
+        var i: int = 0;
+        while (i < n) { sum = sum + y[i]; i++; };
+        return surrogate_leaf(sum / float(n));
+    };
+
+    var best_score: float = 0.0;
+    var best_feature: int = 0;
+    var best_threshold: float = 0.0;
+    var found_split: int = 0;
+
+    var fii: int = 0;
+    while (fii < n_features) {
+        var ti: int = 0;
+        while (ti < n) {
+            var threshold: float = x[ti][fii];
+            var nl: int = 0;
+            var nr: int = 0;
+            var lsum: float = 0.0;
+            var rsum: float = 0.0;
+            var si: int = 0;
+            while (si < n) {
+                if (x[si][fii] < threshold) {
+                    lsum = lsum + y[si];
+                    nl++;
+                };
+                if (x[si][fii] >= threshold) {
+                    rsum = rsum + y[si];
+                    nr++;
+                };
+                si++;
+            };
+            if (nl == 0 || nr == 0) { ti++; continue; };
+
+            var lmean: float = lsum / float(nl);
+            var rmean: float = rsum / float(nr);
+            var lvar: float = 0.0;
+            var rvar: float = 0.0;
+            var vi: int = 0;
+            while (vi < n) {
+                if (x[vi][fii] < threshold) {
+                    var d: float = y[vi] - lmean;
+                    lvar = lvar + d * d;
+                };
+                if (x[vi][fii] >= threshold) {
+                    var d2: float = y[vi] - rmean;
+                    rvar = rvar + d2 * d2;
+                };
+                vi++;
+            };
+
+            var score: float = 0.0 - (lvar + rvar);
+            if (found_split == 0 || score > best_score) {
+                best_score = score;
+                best_feature = fii;
+                best_threshold = threshold;
+                found_split = 1;
+            };
+            ti++;
+        };
+        fii++;
+    };
+
+    if (found_split == 0) {
+        var sum2: float = 0.0;
+        var i2: int = 0;
+        while (i2 < n) { sum2 = sum2 + y[i2]; i2++; };
+        return surrogate_leaf(sum2 / float(n));
+    };
+
+    var left_x: float[][] = alloc float[n][n_features];
+    var right_x: float[][] = alloc float[n][n_features];
+    var left_y: float[] = alloc float[n];
+    var right_y: float[] = alloc float[n];
+    var nl2: int = 0;
+    var nr2: int = 0;
+    var si2: int = 0;
+    while (si2 < n) {
+        if (x[si2][best_feature] < best_threshold) {
+            var fj: int = 0;
+            while (fj < n_features) {
+                left_x[nl2][fj] = x[si2][fj];
+                fj++;
+            };
+            left_y[nl2] = y[si2];
+            nl2++;
+        };
+        if (x[si2][best_feature] >= best_threshold) {
+            var fk: int = 0;
+            while (fk < n_features) {
+                right_x[nr2][fk] = x[si2][fk];
+                fk++;
+            };
+            right_y[nr2] = y[si2];
+            nr2++;
+        };
+        si2++;
+    };
+
+    var left_node: SurrogateNode = gb_build_tree(left_x, left_y, nl2, max_depth, depth + 1);
+    var right_node: SurrogateNode = gb_build_tree(right_x, right_y, nr2, max_depth, depth + 1);
+    return surrogate_node(best_feature, best_threshold, left_node, right_node);
+};
+
+function gb_predict_one(sample: float[], node: SurrogateNode) -> float {
+    if (node.is_leaf == 1) { return node.value; };
+    if (node.left == null || node.right == null) { return node.value; };
+    if (sample[node.feature_idx] < node.threshold) {
+        return gb_predict_one(sample, node.left);
+    };
+    return gb_predict_one(sample, node.right);
+};
+
+function gb_sigmoid(z: float) -> float {
+    return 1.0 / (1.0 + c_exp(0.0 - z));
+};
+
+class GradientBoosting {
+    var n_trees: int;
+    var max_depth: int;
+    var lr: float;
+    var subsample: float;
+    var roots: SurrogateNode[];
+    var base_pred: float;
+    var fitted: int;
+    var mode: str;
+
+    function constructor(n_trees: int, max_depth: int, lr: float, subsample: float) -> null {
+        this.n_trees = n_trees;
+        this.max_depth = max_depth;
+        this.lr = lr;
+        this.subsample = subsample;
+        this.roots = alloc SurrogateNode[n_trees];
+        this.base_pred = 0.0;
+        this.fitted = 0;
+        this.mode = "regression";
+    };
+
+    function use_classification() -> null {
+        this.mode = "classification";
+    };
+
+    function fit(x: float[][], y: int[]) -> null {
+        var n: int = x.rows;
+        var n_features: int = x.cols;
+        var k: int = int(float(n) * this.subsample);
+        if (k < 1) { k = 1; };
+
+        // base prediction = log odds
+        var pos: float = 0.0;
+        var pi2: int = 0;
+        while (pi2 < n) {
+            if (y[pi2] == 1) { pos = pos + 1.0; };
+            pi2++;
+        };
+        var p: float = pos / float(n);
+        if (p <= 0.0) { p = 0.0001; };
+        if (p >= 1.0) { p = 0.9999; };
+        var ratio: float = p / (1.0 - p);
+        this.base_pred = ratio.log().real;
+
+        // initialize predictions
+        var preds: float[] = alloc float[n];
+        var pi: int = 0;
+        while (pi < n) { preds[pi] = this.base_pred; pi++; };
+
+        // boost
+        var ti: int = 0;
+        while (ti < this.n_trees) {
+            // compute residuals = y - sigmoid(pred)
+            var residuals: float[] = alloc float[n];
+            var ri: int = 0;
+            while (ri < n) {
+                var prob: float = gb_sigmoid(preds[ri]);
+                residuals[ri] = float(y[ri]) - prob;
+                ri++;
+            };
+
+            // subsample rows
+            var idx: int[] = subsample_indices(n, k);
+
+            // build subsampled x and residuals
+            var sub_x: float[][] = alloc float[k][n_features];
+            var sub_r: float[] = alloc float[k];
+            var si: int = 0;
+            while (si < k) {
+                var orig: int = idx[si];
+                var fj: int = 0;
+                while (fj < n_features) {
+                    sub_x[si][fj] = x[orig][fj];
+                    fj++;
+                };
+                sub_r[si] = residuals[orig];
+                si++;
+            };
+
+            // build tree on residuals
+            var root: SurrogateNode = gb_build_tree(sub_x, sub_r, k, this.max_depth, 0);
+            this.roots[ti] = root;
+
+            // update predictions
+            var ui: int = 0;
+            while (ui < n) {
+                var cur_root: SurrogateNode = this.roots[ti];
+                preds[ui] = preds[ui] + this.lr * gb_predict_one(x[ui], cur_root);
+                ui++;
+            };
+
+            ti++;
+        };
+        this.fitted = 1;
+    };
+
+    function predict(x: float[][]) -> float[] {
+        var n: int = x.rows;
+        var result: float[] = alloc float[n];
+        var i: int = 0;
+        while (i < n) {
+            var pred: float = this.base_pred;
+            var ti: int = 0;
+            while (ti < this.n_trees) {
+                var cur_root: SurrogateNode = this.roots[ti];
+                var tree_contrib: float = gb_predict_one(x[i], cur_root);
+                pred = pred + this.lr * tree_contrib;
+                ti++;
+            };
+            result[i] = pred;
+            i++;
+        };
+        return result;
+    };
+
+    function mse(x: float[][], y: float[]) -> float {
+        var preds: float[] = this.predict(x);
+        var n: int = x.rows;
+        var sum: float = 0.0;
+        var i: int = 0;
+        while (i < n) {
+            var diff: float = y[i] - preds[i];
+            sum = sum + diff * diff;
+            i++;
+        };
+        return sum / float(n);
+    };
+
+    function rmse(x: float[][], y: float[]) -> float {
+        return c_sqrt(this.mse(x, y));
+    };
+
+    function r2(x: float[][], y: float[]) -> float {
+        var preds: float[] = this.predict(x);
+        var n: int = x.rows;
+        var ysum: float = 0.0;
+        var i: int = 0;
+        while (i < n) { ysum = ysum + y[i]; i++; };
+        var ymean: float = ysum / float(n);
+        var ss_tot: float = 0.0;
+        var ss_res: float = 0.0;
+        var j: int = 0;
+        while (j < n) {
+            var dt: float = y[j] - ymean;
+            var dr: float = y[j] - preds[j];
+            ss_tot = ss_tot + dt * dt;
+            ss_res = ss_res + dr * dr;
+            j++;
+        };
+        if (ss_tot == 0.0) { return 1.0; };
+        return 1.0 - (ss_res / ss_tot);
+    };
+
+    function predict_proba(x: float[][]) -> float[] {
+        var n: int = x.rows;
+        var result: float[] = alloc float[n];
+        var i: int = 0;
+        while (i < n) {
+            var score: float = this.base_pred;
+            var ti: int = 0;
+            while (ti < this.n_trees) {
+                var cur_root: SurrogateNode = this.roots[ti];
+                score = score + this.lr * gb_predict_one(x[i], cur_root);
+                ti++;
+            };
+            result[i] = gb_sigmoid(score);
+            i++;
+        };
+        return result;
+    };
+
+    function predict_class(x: float[][]) -> int[] {
+        var proba: float[] = this.predict_proba(x);
+        var n: int = x.rows;
+        var result: int[] = alloc int[n];
+        var i: int = 0;
+        while (i < n) {
+            if (proba[i] >= 0.5) {
+                result[i] = 1;
+            };
+            if (proba[i] < 0.5) {
+                result[i] = 0;
+            };
+            i++;
+        };
+        return result;
+    };
+
+    function accuracy(x: float[][], y: int[]) -> float {
+        var preds: int[] = this.predict_class(x);
+        var n: int = x.rows;
+        var correct: int = 0;
+        var i: int = 0;
+        while (i < n) {
+            if (preds[i] == y[i]) { correct++; };
+            i++;
+        };
+        return float(correct) / float(n);
+    };
+
+    function precision(x: float[][], y: int[]) -> float {
+        var preds: int[] = this.predict_class(x);
+        var n: int = x.rows;
+        var tp: int = 0;
+        var fp: int = 0;
+        var i: int = 0;
+        while (i < n) {
+            if (preds[i] == 1 && y[i] == 1) { tp++; };
+            if (preds[i] == 1 && y[i] == 0) { fp++; };
+            i++;
+        };
+        if (tp + fp == 0) { return 0.0; };
+        return float(tp) / float(tp + fp);
+    };
+
+    function recall(x: float[][], y: int[]) -> float {
+        var preds: int[] = this.predict_class(x);
+        var n: int = x.rows;
+        var tp: int = 0;
+        var fn: int = 0;
+        var i: int = 0;
+        while (i < n) {
+            if (preds[i] == 1 && y[i] == 1) { tp++; };
+            if (preds[i] == 0 && y[i] == 1) { fn++; };
+            i++;
+        };
+        if (tp + fn == 0) { return 0.0; };
+        return float(tp) / float(tp + fn);
+    };
+
+    function f1(x: float[][], y: int[]) -> float {
+        var p: float = this.precision(x, y);
+        var r: float = this.recall(x, y);
+        if (p + r == 0.0) { return 0.0; };
+        return 2.0 * p * r / (p + r);
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        forge_db_setup(db);
+        forge_db_write_meta(db, "model_type", "GradientBoosting");
+        forge_db_write_meta(db, "n_trees", str(this.n_trees));
+        forge_db_write_meta(db, "max_depth", str(this.max_depth));
+        forge_db_write_meta(db, "lr", str(this.lr));
+        forge_db_write_meta(db, "subsample", str(this.subsample));
+        forge_db_write_meta(db, "base_pred", str(this.base_pred));
+        forge_db_write_meta(db, "fitted", str(this.fitted));
+        forge_db_write_meta(db, "mode", this.mode);
+        var ti: int = 0;
+        while (ti < this.n_trees) {
+            var counter: int[] = alloc int[1];
+            counter[0] = 1;
+            var root: SurrogateNode = this.roots[ti];
+            forge_serialize_surrogatenode(db, "tree_" + str(ti), root, 0, counter);
+            ti++;
+        };
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        this.n_trees = forge_db_read_meta(db, "n_trees").toInt();
+        this.max_depth = forge_db_read_meta(db, "max_depth").toInt();
+        this.lr = forge_db_read_meta(db, "lr").toFloat();
+        this.subsample = forge_db_read_meta(db, "subsample").toFloat();
+        this.base_pred = forge_db_read_meta(db, "base_pred").toFloat();
+        this.fitted = forge_db_read_meta(db, "fitted").toInt();
+        this.mode = forge_db_read_meta(db, "mode");
+        this.roots = alloc SurrogateNode[this.n_trees];
+        var ti: int = 0;
+        while (ti < this.n_trees) {
+            var root: SurrogateNode = forge_deserialize_surrogatenode(db, "tree_" + str(ti), 0);
+            this.roots[ti] = root;
+            ti++;
+        };
+        sqlite3_close(db);
     };
 };

@@ -69,8 +69,13 @@ function round(x: float) -> float {
 // POWERS
 // =============================================
 
+//Does rapid exponentiation but exp cannot be a decimal
 function fast_pow(base: float, exp: int) -> float native mocha_math_fast_pow;
+
+//normal C's slow but exp handling as float pow. Manual guard inserted to prevent NaN
 function c_pow(base: float, exp: float) -> float native mocha_math_c_pow;
+
+//To be used if if a number is not purely real
 function complex_pow(base: Complex, exp: float) -> Complex native mocha_math_complex_pow;
 
 // =========================================================
@@ -143,6 +148,7 @@ function integral(f: lambda, a: float, b: float) -> float native mocha_math_inte
 // limit at infinity — no point needed
 function limit_inf(f: lambda) -> float native mocha_math_limit_inf;
 
+//C's random. False-entropy. Same each time
 function rand_int(min: int, max: int) -> int native mocha_rand_int;
 function rand_float(min: float, max: float) -> float native mocha_rand_float;
 function rand_seed(seed: int) -> null native mocha_rand_seed;

@@ -1,0 +1,71 @@
+// Auto-generated manifest for mocha-bio.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-math
+
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
+function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
+function c_exp(x: float) -> float native mocha_wrap_exp;
+const SYSTOLIC_MIN: float = 50.0;
+const SYSTOLIC_MAX: float = 300.0;
+const DIASTOLIC_MIN: float = 20.0;
+const DIASTOLIC_MAX: float = 200.0;
+const HR_MIN: float = 20.0;
+const HR_MAX: float = 300.0;
+const SV_MIN: float = 10.0;
+const SV_MAX: float = 200.0;
+const EF_MIN: float = 0.0;
+const EF_MAX: float = 100.0;
+const WEIGHT_MIN: float = 1.0;
+const WEIGHT_MAX: float = 500.0;
+const HEIGHT_MIN: float = 30.0;
+const HEIGHT_MAX: float = 250.0;
+const AORTIC_DISSECTION_RISK_THRESHOLD: float = 2.75;
+function validate_systolic(systolic: float) -> null;
+function validate_diastolic(diastolic: float) -> null;
+function validate_heart_rate(hr: float) -> null;
+function validate_stroke_volume(sv: float) -> null;
+function validate_ejection_fraction(ef: float) -> null;
+function validate_bsa_inputs(weight_kg: float, height_cm: float) -> null;
+function mean_arterial_pressure(systolic: float, diastolic: float) -> float;
+function pulse_pressure(systolic: float, diastolic: float) -> float;
+function cardiac_output(heart_rate: float, stroke_volume: float) -> float;
+function cardiac_index(cardiac_output: float, body_surface_area: float) -> float;
+function ejection_fraction(stroke_volume: float, end_diastolic_volume: float) -> float;
+function stroke_volume(end_diastolic: float, end_systolic: float) -> float;
+function body_surface_area(weight_kg: float, height_cm: float) -> float;
+function rate_pressure_product(heart_rate: float, systolic: float) -> float;
+function aortic_size_index(aortic_diameter_cm: float, body_surface_area: float) -> float;
+tag Sex { MALE, FEMALE };
+tag SmokingStatus { SMOKER, NON_SMOKER };
+function svr(map: float, cvp: float, cardiac_output: float) -> float;
+function qtc_bazett(qt_ms: float, heart_rate: float, sex: Sex) -> float;
+function shock_index(heart_rate: float, systolic: float) -> float;
+function vo2_max_fick(cardiac_output: float, cao2: float, cvo2: float) -> float;
+function framingham_risk(age: float, sex: Sex, total_cholesterol: float, hdl_cholesterol: float, systolic: float, bp_treated: bool, smoking: SmokingStatus) -> float;
+const SEA_LEVEL_ATM_PRESSURE: float = 760.0;
+const STANDARD_RQ: float = 0.8;
+const WATER_VAPOUR_PRESSURE: float = 47.0;
+const RR_MIN: float = 4.0;
+const RR_MAX: float = 60.0;
+const FIO2_MIN: float = 0.21;
+const FIO2_MAX: float = 1.0;
+const HGB_MIN: float = 1.0;
+const HGB_MAX: float = 25.0;
+function validate_respiratory_rate(rr: float) -> null;
+function validate_fio2(fio2: float) -> null;
+function validate_hgb(hgb: float) -> null;
+tag ArdsSeverity { MILD, MODERATE, SEVERE, NONE };
+function ideal_body_weight(height_cm: float, sex: Sex) -> float;
+function tidal_volume(ibw_kg: float) -> float;
+function minute_ventilation(tidal_volume_ml: float, respiratory_rate: float) -> float;
+function alveolar_po2(fio2: float, patm: float, paco2: float, rq: float) -> float;
+function aa_gradient(fio2: float, patm: float, paco2: float, pao2: float, rq: float) -> float;
+function fev1_fvc_ratio(fev1: float, fvc: float) -> float;
+function dead_space_fraction(paco2: float, peco2: float) -> float;
+function lung_compliance(tidal_volume_ml: float, plateau_pressure: float, peep: float) -> float;
+function pf_ratio(pao2: float, fio2: float) -> float;
+function ards_severity(pf: float) -> ArdsSeverity;

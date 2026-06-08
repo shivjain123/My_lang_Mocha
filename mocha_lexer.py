@@ -144,6 +144,8 @@ class TokenType(Enum):
     UNKNOWN      = auto()
     EXTEND       = auto()
     TAG = auto()            # My Enum!
+    DOC_COMMENT = auto ()
+    MUST = auto()
 
 
 # ============================================================
@@ -207,6 +209,7 @@ KEYWORDS = {
     "rescue":     TokenType.RESCUE,
     "fail":       TokenType.FAIL,
     "rethrow":    TokenType.RETHROW,
+    "must":       TokenType.MUST
 }
 
 # ============================================================
@@ -301,6 +304,17 @@ class Lexer:
         """ // single line comment """
         while self.current() is not None and self.current() != "\n":
             self.advance()
+        
+    def lex_doc_comment(self, line, col):
+        """ ~~ doc comment — captures rest of line as DOC_COMMENT token """
+        # skip leading space if present
+        if self.current() == " ":
+            self.advance()
+        start = self.pos
+        while self.current() is not None and self.current() != "\n":
+            self.advance()
+        text = self.source[start:self.pos]
+        return self.make_token(TokenType.DOC_COMMENT, text, line, col)
 
     def skip_multiline_comment(self):
         """ triple-quote multiline comment: \"\"\"..\"\"\" """
@@ -416,6 +430,13 @@ class Lexer:
             if ch == "/" and self.current() == "/":
                 self.advance()
                 self.skip_comment()
+                continue
+                
+            # === Doc comment ===
+            if ch == "~" and self.current() == "~":
+                self.advance()  # consume second ~
+                tok = self.lex_doc_comment(line, col)
+                self.tokens.append(tok)
                 continue
 
             # === Multiline comment or string ===

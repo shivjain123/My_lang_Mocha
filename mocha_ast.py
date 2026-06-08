@@ -121,6 +121,8 @@ class CompoundAssignment(Node):
 class Param(Node):
     name: str
     type: str
+    is_required: bool = False
+    default: Node = None # type: ignore
 
 # --- Function Declaration ---
 @dataclass
@@ -134,6 +136,7 @@ class FunctionDecl(Node):
     is_native:   bool = False
     native_name: str  = "" # None
     is_variadic: bool = False
+    doc:         list = None   # type: ignore # list of ~~ comment strings
 
 # --- Function Call: add(1, 2) ---
 @dataclass
@@ -234,6 +237,7 @@ class ClassDecl(Node):
     parents:    list               #all parents for multiple inheritance. If only one, then single inh. parents[0] is used.
     interfaces: list
     body:       list
+    doc:        list = None   # type: ignore # list of ~~ comment strings
 
 # --- Field Declaration ---
 @dataclass
@@ -242,6 +246,7 @@ class FieldDecl(Node):
     type:       str
     visibility: str = "public"
     value:      Optional[Node] = None
+    is_shared:  bool = False
 
 # --- Method Declaration ---
 @dataclass
@@ -254,6 +259,7 @@ class MethodDecl(Node):
     is_shared:   bool = False
     is_async:    bool = False
     has_didLoad: bool = False
+    doc:         list = None   # type: ignore # list of ~~ comment strings
 
 @dataclass
 class QualifiedMethodCall(Node):

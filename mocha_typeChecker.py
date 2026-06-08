@@ -600,9 +600,16 @@ class TypeChecker:
                 return "bool"
             if node.member in ("union", "intersect", "xor", "rel_diff"):
                 return obj_type  # returns same set type
+            if node.member in ("min", "max"):
+                inner = obj_type[4:-1]  # extract from set<int>
+                if inner == "bool":
+                    self.error("min()/max() not defined for set<bool> — bools are unordered", node)
+                if inner not in ("int", "float", "vast", "str"):
+                    self.error(f"min()/max() not supported for set<{inner}>", node)
+                return inner  # min/max returns the element type
             self.error(
                 f"'.{node.member}' is not a method on set. "
-                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff",
+                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff, .min, and .max",
                 node
             )
             return "unknown"
@@ -666,6 +673,11 @@ class TypeChecker:
                     )
 
             return symbol["type"]
+        # only error if it's a known type — unknown type means we already errored upstream
+        if obj_type not in ("unknown",):
+            self.error(
+                f"'.{node.member}' is not a method or property on '{obj_type}'", node
+            )
         return "unknown"
     
     def lookup_member(self, obj_type: str, member: str):
@@ -914,19 +926,21 @@ class TypeChecker:
                 return "str[]"
             return "unknown"
             
-        if func_name == "occs":
-            return "int"
-            
         # occs on 2D array — must specify row or col
-        if func_name == "occs" and obj_type:
-            if "[][]" in obj_type or obj_type.endswith("[][]"):
-                # Check named args for row or col
+        if func_name == "occs":
+            if obj_type and ("[][]" in obj_type or obj_type.endswith("[][]")):
                 has_row_or_col = any(
-                    isinstance(arg, Assignment) and 
-                    isinstance(arg.target, Identifier) and 
+                    isinstance(arg, Assignment) and
+                    isinstance(arg.target, Identifier) and
                     arg.target.name in ("row", "col")
                     for arg in node.args
                 )
+                # actually USE the check
+                if not has_row_or_col:
+                    self.error(
+                        "occs() on a 2D array requires a 'row=' or 'col=' argument. "
+                        "Example: arr.occs(val, row=0) or arr.occs(val, col=2)", node
+                    )
             return "int"
         
         # Set method return types
@@ -958,6 +972,13 @@ class TypeChecker:
                 return obj_type
             if func_name == "size":
                 return "int"
+            if func_name in ("min", "max"):
+                inner = obj_type[4:-1]
+                if inner == "bool":
+                    self.error("min()/max() not defined for set<bool> — bools are unordered", node)
+                if inner not in ("int", "float", "vast", "str"):
+                    self.error(f"min()/max() not supported for set<{inner}>", node)
+                return inner
         
         #String methods
         if obj_type == "str":
@@ -1634,6 +1655,8 @@ class TypeChecker:
         # (so methods can reference each other!)
         for member in node.body:
             if isinstance(member, FieldDecl):
+                if getattr(member, 'is_shared', False):
+                    self.error("'shared' is not allowed on fields — use a module-level variable instead", member)
                 self.symbols.declare(
                     member.name, member.type,
                     visibility=member.visibility

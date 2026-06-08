@@ -11,7 +11,6 @@ class MochaCodeGenError(Exception):
         loc = f" at line {line}, col {col}" if line else ""
         super().__init__(f"MochaCodeGenError{loc}: {message}")
 
-
 LLVM_TYPES = {
     "int":     "i32",
     "vast":    "i64",
@@ -147,6 +146,7 @@ class CodeGen:
         self.entry_allocas = []
         self.class_mocha_fields = {}  # class_name -> [(field_name, mocha_type_str)]
         self.local_name_counts = {}  # tracks how many times a name has been used
+        self.lib_tag_names = set()  # tags imported from libs, don't re-emit
 
         # Built-in StringBuilder type
         self.class_fields["StringBuilder"] = [
@@ -268,6 +268,90 @@ class CodeGen:
         if not self.last_is_terminator():
             self.emit(f"  br label %{label}")
     
+    def resolve_args(self, node):
+        """
+        Splits a call's args into:
+        positional: [Node]         — in order
+        named:      {str: Node}    — name -> value node
+        """
+        positional = []
+        named = {}
+        for arg in node.args:
+            if isinstance(arg, Assignment) and isinstance(arg.target, Identifier):
+                named[arg.target.name] = arg.value
+            else:
+                positional.append(arg)
+        return positional, named
+    
+    def _convert_arg(self, raw: str, llvm_type: str) -> str:
+        """Convert raw i8* argv string to target LLVM type. Returns temp name."""
+        if llvm_type == "i32":
+            t = self.fresh_temp()
+            self.emit(f"  {t} = call i32 @atoi(i8* {raw})")
+            return t
+        elif llvm_type == "i64":
+            t = self.fresh_temp()
+            self.emit(f"  {t} = call i64 @mocha_str_to_vast(i8* {raw})")
+            return t
+        elif llvm_type == "i8":
+            t = self.fresh_temp()
+            self.emit(f"  {t} = call i8 @mocha_str_to_bool(i8* {raw})")
+            return t
+        elif llvm_type == "double":
+            t = self.fresh_temp()
+            self.emit(f"  {t} = call double @atof(i8* {raw})")
+            return t
+        else:  # i8* string
+            return raw
+
+    def _type_default(self, llvm_type: str) -> str:
+        if llvm_type == "i32":    return "i32 0"
+        if llvm_type == "i64":    return "i64 0"
+        if llvm_type == "i8":     return "i8 0"
+        if llvm_type == "double": return "double 0.0"
+        # str — empty string
+        g      = self.fresh_str_global("")
+        length = len("".encode('utf-8')) + 1  # = 1
+        tptr   = self.fresh_temp()
+        tstr   = self.fresh_temp()
+        self.emit(f"  {tptr} = getelementptr [{length} x i8], [{length} x i8]* {g}, i32 0, i32 0")
+        self.emit(f"  {tstr} = call i8* @mocha_str_literal(i8* {tptr})")
+        return tstr
+
+    def _emit_param_default(self, default_node, llvm_type: str) -> str:
+        if isinstance(default_node, IntLiteral):
+            return f"i32 {default_node.value}"
+        if isinstance(default_node, FloatLiteral):
+            return f"double {default_node.value}"
+        if isinstance(default_node, BoolLiteral):
+            return f"i8 {1 if default_node.value else 0}"
+        if isinstance(default_node, StrLiteral):
+            g      = self.fresh_str_global(default_node.value)
+            length = len(default_node.value.encode('utf-8')) + 1
+            tptr   = self.fresh_temp()
+            tstr   = self.fresh_temp()
+            self.emit(f"  {tptr} = getelementptr [{length} x i8], [{length} x i8]* {g}, i32 0, i32 0")
+            self.emit(f"  {tstr} = call i8* @mocha_str_literal(i8* {tptr})")
+            return tstr
+        if isinstance(default_node, NullLiteral):
+            return self._type_default(llvm_type)
+        return self._type_default(llvm_type)
+    
+    def emit_field_zero_inits(self, node_name: str):
+        all_fields = self.class_fields.get(node_name, [])
+        for idx, (fname, ftype) in enumerate(all_fields):
+            zero = self.get_zero_value(ftype)  # ftype is already LLVM type
+            ptr = self.fresh_temp()
+            self.emit(f"  {ptr} = getelementptr %struct.{node_name}, %struct.{node_name}* %this, i32 0, i32 {idx}")
+            self.emit(f"  store {zero}, {ftype}* {ptr}")
+    
+    def get_zero_value(self, lt: str) -> str:
+        if lt in ("i32", "i64", "i8", "i16"):  return f"{lt} 0"
+        if lt == "double":                      return "double 0.0"
+        if lt == "i1":                          return "i1 0"
+        # strings (i8*) and all struct pointers
+        return f"{lt} null"
+    
     def build_header(self):
         sections = {
             "Mocha compiled output": [],
@@ -284,11 +368,13 @@ class CodeGen:
                 "declare i8* @mocha_int_to_str(i32)",
                 "declare i8* @mocha_float_to_str(double)",
                 "declare i8* @mocha_bool_to_str(i8)",
+                "declare i8 @mocha_str_to_bool(i8*)",
                 "declare i32 @mocha_str_eq(i8*, i8*)",
                 "declare i32 @mocha_str_length(i8*)",
                 "declare i8* @mocha_str_charat(i8*, i32)",
                 "declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i1)",
                 "declare i32 @SetConsoleOutputCP(i32)",
+                "declare void @mocha_missing_arg(i8*, i8*)", 
                 "declare i32 @mocha_str_to_int(i8*)",
                 "declare double @mocha_str_to_float(i8*)",
                 "declare i8* @mocha_vast_to_str(i64)",
@@ -619,7 +705,12 @@ class CodeGen:
         raise MochaCodeGenError(f"Cannot generate code for: {type(node).__name__}", node.line, node.col)
     
     def box_value(self, val_reg: str, val_type: str) -> str:
-        """Box a value into i8* for runtime calls (alloca → store → bitcast)."""
+        if val_type == "i8*":
+            slot = self.fresh_temp()  # unique name every time
+            self.entry_allocas.append(f"  {slot} = alloca i8*")  # goes to entry block
+            self.emit(f"  store i8* {val_reg}, i8** {slot}")
+            return slot
+        # original unchanged
         slot = self.fresh_temp()
         cast = self.fresh_temp()
         self.emit(f"  {slot} = alloca {val_type}")
@@ -629,8 +720,13 @@ class CodeGen:
 
     def gen_int_literal(self, node):
         tmp = self.fresh_temp()
-        # If value exceeds i32 range, emit as i64 directly
         if node.value > 2147483647 or node.value < -2147483648:
+            # vast range — check it fits in i64
+            if node.value > 9223372036854775807 or node.value < -9223372036854775808:
+                raise MochaCodeGenError(
+                    f"Integer literal {node.value} exceeds vast (int64) range. "
+                    f"Maximum is 9223372036854775807.", node.line, node.col
+                )
             self.emit(f"  {tmp} = add i64 0, {node.value}")
             return (tmp, "i64")
         self.emit(f"  {tmp} = add i32 0, {node.value}")
@@ -1509,86 +1605,6 @@ class CodeGen:
             return (tmp, "%MochaDict*")
         return None
 
-    def gen_set_method_call(self, s_reg, member, node):
-        if member == "insert":
-            val_reg, val_type = self.gen_expr(node.args[0])
-            slot = self.fresh_temp()
-            self.emit(f"  {slot} = alloca {val_type}")
-            self.emit(f"  store {val_type} {val_reg}, {val_type}* {slot}")
-            cast = self.fresh_temp()
-            self.emit(f"  {cast} = bitcast {val_type}* {slot} to i8*")
-            self.emit(f"  call void @mocha_set_insert(%MochaSet* {s_reg}, i8* {cast})")
-            return ("void", "void")
-        elif member == "delete":
-            val_reg, val_type = self.gen_expr(node.args[0])
-            cast = self.box_value(val_reg, val_type)
-            self.emit(f"  call void @mocha_set_delete(%MochaSet* {s_reg}, i8* {cast})")
-            return ("void", "void")
-        elif member == "has":
-            val_reg, val_type = self.gen_expr(node.args[0])
-            cast = self.box_value(val_reg, val_type)
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call i8 @mocha_set_has(%MochaSet* {s_reg}, i8* {cast})")
-            return (tmp, "i8")
-        elif member == "clean":
-            self.emit(f"  call void @mocha_set_clean(%MochaSet* {s_reg})")
-            return ("void", "void")
-        elif member == "negate":
-            self.emit(f"  call void @mocha_set_negate(%MochaSet* {s_reg})")
-            return ("void", "void")
-        elif member == "retype":
-            type_tags = {"int": 0, "float": 1, "str": 2, "bool": 3, "vast": 4, "object": 5}
-            new_type = "int"
-            for arg in node.args:
-                if not isinstance(arg, NullLiteral):
-                    if isinstance(arg, Identifier):
-                        new_type = arg.name
-            tag = type_tags.get(new_type, 0)
-            self.emit(f"  call void @mocha_set_retype(%MochaSet* {s_reg}, i32 {tag})")
-            
-            # Update local mocha type so subsequent operations use correct type
-            if isinstance(node.name, MemberAccess) and isinstance(node.name.obj, Identifier):
-                self.local_mocha_types[node.name.obj.name] = f"set<{new_type}>"
-            
-            return ("void", "void")
-        elif member == "union":
-            s2_reg, _ = self.gen_expr(node.args[0])
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_union(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            return (tmp, "%MochaSet*")
-        elif member == "intersect":
-            s2_reg, _ = self.gen_expr(node.args[0])
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_intersect(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            return (tmp, "%MochaSet*")
-        elif member == "xor":
-            s2_reg, _ = self.gen_expr(node.args[0])
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_xor(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            return (tmp, "%MochaSet*")
-        elif member == "rel_diff":
-            s2_reg, _ = self.gen_expr(node.args[0])
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_rel_diff(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            return (tmp, "%MochaSet*")
-        elif member == "min" or member == "max":
-            mocha_type = self.local_mocha_types.get(
-                node.name.obj.name if hasattr(node.name, 'obj') else "", "set<int>"
-            )
-            inner = mocha_type[4:-1] if mocha_type.startswith("set<") else "int"
-            suffix_map = {
-                "int":   ("int",   "i32"),
-                "float": ("float", "double"),
-                "vast":  ("vast",  "i64"),
-                "str":   ("str",   "i8*"),
-            }
-            suffix, ret_llvm = suffix_map.get(inner, ("int", "i32"))
-            fn = f"mocha_set_{member}_{suffix}"
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call {ret_llvm} @{fn}(%MochaSet* {s_reg})")
-            return (tmp, ret_llvm)
-        return None
-
     def gen_str_method_call(self, s_reg, member, node):
         if member == "charAt":
             idx_reg, _ = self.gen_expr(node.args[0])
@@ -1806,6 +1822,13 @@ class CodeGen:
     def _dispatch_struct_method(self, obj_reg, obj_llvm_type, method_map, type_name, member, node):
         """Generic struct method dispatcher. Assumes obj_reg is already loaded."""
         if member not in method_map:
+            sanitized = self.sanitize_type_name(type_name)
+            ext_key = f"mocha_ext_{sanitized}_{member}"
+            if ext_key in self.method_return_types:
+                ret_type = self.method_return_types[ext_key]
+                args = self._collect_args(node)
+                all_args = [(obj_reg, obj_llvm_type)] + args
+                return self._emit_call(ret_type, ext_key, all_args)
             raise MochaCodeGenError(f"{type_name} has no method '{member}'", node.line, node.col)
         ret_type, c_func = method_map[member]
         args = self._collect_args(node)
@@ -2474,7 +2497,7 @@ class CodeGen:
         if not args:
             return ("void", "void")
 
-        arr_reg, arr_type = args[0]
+        arr_reg, _ = args[0]
 
         # Check for lambda comparator
         has_lambda = len(node.args) > 1 and isinstance(node.args[1], LambdaExpr)
@@ -2920,8 +2943,7 @@ class CodeGen:
             # vast → str/pointer
             elif val_type == "i64" and llvm_type == "i8*":
                 coerced = self.fresh_temp()
-                self.emit(f"  {coerced} = inttoptr i64 {val_reg} to i8*")
-                val_reg = coerced
+                self.emit(f"  {coerced} = call i8* @mocha_vast_to_str(i64 {val_reg})")
             # vast → bool (truncate to 1 byte)
             elif val_type == "i64" and llvm_type == "i8":
                 coerced = self.fresh_temp()
@@ -3185,13 +3207,14 @@ class CodeGen:
         count    = self.temp_count
         cond_lbl = f"for_cond_{count}"
         body_lbl = f"for_body_{count}"
+        step_lbl = f"for_step_{count}"  # ← new
         end_lbl  = f"for_end_{count}"
         self.temp_count += 1
 
         prev_break    = getattr(self, 'break_label',    None)
         prev_continue = getattr(self, 'continue_label', None)
         self.break_label    = end_lbl
-        self.continue_label = cond_lbl
+        self.continue_label = step_lbl  # ← was cond_lbl
 
         self.gen_stmt(node.init)
         self.emit(f"  br label %{cond_lbl}")
@@ -3202,6 +3225,8 @@ class CodeGen:
         self.emit(f"{body_lbl}:")
         for stmt in node.body:
             self.gen_stmt(stmt)
+        self.emit_br_if_needed(step_lbl)  # ← was end_lbl
+        self.emit(f"{step_lbl}:")         # ← new
         self.gen_expr(node.step)
         self.emit_br_if_needed(cond_lbl)
         self.emit(f"{end_lbl}:")
@@ -3227,6 +3252,7 @@ class CodeGen:
             count    = self.temp_count
             self.temp_count += 1
             cond_lbl = f"foreach_set_cond_{count}"
+            step_lbl = f"foreach_set_step_{count}"
             body_lbl = f"foreach_set_body_{count}"
             end_lbl  = f"foreach_set_end_{count}"
             
@@ -3261,78 +3287,84 @@ class CodeGen:
             old_break    = getattr(self, 'break_label', None)
             old_continue = getattr(self, 'continue_label', None)
             self.break_label    = end_lbl
-            self.continue_label = cond_lbl
+            self.continue_label = step_lbl  # ← was cond_lbl
             for stmt in node.body:
                 self.gen_stmt(stmt)
             self.break_label    = old_break
             self.continue_label = old_continue
-            
-            # Increment
+
+            self.emit_br_if_needed(step_lbl)  # ← new
+            self.emit(f"{step_lbl}:")         # ← new
             next_tmp = self.fresh_temp()
             idx_tmp2 = self.fresh_temp()
             self.emit(f"  {idx_tmp2} = load i32, i32* {idx_ptr}")
             self.emit(f"  {next_tmp} = add i32 {idx_tmp2}, 1")
             self.emit(f"  store i32 {next_tmp}, i32* {idx_ptr}")
             self.emit(f"  br label %{cond_lbl}")
-            
+
             self.emit(f"{end_lbl}:")
             return
 
-        # Original array iteration — unchanged
+        # Original array iteration
         arr_reg, _ = self.gen_expr(node.iterable)
-        
+
         len_tmp = self.fresh_temp()
         self.emit(f"  {len_tmp} = call i32 @mocha_array_length(%MochaArray* {arr_reg})")
-        
+
         idx_ptr = self.fresh_temp()
         self.emit(f"  {idx_ptr} = alloca i32")
         self.emit(f"  store i32 0, i32* {idx_ptr}")
-        
+
         count    = self.temp_count
         self.temp_count += 1
         cond_lbl = f"foreach_cond_{count}"
         body_lbl = f"foreach_body_{count}"
+        step_lbl = f"foreach_step_{count}"  # ← new
         end_lbl  = f"foreach_end_{count}"
-        
+
         self.emit(f"  br label %{cond_lbl}")
         self.emit(f"{cond_lbl}:")
-        
+
         idx_tmp = self.fresh_temp()
         cmp_tmp = self.fresh_temp()
         self.emit(f"  {idx_tmp} = load i32, i32* {idx_ptr}")
         self.emit(f"  {cmp_tmp} = icmp slt i32 {idx_tmp}, {len_tmp}")
         self.emit(f"  br i1 {cmp_tmp}, label %{body_lbl}, label %{end_lbl}")
-        
+
         self.emit(f"{body_lbl}:")
-        
+
         llvm_type = to_llvm_type(node.var_type) if node.var_type else "i8*"
         elem_ptr  = self.fresh_temp()
         elem_tmp  = self.fresh_temp()
         self.emit(f"  {elem_ptr} = alloca {llvm_type}")
-        self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_tmp}, i8* {elem_ptr})")
+        cast = self.fresh_temp()                                          # ← new
+        self.emit(f"  {cast} = bitcast {llvm_type}* {elem_ptr} to i8*") # ← new
+        self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_tmp}, i8* {cast})")  # ← cast not elem_ptr
         self.emit(f"  {elem_tmp} = load {llvm_type}, {llvm_type}* {elem_ptr}")
-        
+
         var_ptr = f"{node.var_name}.ptr"
         self.emit(f"  %{var_ptr} = alloca {llvm_type}")
         self.emit(f"  store {llvm_type} {elem_tmp}, {llvm_type}* %{var_ptr}")
         self.locals[node.var_name] = (f"%{var_ptr}", llvm_type)
-        
+
         old_break    = getattr(self, 'break_label', None)
         old_continue = getattr(self, 'continue_label', None)
         self.break_label    = end_lbl
-        self.continue_label = cond_lbl
+        self.continue_label = step_lbl  # ← was cond_lbl
         for stmt in node.body:
             self.gen_stmt(stmt)
         self.break_label    = old_break
         self.continue_label = old_continue
-        
+
+        self.emit_br_if_needed(step_lbl)  # ← new
+        self.emit(f"{step_lbl}:")         # ← new
         next_tmp = self.fresh_temp()
         idx_tmp2 = self.fresh_temp()
         self.emit(f"  {idx_tmp2} = load i32, i32* {idx_ptr}")
         self.emit(f"  {next_tmp} = add i32 {idx_tmp2}, 1")
         self.emit(f"  store i32 {next_tmp}, i32* {idx_ptr}")
         self.emit(f"  br label %{cond_lbl}")
-        
+
         self.emit(f"{end_lbl}:")
     
     def gen_list_comprehension(self, node):
@@ -3607,7 +3639,7 @@ class CodeGen:
             return node.name
         
         ret_llvm = to_llvm_type(node.return_type)
-        params   = [f"{to_llvm_type(p.type)} %{p.name}" for p in node.params]
+        params   = [f"{to_llvm_param_type(p.type)} %{p.name}" for p in node.params]
 
         if self.current_class and not getattr(node, 'is_shared', False):
             this_type = f"%struct.{self.current_class}*"
@@ -3637,12 +3669,16 @@ class CodeGen:
 
         # Store params
         for p in node.params:
-            pt  = to_llvm_type(p.type)
+            pt  = to_llvm_param_type(p.type)
             ptr = f"%{p.name}.ptr"
             self.entry_allocas.append(f"  {ptr} = alloca {pt}")
             self.emit(f"  store {pt} %{p.name}, {pt}* {ptr}")
             self.locals[p.name] = (ptr, pt)
             self.local_mocha_types[p.name] = p.type
+        
+        is_constructor = node.name.endswith("_constructor")
+        if is_constructor:
+            self.emit_field_zero_inits(self.current_class) # type: ignore
 
         # Generate body — allocas will go to entry_allocas, rest to self.output
         for stmt in node.body:
@@ -3715,6 +3751,7 @@ class CodeGen:
             "vast":     "i64",
             "float":    "double",
             "bool":     "i8",
+            "Complex":  "%struct.MochaComplex*",
             "int[]":    "%MochaArray*",
             "float[]":  "%MochaArray*",
             "str[]":    "%MochaArray*",
@@ -3931,6 +3968,7 @@ class CodeGen:
 
                 self.emit(f"define void @{child_func}(%struct.{node.name}* %self) {{")
                 self.emit("entry:")
+                self.emit_field_zero_inits(node.name)
 
                 all_fields = self.class_fields.get(node.name, [])
                 for m in fields_with_defaults:
@@ -3995,6 +4033,7 @@ class CodeGen:
                     self.classes_with_constructors.add(node.name)
                     self.emit(f"define void @{child_func}(%struct.{node.name}* %self) {{")
                     self.emit("entry:")
+                    self.emit_field_zero_inits(node.name)
                     self.emit("  ret void")
                     self.emit("}")
                     self.emit_blank()
@@ -4083,7 +4122,16 @@ class CodeGen:
             elem_llvm = first_type
             elem_size = {"i32": 4, "double": 8, "i8*": 8, "i8": 1}.get(elem_llvm, 8)
         else:
-            elem_llvm, elem_size = "i8*", 8
+            # infer from expected assign type
+            expected = self.expected_assign_type or ""
+            if expected == "int[]" or expected == "int":
+                elem_llvm, elem_size = "i32", 4
+            elif expected == "bool[]":
+                elem_llvm, elem_size = "i8", 1
+            elif expected == "float[]":
+                elem_llvm, elem_size = "double", 8
+            else:
+                elem_llvm, elem_size = "i8*", 8
 
         arr = self.fresh_temp()
         self.emit(f"  {arr} = call %MochaArray* @mocha_array_new(i32 {count}, i32 {elem_size}, i32 0)")
@@ -4105,6 +4153,7 @@ class CodeGen:
         self.emit(f"  call void @mocha_array_init_set(%MochaArray* {arr}, i32 {index}, i8* {cast})")
 
     def gen_index_access(self, node):
+        #print(f"DEBUG gen_index_access: obj={type(node.obj).__name__}, inferred='{self.infer_mocha_type(node.obj)}', current_class='{self.current_class}'")
         arr_reg, _ = self.gen_expr(node.obj)
         idx_reg, _ = self.gen_expr(node.index)
 
@@ -4153,7 +4202,6 @@ class CodeGen:
                 elif expected == "bool":
                     ptr = self.fresh_temp()
                     val = self.fresh_temp()
-                    self.emit(f"  {ptr} = bitcast i8* {raw} to i8*")
                     self.emit(f"  {val} = load i8, i8* {ptr}")
                     return (val, "i8")
                 
@@ -4210,10 +4258,8 @@ class CodeGen:
                         self.emit(f"  {val} = load double, double* {ptr}")
                         return (val, "double")
                     elif expected == "bool":
-                        ptr = self.fresh_temp()
                         val = self.fresh_temp()
-                        self.emit(f"  {ptr} = bitcast i8* {raw} to i8*")
-                        self.emit(f"  {val} = load i8, i8* {ptr}")
+                        self.emit(f"  {val} = load i8, i8* {raw}")
                         return (val, "i8")
                     elif expected == "vast":
                         ptr = self.fresh_temp()
@@ -4235,6 +4281,17 @@ class CodeGen:
             if isinstance(node.obj, Identifier):
                 mocha_type = self.local_mocha_types.get(node.obj.name, "") or \
                             self.global_mocha_types.get(node.obj.name, "")
+            elif isinstance(node.obj, MemberAccess):
+                # handle this.fieldName[i]
+                if isinstance(node.obj.obj, Identifier) and node.obj.obj.name == "self" or \
+                isinstance(node.obj.obj, Identifier) and node.obj.obj.name == "this":
+                    print(f"DEBUG: MemberAccess index, member={node.obj.member}, class={self.current_class}, mocha_type resolved={mocha_type}")
+                    class_name = self.current_class
+                    fields = self.class_fields.get(class_name, [])
+                    for fname, ftype in fields:
+                        if fname == node.obj.member:
+                            mocha_type = ftype
+                            break
         if mocha_type and mocha_type != "dict":
             bracket = mocha_type.rfind("[")
             if bracket != -1:
@@ -4247,13 +4304,17 @@ class CodeGen:
             self.emit(f"  {result} = call %MochaArray* @mocha_array2d_get_row(%MochaArray2D* {arr_reg}, i32 {idx_reg})")
             return (result, "%MochaArray*")
         else:
-            # 1D array — standard element get
             slot = self.alloca_at_entry(elem_llvm)
-            cast = self.fresh_temp()
-            self.emit(f"  {cast} = bitcast {elem_llvm}* {slot} to i8*")
-            self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {cast})")
             result = self.fresh_temp()
-            self.emit(f"  {result} = load {elem_llvm}, {elem_llvm}* {slot}")
+            if elem_llvm == "i8*":
+                # str: slot is i8** — pass directly, then load i8* from i8**
+                self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {slot})")
+                self.emit(f"  {result} = load i8*, i8** {slot}")
+            else:
+                cast = self.fresh_temp()
+                self.emit(f"  {cast} = bitcast {elem_llvm}* {slot} to i8*")
+                self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {cast})")
+                self.emit(f"  {result} = load {elem_llvm}, {elem_llvm}* {slot}")
             return (result, elem_llvm)
     
     def gen_index2d_access(self, node):
@@ -4373,33 +4434,10 @@ class CodeGen:
 
         for i, elem in enumerate(node.elements):
             reg, typ = self.gen_expr(elem)
-            
-            # Bitcast value to i8* to store in void* slot
             if typ == "i8*":
                 slot = reg  # already a pointer
-            elif typ in ("i32", "i8", "i1"):
-                # HEAP allocation with malloc!
-                size = 4 if typ == "i32" else 1
-                heap_ptr = self.fresh_temp()
-                self.emit(f"  {heap_ptr} = call i8* @malloc(i64 {size})")
-                
-                typed_ptr = self.fresh_temp()
-                self.emit(f"  {typed_ptr} = bitcast i8* {heap_ptr} to {typ}*")
-                self.emit(f"  store {typ} {reg}, {typ}* {typed_ptr}")
-                slot = heap_ptr
-            elif typ == "double":
-                # HEAP allocation for double
-                heap_ptr = self.fresh_temp()
-                self.emit(f"  {heap_ptr} = call i8* @malloc(i64 8)")
-                
-                typed_ptr = self.fresh_temp()
-                self.emit(f"  {typed_ptr} = bitcast i8* {heap_ptr} to double*")
-                self.emit(f"  store double {reg}, double* {typed_ptr}")
-                slot = heap_ptr
             else:
-                slot = self.fresh_temp()
-                self.emit(f"  {slot} = bitcast {typ} {reg} to i8*")
-
+                slot = self.box_value(reg, typ)  # handles everything
             self.emit(f"  call void @mocha_tuple_set(%MochaTuple* {tup}, i32 {i}, i8* {slot})")
 
         return (tup, "%MochaTuple*")
@@ -4519,6 +4557,86 @@ class CodeGen:
             self.emit(f"  call void @mocha_set_insert(%MochaSet* {s}, i8* {cast})")
 
         return (s, "%MochaSet*")
+    
+    def gen_set_method_call(self, s_reg, member, node):
+        if member == "insert":
+            val_reg, val_type = self.gen_expr(node.args[0])
+            slot = self.fresh_temp()
+            self.emit(f"  {slot} = alloca {val_type}")
+            self.emit(f"  store {val_type} {val_reg}, {val_type}* {slot}")
+            cast = self.fresh_temp()
+            self.emit(f"  {cast} = bitcast {val_type}* {slot} to i8*")
+            self.emit(f"  call void @mocha_set_insert(%MochaSet* {s_reg}, i8* {cast})")
+            return ("void", "void")
+        elif member == "delete":
+            val_reg, val_type = self.gen_expr(node.args[0])
+            cast = self.box_value(val_reg, val_type)
+            self.emit(f"  call void @mocha_set_delete(%MochaSet* {s_reg}, i8* {cast})")
+            return ("void", "void")
+        elif member == "has":
+            val_reg, val_type = self.gen_expr(node.args[0])
+            cast = self.box_value(val_reg, val_type)
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call i8 @mocha_set_has(%MochaSet* {s_reg}, i8* {cast})")
+            return (tmp, "i8")
+        elif member == "clean":
+            self.emit(f"  call void @mocha_set_clean(%MochaSet* {s_reg})")
+            return ("void", "void")
+        elif member == "negate":
+            self.emit(f"  call void @mocha_set_negate(%MochaSet* {s_reg})")
+            return ("void", "void")
+        elif member == "retype":
+            type_tags = {"int": 0, "float": 1, "str": 2, "bool": 3, "vast": 4, "object": 5}
+            new_type = "int"
+            for arg in node.args:
+                if not isinstance(arg, NullLiteral):
+                    if isinstance(arg, Identifier):
+                        new_type = arg.name
+            tag = type_tags.get(new_type, 0)
+            self.emit(f"  call void @mocha_set_retype(%MochaSet* {s_reg}, i32 {tag})")
+            
+            # Update local mocha type so subsequent operations use correct type
+            if isinstance(node.name, MemberAccess) and isinstance(node.name.obj, Identifier):
+                self.local_mocha_types[node.name.obj.name] = f"set<{new_type}>"
+            
+            return ("void", "void")
+        elif member == "union":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_union(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "%MochaSet*")
+        elif member == "intersect":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_intersect(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "%MochaSet*")
+        elif member == "xor":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_xor(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "%MochaSet*")
+        elif member == "rel_diff":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call %MochaSet* @mocha_set_rel_diff(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "%MochaSet*")
+        elif member == "min" or member == "max":
+            mocha_type = self.local_mocha_types.get(
+                node.name.obj.name if hasattr(node.name, 'obj') else "", "set<int>"
+            )
+            inner = mocha_type[4:-1] if mocha_type.startswith("set<") else "int"
+            suffix_map = {
+                "int":   ("int",   "i32"),
+                "float": ("float", "double"),
+                "vast":  ("vast",  "i64"),
+                "str":   ("str",   "i8*"),
+            }
+            suffix, ret_llvm = suffix_map.get(inner, ("int", "i32"))
+            fn = f"mocha_set_{member}_{suffix}"
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call {ret_llvm} @{fn}(%MochaSet* {s_reg})")
+            return (tmp, ret_llvm)
+        return None
     
     def gen_lib_qualified_call(self, node):
         # "mocha-math".sin(45.0)
@@ -4826,7 +4944,6 @@ class CodeGen:
                     self.method_return_types[method_name] = ret_llvm
                     self.method_return_types[method_name] = ret_llvm
 
-                    # ← ADD THIS BLOCK
                     if getattr(func, 'is_native', False) and func.native_name:
                         safe_name = self.sanitize_type_name(func.native_name)
                         ret_llvm_native = "i8*" if func.return_type == "null" else to_llvm_type(func.return_type)
@@ -4888,7 +5005,8 @@ class CodeGen:
                 self.gen_const_decl(node)
             
             elif isinstance(node, TagDecl):
-                self.gen_tag_decl(node)
+                if node.name not in self.lib_tag_names:
+                    self.gen_tag_decl(node)
 
         # ============================================================
         # Top-level statements (if any)
@@ -4927,9 +5045,27 @@ class CodeGen:
                 func_name, params = entry_func
                 ir_func_name = f"mocha_entry_{func_name}"
                 args = []
+                missing_flag = self.fresh_temp()
+                self.emit(f"  {missing_flag} = alloca i8")
+                self.emit(f"  store i8 0, i8* {missing_flag}")
                 for i, param in enumerate(params):
                     llvm_type = to_llvm_type(param.type)
                     argv_idx  = i + 1
+                    has_arg   = self.fresh_temp()
+                    use_arg   = self.fresh_label("use_arg")
+                    use_def   = self.fresh_label("use_def")
+                    merge     = self.fresh_label("merge")
+                    slot      = self.fresh_temp()
+
+                    # Alloca to hold the final value
+                    self.emit(f"  {slot} = alloca {llvm_type}")
+
+                    # Check if arg was provided
+                    self.emit(f"  {has_arg} = icmp sgt i32 %argc, {argv_idx}")
+                    self.emit(f"  br i1 {has_arg}, label %{use_arg}, label %{use_def}")
+
+                    # Branch: arg provided
+                    self.emit(f"{use_arg}:")
                     gep = self.fresh_temp()
                     raw = self.fresh_temp()
                     self.emit(f"  {gep} = getelementptr i8*, i8** %argv, i32 {argv_idx}")
@@ -4937,14 +5073,55 @@ class CodeGen:
                     if llvm_type == "i32":
                         converted = self.fresh_temp()
                         self.emit(f"  {converted} = call i32 @atoi(i8* {raw})")
-                        args.append(f"i32 {converted}")
+                        self.emit(f"  store i32 {converted}, i32* {slot}")
+                    elif llvm_type == "i64":
+                        converted = self.fresh_temp()
+                        self.emit(f"  {converted} = call i64 @mocha_str_to_vast(i8* {raw})")
+                        self.emit(f"  store i64 {converted}, i64* {slot}")
+                    elif llvm_type == "i8":
+                        converted = self.fresh_temp()
+                        self.emit(f"  {converted} = call i8 @mocha_str_to_bool(i8* {raw})")
+                        self.emit(f"  store i8 {converted}, i8* {slot}")
                     elif llvm_type == "double":
                         converted = self.fresh_temp()
                         self.emit(f"  {converted} = call double @atof(i8* {raw})")
-                        args.append(f"double {converted}")
+                        self.emit(f"  store double {converted}, double* {slot}")
                     else:
-                        args.append(f"i8* {raw}")
+                        self.emit(f"  store i8* {raw}, i8** {slot}")
+                    self.emit(f"  br label %{merge}")
 
+                    # Branch: arg missing
+                    self.emit(f"{use_def}:")
+                    if param.default is not None:
+                        def_val, _ = self.gen_expr(param.default)
+                        self.emit(f"  store {llvm_type} {def_val}, {llvm_type}* {slot}")
+                    else:
+                        err_msg = f"Error: missing required argument '{param.name}'"
+                        err_g   = self.fresh_str_global(err_msg)
+                        err_ptr = self.fresh_temp()
+                        length  = len(err_msg.encode()) + 1
+                        self.emit(f"  {err_ptr} = getelementptr [{length} x i8], [{length} x i8]* {err_g}, i32 0, i32 0")
+                        self.emit(f"  call void @mocha_print_stderr(i8* {err_ptr})")
+                        self.emit(f"  store i8 1, i8* {missing_flag}")
+                    self.emit(f"  br label %{merge}")
+
+                    # Merge
+                    self.emit(f"{merge}:")
+                    final = self.fresh_temp()
+                    self.emit(f"  {final} = load {llvm_type}, {llvm_type}* {slot}")
+                    args.append(f"{llvm_type} {final}")
+
+                flag_val     = self.fresh_temp()
+                should_exit  = self.fresh_temp()
+                exit_lbl     = self.fresh_label("do_exit")
+                continue_lbl = self.fresh_label("do_continue")
+                self.emit(f"  {flag_val} = load i8, i8* {missing_flag}")
+                self.emit(f"  {should_exit} = icmp eq i8 {flag_val}, 1")
+                self.emit(f"  br i1 {should_exit}, label %{exit_lbl}, label %{continue_lbl}")
+                self.emit(f"{exit_lbl}:")
+                self.emit(f"  call void @mocha_exit(i32 1)")
+                self.emit(f"  unreachable")
+                self.emit(f"{continue_lbl}:")
                 arg_str  = ", ".join(args)
                 ret_type = self.method_return_types.get(ir_func_name, "void")
                 if ret_type == "void":
@@ -4959,5 +5136,6 @@ class CodeGen:
             self.emit("  call void @mocha_gc_shutdown()")
             self.emit("  ret i32 0")
             self.emit("}")
+
 
         return self.get_ir()

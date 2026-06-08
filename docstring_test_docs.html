@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>docstring_test.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">docstring_test.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#add"><i class="ti ti-function"></i> add</a></li><li class="sb-fn"><a href="#nodoc"><i class="ti ti-function"></i> noDoc</a></li><li class="sb-fn"><a href="#fetchpage"><i class="ti ti-function"></i> fetchPage</a></li><li class="sb-fn"><a href="#fib"><i class="ti ti-function"></i> fib</a></li><li class="sb-fn"><a href="#threelines"><i class="ti ti-function"></i> threeLines</a></li><li class="sb-class"><a href="#point"><i class="ti ti-box"></i> Point</a><ul class="sb-methods"><li><a href="#point-constructor">constructor</a></li><li><a href="#point-distanceto">distanceTo</a></li><li><a href="#point-tostring">toString</a></li><li><a href="#point-origin">origin</a></li><li><a href="#point-undocumented">undocumented</a></li></ul></li><li class="sb-fn"><a href="#power"><i class="ti ti-function"></i> power</a></li><li class="sb-fn"><a href="#sortints"><i class="ti ti-function"></i> sortInts</a></li><li class="sb-fn"><a href="#emptydoc"><i class="ti ti-function"></i> emptyDoc</a></li><li class="sb-fn"><a href="#aftergap"><i class="ti ti-function"></i> afterGap</a></li><li class="sb-fn"><a href="#sin"><i class="ti ti-function"></i> sin</a></li><li class="sb-fn"><a href="#main"><i class="ti ti-function"></i> main</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 docstring_test.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">adds two numbers</p>
+  </div>
+</div>
+
+<div class="card" id="nodoc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">noDoc</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="fetchpage">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fetchPage</span><span class="paren">(</span><span class="param-name">url</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">timeout</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">fetches a url and returns the response body</p>
+  </div>
+</div>
+
+<div class="card" id="fib">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fib</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">computes the nth fibonacci number uses iterative approach for efficiency</p>
+  </div>
+</div>
+
+<div class="card" id="threelines">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">threeLines</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">first line of doc second line of doc third line of doc</p>
+  </div>
+</div>
+
+<div class="card" id="power">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">power</span><span class="paren">(</span><span class="param-name">base</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">exp</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">computes base raised to the power of exp</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">base</td><td class="tag-desc">the base value</td></tr><tr><td class="tag-name">exp</td><td class="tag-desc">the exponent, must be non-negative</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">base ^ exp as a float</span></div>
+  </div>
+</div>
+
+<div class="card" id="sortints">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sortInts</span><span class="paren">(</span><span class="param-name">items</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">items</td><td class="tag-desc">the list to sort in place</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">sorted list of integers</span></div>
+  </div>
+</div>
+
+<div class="card" id="emptydoc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">emptyDoc</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="aftergap">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">afterGap</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sin">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sin</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">native function with a docstring</p>
+  </div>
+</div>
+
+<div class="card" id="main">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">main</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="point">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Point</span>
+    <span class="inherit"></span>
+  </div>
+  <p class="class-desc">represents a 2D point in cartesian space</p>
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="point-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="point-distanceto">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">distanceTo</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Point</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">returns the distance to another point</p>
+  </div>
+</div>
+<div class="card" id="point-tostring">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">toString</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">string representation of this point</p>
+  </div>
+</div>
+<div class="card" id="point-origin">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">origin</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Point</span>
+  <span class="badge badge-shared">shared</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">creates a Point at the origin</p>
+  </div>
+</div>
+<div class="card" id="point-undocumented">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">undocumented</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

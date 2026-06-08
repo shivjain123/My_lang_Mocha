@@ -16,6 +16,8 @@ Operations:
   .trace()          — sum of diagonal (2D only)
   .det()            — determinant (2D only, float)
   .rank()           — rank of matrix (2D only, int)
+  .svd()
+  .singular_values()
 """
 
 // ============================================================

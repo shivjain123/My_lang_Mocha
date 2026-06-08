@@ -409,6 +409,7 @@ extend str {
         return results;
     };
 };
+
 extend str[] {
     function join(delim: str) -> str {
         if (this.length == 0) { return ""; };
@@ -657,4 +658,111 @@ function regex_find_span(pat: str, text: str) -> int[] {
         i++;
     };
     return result;
+};
+
+// =============================================
+// TOKENIZER
+// =============================================
+
+class Tokenizer {
+    var vocab:       str[];      // ID → word
+    var vocab_size:  int;
+
+    function constructor() -> null {
+        this.vocab      = [];
+        this.vocab_size = 0;
+
+        // special tokens
+        this.vocab.push("[PAD]");   // 0
+        this.vocab.push("[UNK]");   // 1
+        this.vocab.push("[CLS]");   // 2
+        this.vocab.push("[SEP]");   // 3
+        this.vocab_size = 4;
+    };
+
+    ~~ Check if word exists in vocab, return its ID or -1
+    function find(word: str) -> int {
+        var i: int = 0;
+        while (i < this.vocab_size) {
+            if (this.vocab[i] == word) {
+                return i;
+            };
+            i = i + 1;
+        };
+        return -1;
+    };
+
+    ~~ Build vocabulary from array of sentences
+    ~~ @param texts: str[] of sentences
+    function fit(texts: str[]) -> null {
+        var t: int = 0;
+        while (t < texts.length) {
+            var lower: str = texts[t].toLower();
+            var ripped: str = lower.rip();
+            var words: str[] = ripped.split(" ");
+            var w: int = 0;
+            while (w < words.length) {
+                var word: str = words[w];
+                if (word.length > 0) {
+                    if (this.find(word) == -1) {
+                        //print("IN FIT: pushing: ", word, " vocab_size=", this.vocab_size, "\n");
+                        this.vocab.push(word);
+                        this.vocab_size = this.vocab_size + 1;
+                    };
+                };
+                w = w + 1;
+            };
+            t = t + 1;
+        };
+    };
+
+    ~~ Encode a sentence to token IDs
+    ~~ @param text: input sentence
+    ~~ @return: int[] of token IDs with [CLS] at start and [SEP] at end
+    function encode(text: str) -> int[] {
+        var ids: int[] = [];
+        ids.push(2);  // [CLS]
+
+        var lower: str = text.toLower();
+        var ripped: str = lower.rip();
+        var words: str[] = ripped.split(" ");
+        var w: int = 0;
+        while (w < words.length) {
+            var word: str = words[w];
+            if (word.length > 0) {
+                var id: int = this.find(word);
+                if (id == -1) {
+                    ids.push(1);  // [UNK]
+                };
+                if (id != -1) {
+                    ids.push(id);
+                };
+            };
+            w = w + 1;
+        };
+
+        ids.push(3);  // [SEP]
+        return ids;
+    };
+
+    ~~ Decode token IDs back to string
+    ~~ @param ids: int[] of token IDs
+    ~~ @return: reconstructed sentence
+    function decode(ids: int[]) -> str {
+        var words: str[] = [];
+        var i: int = 0;
+        //print("2: ", this.vocab[2], " 4: ", this.vocab[4], newLine=true);
+        while (i < ids.length) {
+            var id: int = ids[i];
+            var word: str = this.vocab[id];
+            words.push(word);
+            i++;
+        };
+        return words.join(" ");
+    };
+
+    ~~ Get vocab size
+    function size() -> int {
+        return this.vocab_size;
+    };
 };
