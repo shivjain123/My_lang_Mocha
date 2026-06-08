@@ -1987,7 +1987,7 @@ class PositionalEncoding {
     function constructor(max_len: int, d_model: int) -> null {
         this.max_len = max_len;
         this.d_model = d_model;
-        this.table   = Tensor(max_len, d_model);
+        this.table = Tensor(max_len, d_model);
 
         var pos: int = 0;
         while (pos < max_len) {

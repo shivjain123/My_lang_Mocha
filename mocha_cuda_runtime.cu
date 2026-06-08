@@ -120,6 +120,7 @@ extern "C" double mocha_tensor_get(MochaTensor* t, int row, int col) {
 }
 
 extern "C" MochaTensor* mocha_tensor_get_row(MochaTensor* t, int row) {
+    if (t->on_gpu) mocha_tensor_download(t);
     MochaTensor* result = mocha_tensor_new(1, t->cols);
     for (int j = 0; j < t->cols; j++) {
         result->host_data[j] = t->host_data[row * t->cols + j];

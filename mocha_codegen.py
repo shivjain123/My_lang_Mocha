@@ -2323,7 +2323,7 @@ class CodeGen:
             size = self.fresh_temp()
             self.emit(f"  {size} = add i64 0, 1024  ; sizeof {class_name}")
             self.emit(f"  {raw} = call i8* @malloc(i64 {size})")
-            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 64, i1 false)")  # ← ADD THIS
+            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 1024, i1 false)")  # ← ADD THIS
             self.emit(f"  {obj} = bitcast i8* {raw} to {struct_ptr_type}")
             args.insert(0, (obj, struct_ptr_type))
             arg_str = ", ".join(f"{t} {r}" for r, t in args)

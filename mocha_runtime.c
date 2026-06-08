@@ -161,10 +161,28 @@
 #include <ctype.h>
 #include <windows.h>
 #include <setjmp.h>
+#include <signal.h>
 
 //RANDOM NUMBER
 #include <bcrypt.h>
 #pragma comment(lib, "bcrypt.lib")
+
+// ── Crash handler — replaces SIGSEGV with a readable error ────────────────
+static void mocha_crash_handler(int sig) {
+    fflush(stdout);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "╔══════════════════════════════════════════════════════╗\n");
+    fprintf(stderr, "║           Mocha Runtime Error                        ║\n");
+    fprintf(stderr, "╠══════════════════════════════════════════════════════╣\n");
+    fprintf(stderr, "║  The program crashed due to invalid memory access.   ║\n");
+    fprintf(stderr, "║  Possible causes:                                    ║\n");
+    fprintf(stderr, "║   • Accessing a null object                          ║\n");
+    fprintf(stderr, "║   • Array index out of bounds                        ║\n");
+    fprintf(stderr, "║   • Using an object after dispose()                  ║\n");
+    fprintf(stderr, "╚══════════════════════════════════════════════════════╝\n");
+    fflush(stderr);
+    exit(11);
+}
 
 /* ===============================================================
    Mocha Reference Counting
@@ -328,16 +346,17 @@ typedef struct {
 
 /* ---- General ---- */
 #define MOCHA_OOM_CHECK(ptr) \
-    if (!(ptr)) { fprintf(stderr, "MochaRuntimeError: Out of memory!\n"); exit(2); }
-
-#define MOCHA_EPSILON        1e-13
-#define MOCHA_SORT_THRESHOLD 16
-
-double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
-
-/* ---- Garbage Collector (orphaned) ---- */
-#define GC_THRESHOLD  1024
-#define MAX_ROOTS     4096
+    if (!(ptr)) { \
+        fflush(stdout); \
+        fprintf(stderr, "\n╔══════════════════════════════════════════════════════╗\n"); \
+        fprintf(stderr, "║           Mocha Runtime Error                        ║\n"); \
+        fprintf(stderr, "╠══════════════════════════════════════════════════════╣\n"); \
+        fprintf(stderr, "║  Out of memory — allocation failed.                  ║\n"); \
+        fprintf(stderr, "║  Try reducing data size or freeing unused objects.   ║\n"); \
+        fprintf(stderr, "╚══════════════════════════════════════════════════════╝\n"); \
+        fflush(stderr); \
+        exit(2); \
+    }
 
 /* ---- Bounds Checking ---- */
 
@@ -352,6 +371,15 @@ double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
         fprintf(stderr, "Index_Out_Of_Bounds Error: col %d out of range [0, %d)\n", col, (arr)->cols); \
         exit(2); \
     }
+
+#define MOCHA_EPSILON        1e-13
+#define MOCHA_SORT_THRESHOLD 16
+
+double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
+
+/* ---- Garbage Collector (orphaned) ---- */
+#define GC_THRESHOLD  1024
+#define MAX_ROOTS     4096
 
 /* ---- Fixed-Point Arithmetic ---- */
 #define MOCHA_DECIMAL_SCALE 1000000000000LL
@@ -465,7 +493,11 @@ static int      gc_root_count  = 0;
 /* ---- GC Lifecycle ---- */
 
 void mocha_gc_init() {
-    gc_head = NULL; gc_alloc_count = 0; gc_root_count = 0;
+    signal(SIGSEGV, mocha_crash_handler);
+    signal(SIGILL,  mocha_crash_handler); // illegal instruction
+    gc_head = NULL;
+    gc_alloc_count = 0;
+    gc_root_count = 0;
 }
 
 void mocha_gc_shutdown() {
@@ -1020,7 +1052,7 @@ void mocha_print_vast(int64_t n, int8_t newline) {
 typedef __int128 mocha_decimal;
 
 static mocha_decimal decimal_from(double x) { 
-    return (mocha_decimal)llround(x * (double)MOCHA_DECIMAL_SCALE); 
+    return (mocha_decimal)(x * (double)MOCHA_DECIMAL_SCALE);
 }
 
 static double decimal_to(mocha_decimal f) { 
@@ -2792,7 +2824,7 @@ int mocha_wrap_system(const char *cmd) { return system(cmd); }
 //Flush stdout before writing — prevents interleaved output on error
 void* mocha_print_stderr(const char *msg) { //this is called mocha_error in Mocha-side
     fflush(stdout);
-    fprintf(stderr, "%s\n", msg);
+    fprintf(stderr, "\n%s\n", msg);  // \n before AND after
     fflush(stderr);
     return NULL;
 }

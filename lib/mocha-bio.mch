@@ -680,3 +680,901 @@ function ards_severity(pf: float) -> ArdsSeverity {
     };
     return ArdsSeverity.NONE;
 };
+
+~~ Oxygen content of blood (CaO2)
+~~ CaO2 = (Hgb * 1.34 * SaO2) + (0.0031 * PaO2)
+~~ Hgb in g/dL, SaO2 as fraction (0.0-1.0), PaO2 in mmHg
+~~ Result in mL O2/dL blood
+~~ 1.34 = Hüfner constant (O2 carrying capacity per gram Hgb)
+~~ 0.0031 = dissolved O2 coefficient
+~~ Normal arterial: ~20 mL O2/dL
+function oxygen_content(hgb: float, sao2: float, pao2: float) -> float {
+    validate_hgb(hgb);
+    if (sao2 < 0.0 || sao2 > 1.0) {
+        c_print_err("MochaBioWarning (mocha-bio): SaO2 must be a fraction between 0.0 and 1.0.");
+    };
+    if (pao2 <= 0.0 || pao2 > 700.0) {
+        c_print_err("MochaBioWarning (mocha-bio): PaO2 out of physiological range (0-700 mmHg).");
+    };
+    if (sao2 < 0.90) {
+        c_print_err("MochaBioWarning (mocha-bio): SaO2 < 0.90 indicates significant hypoxaemia.");
+    };
+    var bound_o2: float = hgb * 1.34 * sao2;
+    var dissolved_o2: float = 0.0031 * pao2;
+    var cao2: float = bound_o2 + dissolved_o2;
+    if (cao2 < 16.0 || cao2 > 22.0) {
+        c_print_err("MochaBioWarning (mocha-bio): oxygen content outside normal arterial range (16-22 mL O2/dL).");
+    };
+    return cao2;
+};
+
+"""  ========================
+     NEUROLOGY CONSTANTS
+     ========================  """
+
+const ICP_MAX_NORMAL: float = 15.0;
+const CPP_MIN_NORMAL: float = 60.0;
+const CPP_MAX_NORMAL: float = 80.0;
+const NA_MIN: float = 100.0;
+const NA_MAX: float = 180.0;
+const GLUCOSE_MIN: float = 20.0;
+const GLUCOSE_MAX: float = 800.0;
+const BUN_MIN: float = 0.0;
+const BUN_MAX: float = 200.0;
+const OSMOLALITY_MIN: float = 275.0;
+const OSMOLALITY_MAX: float = 295.0;
+const AVDO2_MIN: float = 0.04;
+const AVDO2_MAX: float = 0.09;
+
+"""  ========================
+     NEUROLOGY VALIDATORS
+     ========================  """
+
+function validate_sodium(na: float) -> null {
+    if (na < NA_MIN || na > NA_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): sodium out of physiological range (100-180 mEq/L).");
+    };
+};
+
+function validate_glucose(glucose: float) -> null {
+    if (glucose < GLUCOSE_MIN || glucose > GLUCOSE_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): glucose out of physiological range (20-800 mg/dL).");
+    };
+};
+
+function validate_icp(icp: float) -> null {
+    if (icp < 0.0 || icp > 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): ICP out of physiological range (0-100 mmHg).");
+    };
+};
+
+"""  ========================
+     NEUROLOGY TAGS
+     ========================  """
+
+tag GcsEye {
+    NO_RESPONSE,
+    TO_PAIN,
+    TO_VOICE,
+    SPONTANEOUS
+};
+
+tag GcsVerbal {
+    NO_RESPONSE,
+    INCOMPREHENSIBLE,
+    INAPPROPRIATE,
+    CONFUSED,
+    ORIENTED
+};
+
+tag GcsMotor {
+    NO_RESPONSE,
+    EXTENSION_POSTURING,
+    FLEXION_POSTURING,
+    WITHDRAWAL,
+    LOCALISING,
+    OBEYS_COMMANDS
+};
+
+tag GcsSeverity {
+    SEVERE,
+    MODERATE,
+    MILD
+};
+
+"""  ========================
+     NEUROLOGY FORMULAE
+     ========================  """
+
+~~ Internal helpers — convert GCS Tag components to integer scores
+function gcs_eye_score(eye: GcsEye) -> int {
+    match(eye) {
+        case GcsEye.NO_RESPONSE: return 1;
+        case GcsEye.TO_PAIN:     return 2;
+        case GcsEye.TO_VOICE:    return 3;
+        case GcsEye.SPONTANEOUS: return 4;
+        default:                 return 1;
+    };
+};
+
+function gcs_verbal_score(verbal: GcsVerbal) -> int {
+    match(verbal) {
+        case GcsVerbal.NO_RESPONSE:      return 1;
+        case GcsVerbal.INCOMPREHENSIBLE: return 2;
+        case GcsVerbal.INAPPROPRIATE:    return 3;
+        case GcsVerbal.CONFUSED:         return 4;
+        case GcsVerbal.ORIENTED:         return 5;
+        default:                         return 1;
+    };
+};
+
+function gcs_motor_score(motor: GcsMotor) -> int {
+    match(motor) {
+        case GcsMotor.NO_RESPONSE:         return 1;
+        case GcsMotor.EXTENSION_POSTURING: return 2;
+        case GcsMotor.FLEXION_POSTURING:   return 3;
+        case GcsMotor.WITHDRAWAL:          return 4;
+        case GcsMotor.LOCALISING:          return 5;
+        case GcsMotor.OBEYS_COMMANDS:      return 6;
+        default:                           return 1;
+    };
+};
+
+~~ Glasgow Coma Scale
+~~ Total score 3–15
+~~ Severe: 3–8, Moderate: 9–12, Mild: 13–15
+~~ Score of 3 = no response in any component — deep coma or death
+~~ Score of 8 or below = unable to protect airway — intubation threshold
+function gcs(eye: GcsEye, verbal: GcsVerbal, motor: GcsMotor) -> GcsSeverity {
+    var total: int = gcs_eye_score(eye) + gcs_verbal_score(verbal) + gcs_motor_score(motor);
+    if (total <= 8) {
+        if (total == 3) {
+            c_print_err("MochaBioWarning (mocha-bio): GCS 3 — no response in all components, deep coma or brain death.");
+        } else {
+            c_print_err("MochaBioWarning (mocha-bio): GCS <= 8 — unable to protect airway, consider intubation.");
+        };
+        return GcsSeverity.SEVERE;
+    } else if (total <= 12) {
+        c_print_err("MochaBioWarning (mocha-bio): GCS 9-12 — moderate impairment, close monitoring required.");
+        return GcsSeverity.MODERATE;
+    };
+    return GcsSeverity.MILD;
+};
+
+~~ GCS total score — returns raw int if caller needs the number
+function gcs_score(eye: GcsEye, verbal: GcsVerbal, motor: GcsMotor) -> int {
+    return gcs_eye_score(eye) + gcs_verbal_score(verbal) + gcs_motor_score(motor);
+};
+
+~~ Cerebral perfusion pressure
+~~ CPP = MAP - ICP
+~~ Result in mmHg
+~~ Normal: 60–80 mmHg
+~~ < 60 mmHg: cerebral ischaemia risk
+~~ < 40 mmHg: severe — incompatible with consciousness
+function cerebral_perfusion_pressure(map: float, icp: float) -> float {
+    validate_icp(icp);
+    if (icp > ICP_MAX_NORMAL) {
+        c_print_err("MochaBioWarning (mocha-bio): ICP > 15 mmHg — intracranial hypertension.");
+    };
+    if (icp >= map) {
+        c_print_err("MochaBioWarning (mocha-bio): ICP >= MAP — cerebral perfusion is critically compromised.");
+    };
+    var cpp: float = map - icp;
+    if (cpp < 40.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CPP < 40 mmHg — severe, incompatible with consciousness.");
+    } else if (cpp < CPP_MIN_NORMAL) {
+        c_print_err("MochaBioWarning (mocha-bio): CPP < 60 mmHg — cerebral ischaemia risk.");
+    } else if (cpp > CPP_MAX_NORMAL) {
+        c_print_err("MochaBioWarning (mocha-bio): CPP > 80 mmHg — may indicate loss of cerebral autoregulation.");
+    };
+    return cpp;
+};
+
+~~ Cerebral blood flow (Fick principle)
+~~ CBF = CMRO2 / AVDO2
+~~ CMRO2: cerebral metabolic rate of O2 in mL O2/100g/min
+~~ AVDO2: arteriovenous O2 difference in mL O2/100mL blood
+~~ Result in mL/100g/min
+~~ Normal CBF: 50–60 mL/100g/min
+~~ < 20 mL/100g/min: ischaemic threshold
+~~ < 10 mL/100g/min: infarction threshold
+function cerebral_blood_flow(cmro2: float, avdo2: float) -> float {
+    if (cmro2 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): CMRO2 must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (avdo2 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): AVDO2 must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (avdo2 < AVDO2_MIN || avdo2 > AVDO2_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): AVDO2 outside normal range (4-9 mL O2/100mL).");
+    };
+    var cbf: float = cmro2 / avdo2;
+    if (cbf < 10.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CBF < 10 mL/100g/min — infarction threshold.");
+    } else if (cbf < 20.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CBF < 20 mL/100g/min — ischaemic threshold.");
+    } else if (cbf < 50.0 || cbf > 60.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CBF outside normal range (50-60 mL/100g/min).");
+    };
+    return cbf;
+};
+
+~~ Serum osmolality
+~~ Osm = 2*Na + glucose/18 + BUN/2.8
+~~ Na in mEq/L, glucose in mg/dL, BUN in mg/dL
+~~ Result in mOsm/kg
+~~ Normal: 275–295 mOsm/kg
+~~ > 320 mOsm/kg: hyperosmolar state
+function serum_osmolality(na: float, glucose: float, bun: float) -> float {
+    validate_sodium(na);
+    validate_glucose(glucose);
+    if (bun < BUN_MIN || bun > BUN_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): BUN out of physiological range (0-200 mg/dL).");
+    };
+    var osm: float = (2.0 * na) + (glucose / 18.0) + (bun / 2.8);
+    if (osm < OSMOLALITY_MIN || osm > OSMOLALITY_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): serum osmolality outside normal range (275-295 mOsm/kg).");
+    };
+    if (osm > 320.0) {
+        c_print_err("MochaBioWarning (mocha-bio): serum osmolality > 320 mOsm/kg — hyperosmolar state.");
+    };
+    return osm;
+};
+
+~~ Osmolar gap
+~~ Gap = measured_osm - calculated_osm
+~~ calculated_osm should be from serum_osmolality()
+~~ Normal: < 10 mOsm/kg
+~~ > 10 mOsm/kg: suggests unmeasured osmoles — toxic alcohols, mannitol
+function osmolar_gap(measured_osm: float, calculated_osm: float) -> float {
+    if (measured_osm <= 0.0 || calculated_osm <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): osmolality values must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var gap: float = measured_osm - calculated_osm;
+    if (gap > 10.0) {
+        c_print_err("MochaBioWarning (mocha-bio): osmolar gap > 10 mOsm/kg — suggests toxic alcohols or unmeasured osmoles.");
+    };
+    if (gap < 0.0) {
+        c_print_err("MochaBioWarning (mocha-bio): negative osmolar gap — verify measured and calculated osmolality inputs.");
+    };
+    return gap;
+};
+
+~~ Corrected sodium for hyperglycaemia
+~~ Corrected Na = Na + 0.016 * (glucose - 100)
+~~ Na in mEq/L, glucose in mg/dL
+~~ Accounts for osmotic shift of water out of cells in hyperglycaemia
+~~ Each 100 mg/dL rise in glucose above normal drops Na by ~1.6 mEq/L
+function corrected_sodium(na: float, glucose: float) -> float {
+    validate_sodium(na);
+    validate_glucose(glucose);
+    if (glucose <= 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): glucose <= 100 mg/dL — sodium correction not indicated.");
+    };
+    var corrected: float = na + (0.016 * (glucose - 100.0));
+    validate_sodium(corrected);
+    return corrected;
+};
+
+"""  ========================
+     RENAL CONSTANTS
+     ========================  """
+
+const CREATININE_MIN: float = 0.1;
+const CREATININE_MAX: float = 20.0;
+const POTASSIUM_MIN: float = 1.0;
+const POTASSIUM_MAX: float = 9.0;
+const FENA_PRERENAL_THRESHOLD: float = 1.0;
+const FENA_INTRINSIC_THRESHOLD: float = 2.0;
+const FEUREA_PRERENAL_THRESHOLD: float = 35.0;
+const BUN_CR_PRERENAL_THRESHOLD: float = 20.0;
+
+"""  ========================
+     RENAL VALIDATORS
+     ========================  """
+
+function validate_creatinine(cr: float) -> null {
+    if (cr < CREATININE_MIN || cr > CREATININE_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): creatinine out of physiological range (0.1-20 mg/dL).");
+    };
+};
+
+function validate_potassium(k: float) -> null {
+    if (k < POTASSIUM_MIN || k > POTASSIUM_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): potassium out of physiological range (1.0-9.0 mEq/L).");
+    };
+};
+
+"""  ========================
+     RENAL TAGS
+     ========================  """
+
+tag CkdStage {
+    G1,
+    G2,
+    G3A,
+    G3B,
+    G4,
+    G5
+};
+
+tag AkiLikelihood {
+    PRERENAL,
+    INTRINSIC,
+    INDETERMINATE
+};
+
+"""  ========================
+     RENAL FORMULAE
+     ========================  """
+
+~~ CKD-EPI GFR (2021 — no race coefficient)
+~~ Serum creatinine in mg/dL, age in years
+~~ Result in mL/min/1.73m²
+~~ G1: >= 90, G2: 60-89, G3a: 45-59, G3b: 30-44, G4: 15-29, G5: < 15
+function ckd_epi_gfr(serum_cr: float, age: float, sex: Sex) -> CkdStage {
+    validate_creatinine(serum_cr);
+    if (age < 18.0 || age > 120.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CKD-EPI validated for adults >= 18 years only.");
+    };
+    if (serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): serum creatinine must be positive.");
+        c_exit(2);
+        return CkdStage.G5;
+    };
+
+    // 2021 CKD-EPI coefficients
+    var kappa: float = 0.7;
+    var alpha: float = -0.241;
+    if (sex == Sex.MALE) {
+        kappa = 0.9;
+        alpha = -0.302;
+    };
+
+    var cr_kappa: float = serum_cr / kappa;
+    var min_term: float = cr_kappa;
+    if (min_term > 1.0) {
+        min_term = 1.0;
+    };
+    var max_term: float = cr_kappa;
+    if (max_term < 1.0) {
+        max_term = 1.0;
+    };
+
+    var gfr: float = 142.0
+        * c_pow(min_term, alpha)
+        * c_pow(max_term, -1.200)
+        * c_pow(0.9938, age);
+
+    if (sex == Sex.FEMALE) {
+        gfr = gfr * 1.012;
+    };
+
+    if (gfr >= 90.0) {
+        return CkdStage.G1;
+    } else if (gfr >= 60.0) {
+        return CkdStage.G2;
+    } else if (gfr >= 45.0) {
+        c_print_err("MochaBioWarning (mocha-bio): GFR 45-59 mL/min/1.73m² — CKD stage G3a, mildly to moderately decreased.");
+        return CkdStage.G3A;
+    } else if (gfr >= 30.0) {
+        c_print_err("MochaBioWarning (mocha-bio): GFR 30-44 mL/min/1.73m² — CKD stage G3b, moderately to severely decreased.");
+        return CkdStage.G3B;
+    } else if (gfr >= 15.0) {
+        c_print_err("MochaBioWarning (mocha-bio): GFR 15-29 mL/min/1.73m² — CKD stage G4, severely decreased.");
+        return CkdStage.G4;
+    };
+    c_print_err("MochaBioWarning (mocha-bio): GFR < 15 mL/min/1.73m² — CKD stage G5, kidney failure.");
+    return CkdStage.G5;
+};
+
+~~ CKD-EPI GFR raw value — returns float if caller needs the number
+~~ Same inputs as ckd_epi_gfr()
+function ckd_epi_gfr_value(serum_cr: float, age: float, sex: Sex) -> float {
+    validate_creatinine(serum_cr);
+    if (age < 18.0 || age > 120.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CKD-EPI validated for adults >= 18 years only.");
+    };
+    if (serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): serum creatinine must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+
+    var kappa: float = 0.7;
+    var alpha: float = -0.241;
+    if (sex == Sex.MALE) {
+        kappa = 0.9;
+        alpha = -0.302;
+    };
+
+    var cr_kappa: float = serum_cr / kappa;
+    var min_term: float = cr_kappa;
+    if (min_term > 1.0) {
+        min_term = 1.0;
+    };
+    var max_term: float = cr_kappa;
+    if (max_term < 1.0) {
+        max_term = 1.0;
+    };
+
+    var gfr: float = 142.0
+        * c_pow(min_term, alpha)
+        * c_pow(max_term, -1.200)
+        * c_pow(0.9938, age);
+
+    if (sex == Sex.FEMALE) {
+        gfr = gfr * 1.012;
+    };
+    return gfr;
+};
+
+~~ Cockcroft-Gault creatinine clearance
+~~ CrCl = ((140 - age) * weight_kg) / (72 * serum_cr)
+~~ Multiply by 0.85 for females
+~~ Result in mL/min
+~~ Used for drug dosing — not interchangeable with CKD-EPI GFR
+function cockcroft_gault(age: float, weight_kg: float, serum_cr: float, sex: Sex) -> float {
+    validate_creatinine(serum_cr);
+    if (age < 18.0 || age > 120.0) {
+        c_print_err("MochaBioWarning (mocha-bio): Cockcroft-Gault validated for adults >= 18 years only.");
+    };
+    if (weight_kg < WEIGHT_MIN || weight_kg > WEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): weight out of physiological range (1-500 kg).");
+    };
+    if (serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): serum creatinine must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var crcl: float = ((140.0 - age) * weight_kg) / (72.0 * serum_cr);
+    if (sex == Sex.FEMALE) {
+        crcl = crcl * 0.85;
+    };
+    if (crcl < 0.0) {
+        c_print_err("MochaBioWarning (mocha-bio): negative CrCl — age may exceed physiological range for this formula.");
+    };
+    if (crcl < 15.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CrCl < 15 mL/min — severe renal impairment, drug dosing requires specialist review.");
+    } else if (crcl < 30.0) {
+        c_print_err("MochaBioWarning (mocha-bio): CrCl < 30 mL/min — moderate-severe renal impairment, adjust drug doses.");
+    };
+    return crcl;
+};
+
+~~ BUN/creatinine ratio
+~~ Both in mg/dL
+~~ Normal: 10-20
+~~ > 20: prerenal (dehydration, GI bleeding, high protein intake)
+~~ < 10: intrinsic renal disease, liver failure, low protein intake
+function bun_creatinine_ratio(bun: float, serum_cr: float) -> float {
+    validate_creatinine(serum_cr);
+    if (bun < BUN_MIN || bun > BUN_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): BUN out of physiological range (0-200 mg/dL).");
+    };
+    if (serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): serum creatinine must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var ratio: float = bun / serum_cr;
+    if (ratio > BUN_CR_PRERENAL_THRESHOLD) {
+        c_print_err("MochaBioWarning (mocha-bio): BUN/creatinine > 20 — suggests prerenal cause (dehydration, GI bleeding).");
+    } else if (ratio < 10.0) {
+        c_print_err("MochaBioWarning (mocha-bio): BUN/creatinine < 10 — suggests intrinsic renal disease or liver failure.");
+    };
+    return ratio;
+};
+
+~~ Fractional excretion of sodium (FENa)
+~~ FENa = (urine_na * serum_cr) / (serum_na * urine_cr) * 100
+~~ All sodium in mEq/L, creatinine in mg/dL
+~~ Result in %
+~~ < 1%: prerenal AKI (kidneys conserving sodium)
+~~ > 2%: intrinsic renal AKI (tubular damage)
+~~ 1-2%: indeterminate
+~~ Unreliable in patients on diuretics — use FEUrea instead
+function fena(urine_na: float, serum_cr: float, serum_na: float, urine_cr: float) -> AkiLikelihood {
+    validate_sodium(serum_na);
+    validate_creatinine(serum_cr);
+    if (urine_na <= 0.0 || urine_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): urine values must be positive.");
+        c_exit(2);
+        return AkiLikelihood.INDETERMINATE;
+    };
+    if (serum_na <= 0.0 || serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): serum values must be positive.");
+        c_exit(2);
+        return AkiLikelihood.INDETERMINATE;
+    };
+    var fe: float = ((urine_na * serum_cr) / (serum_na * urine_cr)) * 100.0;
+    if (fe < FENA_PRERENAL_THRESHOLD) {
+        return AkiLikelihood.PRERENAL;
+    } else if (fe > FENA_INTRINSIC_THRESHOLD) {
+        c_print_err("MochaBioWarning (mocha-bio): FENa > 2% — suggests intrinsic renal AKI (tubular damage).");
+        return AkiLikelihood.INTRINSIC;
+    };
+    return AkiLikelihood.INDETERMINATE;
+};
+
+~~ FENa raw value — returns float if caller needs the number
+function fena_value(urine_na: float, serum_cr: float, serum_na: float, urine_cr: float) -> float {
+    if (urine_na <= 0.0 || urine_cr <= 0.0 || serum_na <= 0.0 || serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): all values must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return ((urine_na * serum_cr) / (serum_na * urine_cr)) * 100.0;
+};
+
+~~ Fractional excretion of urea (FEUrea)
+~~ FEUrea = (urine_urea * serum_cr) / (serum_urea * urine_cr) * 100
+~~ All urea in mg/dL, creatinine in mg/dL
+~~ Result in %
+~~ < 35%: prerenal AKI
+~~ >= 35%: intrinsic renal AKI
+~~ Use when patient is on diuretics — FENa unreliable in that context
+function feurea(urine_urea: float, serum_cr: float, serum_urea: float, urine_cr: float) -> AkiLikelihood {
+    validate_creatinine(serum_cr);
+    if (urine_urea <= 0.0 || serum_urea <= 0.0 || urine_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): all values must be positive.");
+        c_exit(2);
+        return AkiLikelihood.INDETERMINATE;
+    };
+    if (serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): serum creatinine must be positive.");
+        c_exit(2);
+        return AkiLikelihood.INDETERMINATE;
+    };
+    var fe: float = ((urine_urea * serum_cr) / (serum_urea * urine_cr)) * 100.0;
+    if (fe < FEUREA_PRERENAL_THRESHOLD) {
+        return AkiLikelihood.PRERENAL;
+    };
+    c_print_err("MochaBioWarning (mocha-bio): FEUrea >= 35% — suggests intrinsic renal AKI.");
+    return AkiLikelihood.INTRINSIC;
+};
+
+~~ FEUrea raw value — returns float if caller needs the number
+function feurea_value(urine_urea: float, serum_cr: float, serum_urea: float, urine_cr: float) -> float {
+    if (urine_urea <= 0.0 || serum_urea <= 0.0 || urine_cr <= 0.0 || serum_cr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): all values must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return ((urine_urea * serum_cr) / (serum_urea * urine_cr)) * 100.0;
+};
+
+"""  ========================
+     ENDOCRINE CONSTANTS
+     ========================  """
+
+// BMI is intentionally excluded from mocha-bio.
+// It was designed to describe populations, not individuals, and systematically
+// misclassifies muscular, tall, and short individuals. Use BAI, RFM, or
+// waist-to-height ratio instead for individual body composition assessment.
+
+const WAIST_MIN: float = 40.0;
+const WAIST_MAX: float = 200.0;
+const HIP_MIN: float = 50.0;
+const HIP_MAX: float = 200.0;
+const HBA1C_MIN: float = 3.0;
+const HBA1C_MAX: float = 20.0;
+const INSULIN_MIN: float = 0.5;
+const INSULIN_MAX: float = 300.0;
+const CALCIUM_MIN: float = 5.0;
+const CALCIUM_MAX: float = 15.0;
+const ALBUMIN_MIN: float = 1.0;
+const ALBUMIN_MAX: float = 6.0;
+
+"""  ========================
+     ENDOCRINE VALIDATORS
+     ========================  """
+
+function validate_waist(waist_cm: float) -> null {
+    if (waist_cm < WAIST_MIN || waist_cm > WAIST_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): waist circumference out of physiological range (40-200 cm).");
+    };
+};
+
+function validate_hip(hip_cm: float) -> null {
+    if (hip_cm < HIP_MIN || hip_cm > HIP_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): hip circumference out of physiological range (50-200 cm).");
+    };
+};
+
+function validate_hba1c(hba1c: float) -> null {
+    if (hba1c < HBA1C_MIN || hba1c > HBA1C_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): HbA1c out of physiological range (3-20%).");
+    };
+};
+
+function validate_calcium(calcium: float) -> null {
+    if (calcium < CALCIUM_MIN || calcium > CALCIUM_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): calcium out of physiological range (5-15 mg/dL).");
+    };
+};
+
+function validate_albumin(albumin: float) -> null {
+    if (albumin < ALBUMIN_MIN || albumin > ALBUMIN_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): albumin out of physiological range (1-6 g/dL).");
+    };
+};
+
+"""  ========================
+     ENDOCRINE TAGS
+     ========================  """
+
+tag ActivityLevel {
+    SEDENTARY,
+    LIGHT,
+    MODERATE,
+    ACTIVE,
+    VERY_ACTIVE
+};
+
+tag WaistHeightRisk {
+    LOW,
+    MODERATE,
+    HIGH,
+    VERY_HIGH
+};
+
+"""  ========================
+     ENDOCRINE FORMULAE
+     ========================  """
+
+~~ Body adiposity index (BAI)
+~~ BAI = (hip_cm / height_cm^1.5) - 18
+~~ Estimates body fat % directly
+~~ Normal: ~21-33% women, ~8-21% men
+~~ More accurate than BMI for estimating adiposity
+function body_adiposity_index(hip_cm: float, height_cm: float) -> float {
+    validate_hip(hip_cm);
+    if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
+    };
+    if (hip_cm <= 0.0 || height_cm <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): measurements must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    // convert to metres first, then height_m^1.5 = height_m * sqrt(height_m)
+    var height_m: float = height_cm / 100.0;
+    var height_1_5: float = height_m * c_sqrt(height_m);
+    return (hip_cm / height_1_5) - 18.0;
+};
+
+~~ Ponderal index
+~~ PI = weight_kg / (height_m^3)
+~~ Less sensitive to height extremes than BMI
+~~ Normal range: 11-15 kg/m³
+function ponderal_index(weight_kg: float, height_cm: float) -> float {
+    if (weight_kg < WEIGHT_MIN || weight_kg > WEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): weight out of physiological range (1-500 kg).");
+    };
+    if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
+    };
+    if (height_cm <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): height must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var height_m: float = height_cm / 100.0;
+    var height_m3: float = height_m * height_m * height_m;
+    var pi: float = weight_kg / height_m3;
+    if (pi < 11.0 || pi > 15.0) {
+        c_print_err("MochaBioWarning (mocha-bio): ponderal index outside normal range (11-15 kg/m³).");
+    };
+    return pi;
+};
+
+~~ Waist-to-height ratio
+~~ WHtR = waist_cm / height_cm
+~~ One of the strongest individual predictors of cardiometabolic risk
+~~ < 0.4: low
+~~ 0.4-0.5: moderate
+~~ 0.5-0.6: high
+~~ > 0.6: very high
+function waist_height_ratio(waist_cm: float, height_cm: float) -> WaistHeightRisk {
+    validate_waist(waist_cm);
+    if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
+    };
+    if (height_cm <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): height must be positive.");
+        c_exit(2);
+        return WaistHeightRisk.VERY_HIGH;
+    };
+    var ratio: float = waist_cm / height_cm;
+    if (ratio < 0.4) {
+        return WaistHeightRisk.LOW;
+    } else if (ratio < 0.5) {
+        return WaistHeightRisk.MODERATE;
+    } else if (ratio < 0.6) {
+        c_print_err("MochaBioWarning (mocha-bio): waist-to-height ratio 0.5-0.6 — high cardiometabolic risk.");
+        return WaistHeightRisk.HIGH;
+    };
+    c_print_err("MochaBioWarning (mocha-bio): waist-to-height ratio > 0.6 — very high cardiometabolic risk.");
+    return WaistHeightRisk.VERY_HIGH;
+};
+
+~~ Waist-to-height ratio raw value
+function waist_height_ratio_value(waist_cm: float, height_cm: float) -> float {
+    validate_waist(waist_cm);
+    if (height_cm <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): height must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return waist_cm / height_cm;
+};
+
+~~ Relative fat mass (RFM) — Woolcott & Bergman 2018
+~~ Male:   RFM = 64 - (20 * height_cm / waist_cm)
+~~ Female: RFM = 76 - (20 * height_cm / waist_cm)
+~~ Result in % body fat
+~~ Designed specifically to replace BMI for individual assessment
+~~ Normal: ~6-24% men, ~14-36% women
+function relative_fat_mass(height_cm: float, waist_cm: float, sex: Sex) -> float {
+    validate_waist(waist_cm);
+    if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
+    };
+    if (waist_cm <= 0.0 || height_cm <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): measurements must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var rfm: float = 0.0;
+    if (sex == Sex.MALE) {
+        rfm = 64.0 - (20.0 * (height_cm / waist_cm));
+        if (rfm < 6.0 || rfm > 24.0) {
+            c_print_err("MochaBioWarning (mocha-bio): RFM outside normal range for males (6-24%).");
+        };
+    } else {
+        rfm = 76.0 - (20.0 * (height_cm / waist_cm));
+        if (rfm < 14.0 || rfm > 36.0) {
+            c_print_err("MochaBioWarning (mocha-bio): RFM outside normal range for females (14-36%).");
+        };
+    };
+    return rfm;
+};
+
+~~ Basal metabolic rate — Mifflin-St Jeor equation
+~~ Male:   BMR = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + 5
+~~ Female: BMR = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) - 161
+~~ Result in kcal/day
+~~ Most accurate BMR formula for general population
+function basal_metabolic_rate(weight_kg: float, height_cm: float, age: float, sex: Sex) -> float {
+    if (weight_kg < WEIGHT_MIN || weight_kg > WEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): weight out of physiological range (1-500 kg).");
+    };
+    if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
+    };
+    if (age < 18.0 || age > 120.0) {
+        c_print_err("MochaBioWarning (mocha-bio): age out of expected range for Mifflin-St Jeor (18-120 years).");
+    };
+    var bmr: float = (10.0 * weight_kg) + (6.25 * height_cm) - (5.0 * age);
+    if (sex == Sex.MALE) {
+        bmr = bmr + 5.0;
+    } else {
+        bmr = bmr - 161.0;
+    };
+    return bmr;
+};
+
+~~ Total daily energy expenditure
+~~ TDEE = BMR * activity_multiplier
+~~ Result in kcal/day
+~~ Sedentary: 1.2, Light: 1.375, Moderate: 1.55, Active: 1.725, Very active: 1.9
+function total_daily_energy_expenditure(bmr: float, activity: ActivityLevel) -> float {
+    if (bmr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): BMR must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var multiplier: float = 1.2;
+    match(activity) {
+        case ActivityLevel.SEDENTARY:   multiplier = 1.2;
+        case ActivityLevel.LIGHT:       multiplier = 1.375;
+        case ActivityLevel.MODERATE:    multiplier = 1.55;
+        case ActivityLevel.ACTIVE:      multiplier = 1.725;
+        case ActivityLevel.VERY_ACTIVE: multiplier = 1.9;
+        default:                        multiplier = 1.2;
+    };
+    return bmr * multiplier;
+};
+
+~~ HbA1c to estimated average glucose (eAG)
+~~ eAG = (HbA1c * 28.7) - 46.7
+~~ HbA1c in %, result in mg/dL
+~~ Normal HbA1c: < 5.7%
+~~ Prediabetes: 5.7-6.4%
+~~ Diabetes: >= 6.5%
+function hba1c_to_eag(hba1c: float) -> float {
+    validate_hba1c(hba1c);
+    if (hba1c >= 6.5) {
+        c_print_err("MochaBioWarning (mocha-bio): HbA1c >= 6.5% — diagnostic threshold for diabetes.");
+    } else if (hba1c >= 5.7) {
+        c_print_err("MochaBioWarning (mocha-bio): HbA1c 5.7-6.4% — prediabetes range.");
+    };
+    return (hba1c * 28.7) - 46.7;
+};
+
+~~ HOMA-IR — homeostatic model assessment of insulin resistance
+~~ HOMA-IR = (fasting_glucose_mg_dl * fasting_insulin_uU_ml) / 405
+~~ Normal: < 1.0 (insulin sensitive)
+~~ > 1.9: early insulin resistance
+~~ > 2.9: significant insulin resistance
+function homa_ir(fasting_glucose: float, fasting_insulin: float) -> float {
+    validate_glucose(fasting_glucose);
+    if (fasting_insulin < INSULIN_MIN || fasting_insulin > INSULIN_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): fasting insulin out of physiological range (0.5-300 uU/mL).");
+    };
+    if (fasting_glucose <= 0.0 || fasting_insulin <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): glucose and insulin must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var ir: float = (fasting_glucose * fasting_insulin) / 405.0;
+    if (ir > 2.9) {
+        c_print_err("MochaBioWarning (mocha-bio): HOMA-IR > 2.9 — significant insulin resistance.");
+    } else if (ir > 1.9) {
+        c_print_err("MochaBioWarning (mocha-bio): HOMA-IR > 1.9 — early insulin resistance.");
+    };
+    return ir;
+};
+
+~~ Corrected calcium for hypoalbuminaemia
+~~ Corrected Ca = measured_calcium + 0.8 * (4.0 - albumin)
+~~ Calcium in mg/dL, albumin in g/dL
+~~ Normal corrected calcium: 8.5-10.5 mg/dL
+~~ Hypoalbuminaemia falsely lowers measured calcium
+function corrected_calcium(measured_calcium: float, albumin: float) -> float {
+    validate_calcium(measured_calcium);
+    validate_albumin(albumin);
+    var corrected: float = measured_calcium + (0.8 * (4.0 - albumin));
+    if (corrected < 8.5 || corrected > 10.5) {
+        c_print_err("MochaBioWarning (mocha-bio): corrected calcium outside normal range (8.5-10.5 mg/dL).");
+    };
+    if (corrected > 12.0) {
+        c_print_err("MochaBioWarning (mocha-bio): corrected calcium > 12.0 mg/dL — severe hypercalcaemia.");
+    } else if (corrected < 7.0) {
+        c_print_err("MochaBioWarning (mocha-bio): corrected calcium < 7.0 mg/dL — severe hypocalcaemia.");
+    };
+    return corrected;
+};
+
+~~ Free water deficit
+~~ FWD = body_water_fraction * weight_kg * (sodium / 140.0 - 1.0)
+~~ Body water fraction: 0.6 male, 0.5 female
+~~ Result in litres
+~~ Used in hypernatraemia management to estimate free water replacement
+~~ > 5L: severe deficit
+function free_water_deficit(weight_kg: float, sodium: float, sex: Sex) -> float {
+    if (weight_kg < WEIGHT_MIN || weight_kg > WEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): weight out of physiological range (1-500 kg).");
+    };
+    validate_sodium(sodium);
+    if (sodium <= 140.0) {
+        c_print_err("MochaBioWarning (mocha-bio): sodium <= 140 mEq/L — free water deficit formula only applies in hypernatraemia.");
+    };
+    var fraction: float = 0.5;
+    if (sex == Sex.MALE) {
+        fraction = 0.6;
+    };
+    var fwd: float = fraction * weight_kg * ((sodium / 140.0) - 1.0);
+    if (fwd > 5.0) {
+        c_print_err("MochaBioWarning (mocha-bio): free water deficit > 5L — severe hypernatraemia, replace slowly to avoid cerebral oedema.");
+    };
+    return fwd;
+};

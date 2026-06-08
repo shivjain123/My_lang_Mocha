@@ -30,12 +30,12 @@ function main(didLoad) -> null {
     ];
 
     // ── Hyperparameters ───────────────────────────────────────
-    var d_model: int = 16;
-    var d_k:     int = 8;
-    var d_ff:    int = 32;
+    var d_model: int = 32;
+    var d_k:     int = 16;
+    var d_ff:    int = 64;
     var max_len: int = 20;
-    var lr:      float = 0.01;
-    var epochs:  int = 100;
+    var lr:      float = 0.0001;
+    var epochs:  int = 2000;
 
     // ── Build tokenizer ───────────────────────────────────────
     var tok: Tokenizer = Tokenizer();
@@ -44,13 +44,9 @@ function main(didLoad) -> null {
 
     // ── Build model ───────────────────────────────────────────
     var emb: Embedding = Embedding(tok.size(), d_model);
-    print("emb ok\n");
     var pe: PositionalEncoding = PositionalEncoding(max_len, d_model);
-    print("pe ok\n");
     var bert: BertLayer = BertLayer(d_model, d_k, d_ff);
-    print("bert ok\n");
     var head: Dense = Dense(d_model, 1, Activation.SIGMOID);
-    print("head ok\n");
 
     // ── Training loop ─────────────────────────────────────────
     var epoch: int = 0;
@@ -58,34 +54,26 @@ function main(didLoad) -> null {
         var total_loss: float = 0.0;
         var i: int = 0;
         while (i < texts.length) {
-            // encode text
             var ids: int[] = tok.encode(texts[i]);
 
-            // embed + positional encode
             var embedded: Tensor = emb.forward(ids);
-            var encoded:  Tensor = pe.encode(embedded);
+            var encoded: Tensor = pe.encode(embedded);
             embedded.dispose();
 
-            // bert layer
-            var bert_out: Tensor = bert.forward(encoded);
+            var seq_len: int = encoded.nrows;
 
-            // take [CLS] token (row 0)
+            var bert_out: Tensor = bert.forward(encoded);
             var cls: Tensor = bert_out.get_row(0);
             bert_out.dispose();
-            encoded.dispose();
 
-            // classification head
             var pred: Tensor = head.forward(cls);
 
-            // label tensor
             var label: Tensor = Tensor(1, 1);
             label.put(0, 0, labels[i]);
 
-            // loss
             var loss: float = mocha_tensor_mse_loss(pred.ptr, label.ptr);
             total_loss = total_loss + loss;
 
-            // backward
             var dout: Tensor = Tensor(1, 1);
             mocha_tensor_free(dout.ptr);
             dout.ptr = mocha_tensor_mse_grad(pred.ptr, label.ptr);
@@ -93,22 +81,30 @@ function main(didLoad) -> null {
             var dcls: Tensor = head.backward(dout, lr);
             dout.dispose();
 
-            // backward through bert
-            var denc: Tensor = bert.backward(dcls, lr);
+            var denc_full: Tensor = Tensor(seq_len, d_model);
+            denc_full.zeros();
+            var col: int = 0;
+            while (col < d_model) {
+                denc_full.put(0, col, dcls.at(0, col));
+                col = col + 1;
+            };
             dcls.dispose();
-            //denc.dispose();
 
-            // backward through embedding
+            var denc: Tensor = bert.backward(denc_full, lr);
+            denc_full.dispose();
+
             emb.backward(denc, ids, lr);
+            denc.dispose();
 
             pred.dispose();
             label.dispose();
             cls.dispose();
+            encoded.dispose();
 
-            i = i + 1;
+            i++;
         };
 
-        if (epoch % 10 == 0) {
+        if (epoch % 100 == 0) {
             var avg_loss: float = total_loss / 16.0;
             print("Epoch ", epoch, " loss: ", avg_loss, "\n");
         };
