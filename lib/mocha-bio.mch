@@ -1578,3 +1578,668 @@ function free_water_deficit(weight_kg: float, sodium: float, sex: Sex) -> float 
     };
     return fwd;
 };
+
+"""  ========================
+     PHARMACOKINETICS CONSTANTS
+     ========================  """
+
+const LN2: float = 0.693147;
+const F_MIN: float = 0.0;
+const F_MAX: float = 1.0;
+const CONCENTRATION_MIN: float = 0.0;
+const VD_MIN: float = 0.0;
+const CL_MIN: float = 0.0;
+const HILL_N_MIN: float = 0.1;
+const HILL_N_MAX: float = 10.0;
+
+"""  ========================
+     PHARMACOKINETICS VALIDATORS
+     ========================  """
+
+function validate_concentration(c: float) -> null {
+    if (c < CONCENTRATION_MIN) {
+        c_print_err("MochaBioWarning (mocha-bio): concentration cannot be negative.");
+    };
+};
+
+function validate_bioavailability(f: float) -> null {
+    if (f <= F_MIN || f > F_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): bioavailability must be between 0.0 (exclusive) and 1.0.");
+    };
+};
+
+function validate_vd(vd: float) -> null {
+    if (vd <= VD_MIN) {
+        c_print_err("MochaBioError (mocha-bio): volume of distribution must be positive.");
+    };
+};
+
+function validate_clearance(cl: float) -> null {
+    if (cl <= CL_MIN) {
+        c_print_err("MochaBioError (mocha-bio): clearance must be positive.");
+    };
+};
+
+"""  ========================
+     PHARMACOKINETICS TAGS
+     ========================  """
+
+tag RouteOfAdministration {
+    IV,
+    ORAL,
+    SUBCUTANEOUS,
+    INTRAMUSCULAR
+};
+
+"""  ========================
+     PHARMACOKINETICS FORMULAE
+     ========================  """
+
+~~ Elimination rate constant
+~~ ke = CL / Vd
+~~ CL in L/h, Vd in L
+~~ Result in h⁻¹
+~~ Describes the fraction of Vd cleared per unit time
+function elimination_rate_constant(cl: float, vd: float) -> float {
+    validate_clearance(cl);
+    validate_vd(vd);
+    if (cl <= 0.0 || vd <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): CL and Vd must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return cl / vd;
+};
+
+~~ Half-life
+~~ t½ = ln(2) / ke = 0.693 / ke
+~~ ke in h⁻¹, result in hours
+~~ Time for plasma concentration to halve
+function half_life(ke: float) -> float {
+    if (ke <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): elimination rate constant must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return LN2 / ke;
+};
+
+~~ Half-life from CL and Vd directly
+~~ t½ = (ln(2) * Vd) / CL
+~~ Convenience function — avoids caller computing ke manually
+function half_life_from_cl_vd(cl: float, vd: float) -> float {
+    validate_clearance(cl);
+    validate_vd(vd);
+    if (cl <= 0.0 || vd <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): CL and Vd must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (LN2 * vd) / cl;
+};
+
+~~ Volume of distribution
+~~ Vd = dose / C0
+~~ dose in mg, C0 in mg/L (initial plasma concentration after IV bolus)
+~~ Result in L
+~~ Apparent volume into which drug distributes
+function volume_of_distribution(dose_mg: float, c0: float) -> float {
+    if (dose_mg <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): dose must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (c0 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): initial concentration must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return dose_mg / c0;
+};
+
+~~ Clearance
+~~ CL = ke * Vd
+~~ ke in h⁻¹, Vd in L
+~~ Result in L/h
+~~ Volume of plasma cleared of drug per unit time
+function clearance(ke: float, vd: float) -> float {
+    if (ke <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): elimination rate constant must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    validate_vd(vd);
+    if (vd <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Vd must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return ke * vd;
+};
+
+~~ Loading dose
+~~ LD = Vd * target_concentration
+~~ Vd in L, target_concentration in mg/L
+~~ Result in mg
+~~ Dose required to immediately achieve target plasma concentration
+function loading_dose(vd: float, target_concentration: float) -> float {
+    validate_vd(vd);
+    validate_concentration(target_concentration);
+    if (vd <= 0.0 || target_concentration <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Vd and target concentration must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return vd * target_concentration;
+};
+
+~~ Maintenance dose
+~~ MD = CL * target_concentration * tau
+~~ CL in L/h, target_concentration in mg/L, tau (dosing interval) in hours
+~~ Result in mg
+~~ Dose required to maintain target steady state concentration
+function maintenance_dose(cl: float, target_concentration: float, tau: float) -> float {
+    validate_clearance(cl);
+    validate_concentration(target_concentration);
+    if (cl <= 0.0 || target_concentration <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): CL and target concentration must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (tau <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): dosing interval must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return cl * target_concentration * tau;
+};
+
+~~ Bioavailability-adjusted dose
+~~ Adjusted dose = intended_dose / F
+~~ F: bioavailability fraction (0.0-1.0)
+~~ IV route: F = 1.0 by definition
+~~ Oral/other routes: F < 1.0 due to first-pass and absorption losses
+function bioavailability_adjusted_dose(
+    intended_dose: float,
+    f: float,
+    route: RouteOfAdministration
+) -> float {
+    if (intended_dose <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): intended dose must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    validate_bioavailability(f);
+    if (f <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): bioavailability must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (route == RouteOfAdministration.IV && f != 1.0) {
+        c_print_err("MochaBioWarning (mocha-bio): IV route has bioavailability of 1.0 by definition.");
+    };
+    return intended_dose / f;
+};
+
+~~ One-compartment concentration at time t
+~~ C(t) = C0 * e^(-ke * t)
+~~ C0 in mg/L, ke in h⁻¹, t in hours
+~~ Result in mg/L
+~~ Assumes instantaneous distribution (IV bolus)
+function concentration_at_time(c0: float, ke: float, t: float) -> float {
+    validate_concentration(c0);
+    if (c0 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): initial concentration must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (ke <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): elimination rate constant must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (t < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): time cannot be negative.");
+        c_exit(2);
+        return 0.0;
+    };
+    return c0 * c_exp(0.0 - (ke * t));
+};
+
+~~ Steady state concentration
+~~ Css = (F * dose) / (CL * tau)
+~~ F: bioavailability, dose in mg, CL in L/h, tau in hours
+~~ Result in mg/L
+~~ Average plasma concentration at steady state
+~~ Reached after ~4-5 half-lives
+function steady_state_concentration(f: float, dose_mg: float, cl: float, tau: float) -> float {
+    validate_bioavailability(f);
+    if (dose_mg <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): dose must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    validate_clearance(cl);
+    if (cl <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): clearance must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (tau <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): dosing interval must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (f <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): bioavailability must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (f * dose_mg) / (cl * tau);
+};
+
+~~ Accumulation factor
+~~ R = 1 / (1 - e^(-ke * tau))
+~~ ke in h⁻¹, tau (dosing interval) in hours
+~~ Dimensionless — predicts ratio of steady state to first dose concentration
+~~ R = 1: no accumulation (tau >> t½)
+~~ R >> 1: significant accumulation (tau << t½)
+function accumulation_factor(ke: float, tau: float) -> float {
+    if (ke <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): elimination rate constant must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (tau <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): dosing interval must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var denom: float = 1.0 - c_exp(0.0 - (ke * tau));
+    if (denom <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): accumulation factor denominator <= 0 — check ke and tau values.");
+        c_exit(2);
+        return 0.0;
+    };
+    var r: float = 1.0 / denom;
+    if (r > 10.0) {
+        c_print_err("MochaBioWarning (mocha-bio): accumulation factor > 10 — significant drug accumulation expected.");
+    };
+    return r;
+};
+
+~~ Hill equation (Emax model)
+~~ E = Emax * C^n / (EC50^n + C^n)
+~~ Emax: maximum effect (same units as E)
+~~ C: drug concentration in mg/L
+~~ EC50: concentration producing 50% Emax in mg/L
+~~ n: Hill coefficient (dimensionless)
+~~   n = 1: hyperbolic (simple binding)
+~~   n > 1: sigmoidal (cooperative binding)
+~~   n < 1: shallow curve (heterogeneous receptors)
+~~ Result in same units as Emax
+function hill_effect(c: float, emax: float, ec50: float, n: float) -> float {
+    validate_concentration(c);
+    if (emax <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Emax must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (ec50 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): EC50 must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (n < HILL_N_MIN || n > HILL_N_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): Hill coefficient outside expected range (0.1-10).");
+    };
+    if (n <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Hill coefficient must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (c == 0.0) {
+        return 0.0;
+    };
+    var cn: float = c_pow(c, n);
+    var ec50n: float = c_pow(ec50, n);
+    return emax * cn / (ec50n + cn);
+};
+
+~~ Hill equation inverse — concentration to achieve target effect
+~~ C = EC50 * (E / (Emax - E))^(1/n)
+~~ E must be strictly between 0 and Emax
+~~ Result in mg/L
+function hill_concentration(e: float, emax: float, ec50: float, n: float) -> float {
+    if (emax <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Emax must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (e <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): target effect must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (e >= emax) {
+        c_print_err("MochaBioError (mocha-bio): target effect must be strictly less than Emax — Emax is an asymptote, never reached.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (ec50 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): EC50 must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (n <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Hill coefficient must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (n < HILL_N_MIN || n > HILL_N_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): Hill coefficient outside expected range (0.1-10).");
+    };
+    var ratio: float = e / (emax - e);
+    return ec50 * c_pow(ratio, 1.0 / n);
+};
+
+"""  ========================
+     HEMATOLOGY CONSTANTS
+     ========================  """
+
+const RBC_MIN: float = 1.0;
+const RBC_MAX: float = 8.0;
+const WBC_MIN: float = 0.1;
+const WBC_MAX: float = 100.0;
+const HCT_MIN: float = 5.0;
+const HCT_MAX: float = 65.0;
+const RETIC_MIN: float = 0.0;
+const RETIC_MAX: float = 20.0;
+const IRON_MIN: float = 10.0;
+const IRON_MAX: float = 300.0;
+const TIBC_MIN: float = 100.0;
+const TIBC_MAX: float = 500.0;
+const NORMAL_HCT_MALE: float = 45.0;
+const NORMAL_HCT_FEMALE: float = 41.0;
+
+"""  ========================
+     HEMATOLOGY VALIDATORS
+     ========================  """
+
+function validate_rbc(rbc: float) -> null {
+    if (rbc < RBC_MIN || rbc > RBC_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): RBC count out of physiological range (1-8 x10⁶/µL).");
+    };
+};
+
+function validate_wbc(wbc: float) -> null {
+    if (wbc < WBC_MIN || wbc > WBC_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): WBC count out of physiological range (0.1-100 x10³/µL).");
+    };
+};
+
+function validate_hematocrit(hct: float) -> null {
+    if (hct < HCT_MIN || hct > HCT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): hematocrit out of physiological range (5-65%).");
+    };
+};
+
+function validate_retic(retic: float) -> null {
+    if (retic < RETIC_MIN || retic > RETIC_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): reticulocyte percentage out of physiological range (0-20%).");
+    };
+};
+
+"""  ========================
+     HEMATOLOGY TAGS
+     ========================  """
+
+tag AnaemiaType {
+    MICROCYTIC,
+    NORMOCYTIC,
+    MACROCYTIC
+};
+
+tag NeutropeniaGrade {
+    NONE,
+    MILD,
+    MODERATE,
+    SEVERE
+};
+
+"""  ========================
+     HEMATOLOGY FORMULAE
+     ========================  """
+
+~~ Mean corpuscular volume (MCV)
+~~ MCV = (hematocrit * 10) / RBC_count
+~~ Hematocrit in %, RBC in x10⁶/µL
+~~ Result in fL (femtolitres)
+~~ Normal: 80-100 fL
+~~ < 80: microcytic (iron deficiency, thalassaemia)
+~~ > 100: macrocytic (B12/folate deficiency)
+function mcv(hematocrit: float, rbc: float) -> AnaemiaType {
+    validate_hematocrit(hematocrit);
+    validate_rbc(rbc);
+    if (rbc <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): RBC count must be positive.");
+        c_exit(2);
+        return AnaemiaType.NORMOCYTIC;
+    };
+    var result: float = (hematocrit * 10.0) / rbc;
+    if (result < 80.0) {
+        c_print_err("MochaBioWarning (mocha-bio): MCV < 80 fL — microcytic anaemia (consider iron deficiency, thalassaemia).");
+        return AnaemiaType.MICROCYTIC;
+    } else if (result > 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): MCV > 100 fL — macrocytic anaemia (consider B12/folate deficiency).");
+        return AnaemiaType.MACROCYTIC;
+    };
+    return AnaemiaType.NORMOCYTIC;
+};
+
+~~ MCV raw value
+function mcv_value(hematocrit: float, rbc: float) -> float {
+    validate_hematocrit(hematocrit);
+    validate_rbc(rbc);
+    if (rbc <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): RBC count must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (hematocrit * 10.0) / rbc;
+};
+
+~~ Mean corpuscular haemoglobin (MCH)
+~~ MCH = (Hgb * 10) / RBC_count
+~~ Hgb in g/dL, RBC in x10⁶/µL
+~~ Result in pg (picograms)
+~~ Normal: 27-33 pg
+function mch(hgb: float, rbc: float) -> float {
+    validate_hgb(hgb);
+    validate_rbc(rbc);
+    if (rbc <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): RBC count must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var result: float = (hgb * 10.0) / rbc;
+    if (result < 27.0 || result > 33.0) {
+        c_print_err("MochaBioWarning (mocha-bio): MCH outside normal range (27-33 pg).");
+    };
+    return result;
+};
+
+~~ Mean corpuscular haemoglobin concentration (MCHC)
+~~ MCHC = (Hgb / hematocrit) * 100
+~~ Hgb in g/dL, hematocrit in %
+~~ Result in g/dL
+~~ Normal: 32-36 g/dL
+~~ < 32: hypochromic (iron deficiency)
+~~ > 36: hyperchromic (spherocytosis, severe dehydration)
+function mchc(hgb: float, hematocrit: float) -> float {
+    validate_hgb(hgb);
+    validate_hematocrit(hematocrit);
+    if (hematocrit <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): hematocrit must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var result: float = (hgb / hematocrit) * 100.0;
+    if (result < 32.0) {
+        c_print_err("MochaBioWarning (mocha-bio): MCHC < 32 g/dL — hypochromic (consider iron deficiency).");
+    } else if (result > 36.0) {
+        c_print_err("MochaBioWarning (mocha-bio): MCHC > 36 g/dL — hyperchromic (consider spherocytosis).");
+    };
+    return result;
+};
+
+~~ Corrected reticulocyte count
+~~ Corrected retic% = retic% * (hematocrit / normal_hct)
+~~ Normal Hct: 45% male, 41% female
+~~ Corrects for dilutional effect of anaemia on reticulocyte percentage
+~~ Normal corrected retic: 1-2%
+function corrected_reticulocyte(retic_pct: float, hematocrit: float, sex: Sex) -> float {
+    validate_retic(retic_pct);
+    validate_hematocrit(hematocrit);
+    var normal_hct: float = NORMAL_HCT_FEMALE;
+    if (sex == Sex.MALE) {
+        normal_hct = NORMAL_HCT_MALE;
+    };
+    var corrected: float = retic_pct * (hematocrit / normal_hct);
+    if (corrected < 1.0 || corrected > 2.0) {
+        c_print_err("MochaBioWarning (mocha-bio): corrected reticulocyte count outside normal range (1-2%).");
+    };
+    return corrected;
+};
+
+~~ Reticulocyte production index (RPI)
+~~ RPI = corrected_retic / maturation_factor
+~~ Maturation factor derived internally from hematocrit:
+~~   Hct >= 36%: 1.0, Hct 26-35%: 1.5, Hct 16-25%: 2.0, Hct < 16%: 2.5
+~~ RPI < 2: hypoproliferative (bone marrow not responding)
+~~ RPI >= 2: adequate response (haemolysis or blood loss)
+function reticulocyte_production_index(retic_pct: float, hematocrit: float, sex: Sex) -> float {
+    validate_retic(retic_pct);
+    validate_hematocrit(hematocrit);
+    var corrected: float = corrected_reticulocyte(retic_pct, hematocrit, sex);
+    var maturation_factor: float = 1.0;
+    if (hematocrit < 16.0) {
+        maturation_factor = 2.5;
+    } else if (hematocrit < 26.0) {
+        maturation_factor = 2.0;
+    } else if (hematocrit < 36.0) {
+        maturation_factor = 1.5;
+    };
+    var rpi: float = corrected / maturation_factor;
+    if (rpi < 2.0) {
+        c_print_err("MochaBioWarning (mocha-bio): RPI < 2 — hypoproliferative anaemia, bone marrow not responding adequately.");
+    } else {
+        c_print_err("MochaBioWarning (mocha-bio): RPI >= 2 — adequate marrow response, consider haemolysis or blood loss.");
+    };
+    return rpi;
+};
+
+~~ Blood volume estimation (Nadler equation)
+~~ Male:   BV = (0.3669 * height_m^3) + (0.03219 * weight_kg) + 0.6041
+~~ Female: BV = (0.3561 * height_m^3) + (0.03308 * weight_kg) + 0.1833
+~~ Result in litres
+~~ Normal: ~5L male, ~4L female
+function blood_volume(height_cm: float, weight_kg: float, sex: Sex) -> float {
+    if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
+    };
+    if (weight_kg < WEIGHT_MIN || weight_kg > WEIGHT_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): weight out of physiological range (1-500 kg).");
+    };
+    if (height_cm <= 0.0 || weight_kg <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): height and weight must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var height_m: float = height_cm / 100.0;
+    var height_m3: float = height_m * height_m * height_m;
+    var bv: float = 0.0;
+    if (sex == Sex.MALE) {
+        bv = (0.3669 * height_m3) + (0.03219 * weight_kg) + 0.6041;
+    } else {
+        bv = (0.3561 * height_m3) + (0.03308 * weight_kg) + 0.1833;
+    };
+    if (bv < 3.0 || bv > 8.0) {
+        c_print_err("MochaBioWarning (mocha-bio): blood volume outside expected range (3-8 L).");
+    };
+    return bv;
+};
+
+~~ Absolute neutrophil count (ANC)
+~~ ANC = WBC * (neutrophils_pct + bands_pct) / 100
+~~ WBC in x10³/µL, percentages 0-100
+~~ Result in x10³/µL
+~~ Normal: >= 1.5 x10³/µL
+~~ Mild neutropenia: 1.0-1.5
+~~ Moderate: 0.5-1.0
+~~ Severe: < 0.5 — high infection risk
+function anc(wbc: float, neutrophils_pct: float, bands_pct: float) -> NeutropeniaGrade {
+    validate_wbc(wbc);
+    if (neutrophils_pct < 0.0 || neutrophils_pct > 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): neutrophil percentage out of range (0-100%).");
+    };
+    if (bands_pct < 0.0 || bands_pct > 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): bands percentage out of range (0-100%).");
+    };
+    if ((neutrophils_pct + bands_pct) > 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): neutrophils + bands exceeds 100%.");
+    };
+    var result: float = wbc * (neutrophils_pct + bands_pct) / 100.0;
+    if (result < 0.5) {
+        c_print_err("MochaBioWarning (mocha-bio): ANC < 0.5 x10³/µL — severe neutropenia, high infection risk.");
+        return NeutropeniaGrade.SEVERE;
+    } else if (result < 1.0) {
+        c_print_err("MochaBioWarning (mocha-bio): ANC 0.5-1.0 x10³/µL — moderate neutropenia.");
+        return NeutropeniaGrade.MODERATE;
+    } else if (result < 1.5) {
+        c_print_err("MochaBioWarning (mocha-bio): ANC 1.0-1.5 x10³/µL — mild neutropenia.");
+        return NeutropeniaGrade.MILD;
+    };
+    return NeutropeniaGrade.NONE;
+};
+
+~~ ANC raw value
+function anc_value(wbc: float, neutrophils_pct: float, bands_pct: float) -> float {
+    validate_wbc(wbc);
+    if (wbc <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): WBC must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return wbc * (neutrophils_pct + bands_pct) / 100.0;
+};
+
+~~ Transferrin saturation
+~~ Tsat = (serum_iron / TIBC) * 100
+~~ Both in µg/dL, result in %
+~~ Normal: 20-50%
+~~ < 20%: iron deficiency
+~~ > 50%: iron overload (haemochromatosis)
+function transferrin_saturation(serum_iron: float, tibc: float) -> float {
+    if (serum_iron < IRON_MIN || serum_iron > IRON_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): serum iron out of physiological range (10-300 µg/dL).");
+    };
+    if (tibc < TIBC_MIN || tibc > TIBC_MAX) {
+        c_print_err("MochaBioWarning (mocha-bio): TIBC out of physiological range (100-500 µg/dL).");
+    };
+    if (tibc <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): TIBC must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (serum_iron > tibc) {
+        c_print_err("MochaBioWarning (mocha-bio): serum iron > TIBC is physiologically implausible.");
+    };
+    var tsat: float = (serum_iron / tibc) * 100.0;
+    if (tsat < 20.0) {
+        c_print_err("MochaBioWarning (mocha-bio): transferrin saturation < 20% — iron deficiency.");
+    } else if (tsat > 50.0) {
+        c_print_err("MochaBioWarning (mocha-bio): transferrin saturation > 50% — iron overload, consider haemochromatosis.");
+    };
+    return tsat;
+};

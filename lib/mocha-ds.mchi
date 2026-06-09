@@ -1,0 +1,33 @@
+// Auto-generated manifest for mocha-ds.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
+tag DSKind { INT, FLOAT, STR, BOOL };
+class DSValue;
+class DSValue field kind: DSKind;
+class DSValue field int_val: int;
+class DSValue field flt_val: float;
+class DSValue field str_val: str;
+class DSValue field bool_val: bool;
+function ds_int(v: int) -> DSValue;
+function ds_float(v: float) -> DSValue;
+function ds_str(v: str) -> DSValue;
+function ds_bool(v: bool) -> DSValue;
+function ds_equals(a: DSValue, b: DSValue) -> bool;
+function ds_to_str(v: DSValue) -> str;
+class SLNode;
+class SLNode field data: DSValue;
+class SLNode field next: SLNode;
+class SinglyLL;
+class SinglyLL field head: SLNode;
+class SinglyLL field size: int;
+class SinglyLL function prepend(data: DSValue) -> null;
+class SinglyLL function append(data: DSValue) -> null;
+class SinglyLL function remove(data: DSValue) -> bool;
+class SinglyLL function contains(data: DSValue) -> bool;
+class SinglyLL function get(index: int) -> DSValue;
+class SinglyLL function print_all() -> null;
+class SinglyLL function is_empty() -> bool;
