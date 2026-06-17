@@ -8,7 +8,7 @@
 //FFI Wrappers
 function c_print_err(msg: str) -> null native mocha_print_stderr;
 function c_exit(code: int) -> null native mocha_exit;
-function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
+//function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
 function c_exp(x: float) -> float native mocha_wrap_exp;
 
 """  ========================
@@ -177,7 +177,8 @@ function stroke_volume(end_diastolic: float, end_systolic: float) -> float {
 ~~ Result in m²
 function body_surface_area(weight_kg: float, height_cm: float) -> float {
     validate_bsa_inputs(weight_kg, height_cm);
-    return c_sqrt((weight_kg * height_cm) / 3600.0);
+    //return c_sqrt((weight_kg * height_cm) / 3600.0);
+    return ((weight_kg * height_cm) / 3600.0).sqrt().real;
 };
 
 ~~ Rate pressure product = heart_rate * systolic
@@ -266,7 +267,7 @@ function qtc_bazett(qt_ms: float, heart_rate: float, sex: Sex) -> float {
         c_print_err("MochaBioWarning (mocha-bio): QT interval out of physiological range (0-800 ms).");
     };
     var rr_s: float = 60.0 / heart_rate;
-    var qtc: float = qt_ms / c_sqrt(rr_s);
+    var qtc: float = qt_ms / rr_s.sqrt().real;
     var threshold: float = 440.0;
     if (sex == Sex.FEMALE) {
         threshold = 460.0;
@@ -1396,7 +1397,7 @@ function body_adiposity_index(hip_cm: float, height_cm: float) -> float {
     };
     // convert to metres first, then height_m^1.5 = height_m * sqrt(height_m)
     var height_m: float = height_cm / 100.0;
-    var height_1_5: float = height_m * c_sqrt(height_m);
+    var height_1_5: float = height_m * height_m.sqrt().real;
     return (hip_cm / height_1_5) - 18.0;
 };
 

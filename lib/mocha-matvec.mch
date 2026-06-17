@@ -24,7 +24,7 @@ Operations:
 // NATIVE WRAPPERS
 // ============================================================
 
-function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
+//function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
 function c_print_err(msg: str) -> null native mocha_print_stderr;
 function c_exit(code: int) -> null native mocha_exit;
 
@@ -92,7 +92,8 @@ extend int[] {
             sum = sum + (elem * elem);
             i++;
         };
-        return c_sqrt(sum);
+        //return c_sqrt(sum);
+        return sum.sqrt().real;
     };
 
     function unit_vector() -> float[] {
@@ -171,7 +172,8 @@ extend float[] {
             sum = sum + (this[i] * this[i]);
             i++;
         };
-        return c_sqrt(sum);
+        //return c_sqrt(sum);
+        return sum.sqrt().real;
     };
 
     function unit_vector() -> float[] {

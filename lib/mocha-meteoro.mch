@@ -22,7 +22,7 @@
 
 // ── C runtime math helpers ──
 function c_exp(x: float) -> float native mocha_wrap_exp;
-function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
+//function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
 function c_sin(x: float) -> float native mocha_wrap_sin;
 function c_cos(x: float) -> float native mocha_wrap_cos;
 function c_atan(x: float) -> float native mocha_wrap_atan;
@@ -1836,7 +1836,7 @@ function visibility_impairment_pm25(pm25_ugm3: float) -> float {
     };
     // Empirical: reduction_km = sqrt(PM2.5 / 10)
     // 15µg→0.39km, 250µg→1.58km
-    var sqrt_term: float = c_sqrt(pm25_ugm3 / 10.0);
+    var sqrt_term: float = (pm25_ugm3 / 10.0).sqrt().real;
     return sqrt_term;
 };
 

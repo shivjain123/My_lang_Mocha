@@ -351,6 +351,200 @@ class CodeGen:
         if lt == "i1":                          return "i1 0"
         # strings (i8*) and all struct pointers
         return f"{lt} null"
+
+    def box_value(self, val_reg: str, val_type: str) -> str:
+        size = {"i32": 4, "double": 8, "i8": 1, "i64": 8, "i8*": 8}.get(val_type, 8)
+        ptr  = self.fresh_temp()
+        cast = self.fresh_temp()
+        self.emit(f"  {ptr} = call i8* @malloc(i64 {size})")
+        if val_type == "i8*":
+            self.emit(f"  {cast} = bitcast i8* {ptr} to i8**")
+            self.emit(f"  store i8* {val_reg}, i8** {cast}")
+        else:
+            self.emit(f"  {cast} = bitcast i8* {ptr} to {val_type}*")
+            self.emit(f"  store {val_type} {val_reg}, {val_type}* {cast}")
+        return ptr
+    
+    def infer_mocha_type(self, node):
+        if isinstance(node, Identifier):
+            if node.name == "this" and self.current_class:
+                return self.current_class
+            return self.local_mocha_types.get(node.name, "")
+        if isinstance(node, MemberAccess):
+            obj_mocha = self.infer_mocha_type(node.obj)
+            base = obj_mocha.replace("[]", "").strip()
+            for fname, ftype in self.class_mocha_fields.get(base, []):
+                if fname == node.member:
+                    return ftype
+        if isinstance(node, IndexAccess):
+            arr_mocha = self.infer_mocha_type(node.obj)
+            return arr_mocha.replace("[]", "").strip()
+        return ""
+    
+    def resolve_lvalue_ptr(self, node):
+        """
+        Returns one of:
+        ("local", ptr, llvm_type)          — simple variable
+        ("field", ptr, llvm_type)          — struct field via GEP
+        ("array", arr_reg, idx_reg, elem_llvm)  — runtime-managed array element
+        """
+        if isinstance(node, Identifier):
+            ptr, llvm_type = self.locals[node.name]
+            return ("local", ptr, llvm_type)
+
+        if isinstance(node, MemberAccess):
+            obj_val, obj_llvm = self.gen_expr(node.obj)
+            class_name = obj_llvm.replace("%struct.", "").replace("*", "").strip()
+            fields = self.class_fields.get(class_name, [])
+            idx = next((i for i, (n, _) in enumerate(fields) if n == node.member), None)
+            if idx is None:
+                raise MochaCodeGenError(
+                    f"Internal compiler error: field '{node.member}' not found on '{class_name}'",
+                    node.line, node.col
+                )
+            field_type = to_llvm_type(fields[idx][1])
+            ptr = self.fresh_temp()
+            self.emit(f"  {ptr} = getelementptr %struct.{class_name}, %struct.{class_name}* {obj_val}, i32 0, i32 {idx}")
+            return ("field", ptr, field_type)
+
+        if isinstance(node, IndexAccess):
+            arr_reg, _ = self.gen_expr(node.obj)
+            idx_reg, _ = self.gen_expr(node.index)
+            # Resolve element llvm type same way gen_index_access does
+            mocha_type = self.infer_mocha_type(node.obj)
+            if not mocha_type and isinstance(node.obj, Identifier):
+                mocha_type = self.local_mocha_types.get(node.obj.name, "") or \
+                            self.global_mocha_types.get(node.obj.name, "")
+            elem_llvm = "i32"
+            if mocha_type:
+                bracket = mocha_type.rfind("[")
+                if bracket != -1:
+                    elem_mocha = mocha_type[:bracket]
+                    elem_llvm = to_llvm_type(elem_mocha)
+            return ("array", arr_reg, idx_reg, elem_llvm)
+
+        raise MochaCodeGenError(
+            "Internal compiler error: invalid increment/decrement target",
+            node.line, node.col
+        )
+    
+    def get_return_type(self, name, node=None):
+        if name not in self.method_return_types:
+            line = getattr(node, 'line', '?')
+            col  = getattr(node, 'col', '?')
+            raise MochaCodeGenError(
+                f"Unknown function or method '{name}' — did you forget to import a library?",
+                line, col # type: ignore
+            )
+        return self.method_return_types[name]
+    
+    def _collect_args(self, node):
+        """Collect positional args, skipping named params (Assignment nodes)."""
+        args = []
+        for arg in node.args:
+            if isinstance(arg, Assignment):
+                continue
+            reg, typ = self.gen_expr(arg)
+            args.append((reg, typ))
+        return args
+
+    def _emit_call(self, ret_type, c_func, all_args):
+        """Emit a call and return (reg, type). Handles void vs non-void."""
+        # resolve native name if this is an extend method with a native mapping
+        c_func = self.ext_native_names.get(c_func, c_func)
+        
+        arg_str = ", ".join(f"{t} {r}" for r, t in all_args)
+        if ret_type == "void":
+            self.emit(f"  call void @{c_func}({arg_str})")
+            return ("void", "void")
+        tmp = self.fresh_temp()
+        self.emit(f"  {tmp} = call {ret_type} @{c_func}({arg_str})")
+        return (tmp, ret_type)
+
+    def _dispatch_struct_method(self, obj_reg, obj_llvm_type, method_map, type_name, member, node):
+        """Generic struct method dispatcher. Assumes obj_reg is already loaded."""
+        if member not in method_map:
+            sanitized = self.sanitize_type_name(type_name)
+            ext_key = f"mocha_ext_{sanitized}_{member}"
+            if ext_key in self.method_return_types:
+                ret_type = self.method_return_types[ext_key]
+                args = self._collect_args(node)
+                all_args = [(obj_reg, obj_llvm_type)] + args
+                return self._emit_call(ret_type, ext_key, all_args)
+            raise MochaCodeGenError(f"{type_name} has no method '{member}'", node.line, node.col)
+        ret_type, c_func = method_map[member]
+        args = self._collect_args(node)
+        all_args = [(obj_reg, obj_llvm_type)] + args
+        return self._emit_call(ret_type, c_func, all_args)
+    
+    def compute_struct_size(self, class_name: str, visited=None) -> int:
+        """
+        Compute the byte size of a Mocha class struct by summing its fields.
+        Recurses into parent classes for inherited fields.
+        Rounds up to 16-byte alignment.
+        """
+        if visited is None:
+            visited = set()
+        if class_name in visited:
+            return 0
+        visited.add(class_name)
+
+        LLVM_SIZES = {
+            "i1":     1,
+            "i8":     1,
+            "i32":    4,
+            "i64":    8,
+            "double": 8,
+            "i8*":    8,   # pointer
+        }
+
+        fields = self.class_fields.get(class_name, [])
+        size = 0
+        for field_name, llvm_type in fields:
+            if llvm_type in LLVM_SIZES:
+                size += LLVM_SIZES[llvm_type]
+            elif llvm_type.startswith("%struct."):
+                size += 8   # struct pointer
+            elif llvm_type.startswith("["):
+                # fixed array type e.g. [4 x i32] — rare in Mocha but handle it
+                size += 8   # treat as pointer
+            else:
+                size += 8   # safe default for unknown pointer types
+
+        # 16-byte alignment
+        size = ((size + 15) // 16) * 16
+        # minimum 16 bytes even for empty structs
+        return max(size, 16)
+    
+    def unique_ptr_name(self, name: str) -> str:
+        """Generate a unique pointer name, deduplicating if needed."""
+        if name not in self.local_name_counts:
+            self.local_name_counts[name] = 0
+            return f"%{name}.ptr"
+        else:
+            self.local_name_counts[name] += 1
+            return f"%{name}.{self.local_name_counts[name]}.ptr"
+        
+    def bool_to_i1(self, reg: str, reg_type: str) -> str:
+        if reg_type == "i1":
+            return reg
+        tmp = self.fresh_temp()
+        if reg_type == "i32":
+            self.emit(f"  {tmp} = icmp ne i32 {reg}, 0")
+        elif reg_type == "double":
+            self.emit(f"  {tmp} = fcmp one double {reg}, 0.0")
+        elif reg_type == "i64":
+            self.emit(f"  {tmp} = icmp ne i64 {reg}, 0")
+        else:
+            self.emit(f"  {tmp} = trunc i8 {reg} to i1")
+        return tmp
+    
+    def alloca_at_entry(self, llvm_type: str, name: Optional[str] = None) -> str:
+        if name is None:
+            name = self.fresh_temp()
+        if not any(a.startswith(f"  {name} = alloca") for a in self.entry_allocas):
+            self.entry_allocas.append(f"  {name} = alloca {llvm_type}")
+        return name
     
     def build_header(self):
         sections = {
@@ -704,18 +898,9 @@ class CodeGen:
             return (tmp, "i32")
         raise MochaCodeGenError(f"Cannot generate code for: {type(node).__name__}", node.line, node.col)
     
-    def box_value(self, val_reg: str, val_type: str) -> str:
-        size = {"i32": 4, "double": 8, "i8": 1, "i64": 8, "i8*": 8}.get(val_type, 8)
-        ptr  = self.fresh_temp()
-        cast = self.fresh_temp()
-        self.emit(f"  {ptr} = call i8* @malloc(i64 {size})")
-        if val_type == "i8*":
-            self.emit(f"  {cast} = bitcast i8* {ptr} to i8**")
-            self.emit(f"  store i8* {val_reg}, i8** {cast}")
-        else:
-            self.emit(f"  {cast} = bitcast i8* {ptr} to {val_type}*")
-            self.emit(f"  store {val_type} {val_reg}, {val_type}* {cast}")
-        return ptr
+    #=======================
+    # Generate Literals
+    #=======================
 
     def gen_int_literal(self, node):
         tmp = self.fresh_temp()
@@ -784,22 +969,6 @@ class CodeGen:
             return (tmp, llvm_type)
 
         raise MochaCodeGenError(f"Undeclared variable: '{node.name}'", node.line, node.col)
-
-    def infer_mocha_type(self, node):
-        if isinstance(node, Identifier):
-            if node.name == "this" and self.current_class:
-                return self.current_class
-            return self.local_mocha_types.get(node.name, "")
-        if isinstance(node, MemberAccess):
-            obj_mocha = self.infer_mocha_type(node.obj)
-            base = obj_mocha.replace("[]", "").strip()
-            for fname, ftype in self.class_mocha_fields.get(base, []):
-                if fname == node.member:
-                    return ftype
-        if isinstance(node, IndexAccess):
-            arr_mocha = self.infer_mocha_type(node.obj)
-            return arr_mocha.replace("[]", "").strip()
-        return ""
     
     def gen_member_access(self, node):
         if isinstance(node.obj, Identifier):
@@ -1228,54 +1397,6 @@ class CodeGen:
                 self.emit(f"  {tmp} = xor i32 {right_reg}, -1")
                 return (tmp, "i32")
         raise MochaCodeGenError(f"Unknown unary operator: '{node.op}'", node.line, node.col)
-
-    def resolve_lvalue_ptr(self, node):
-        """
-        Returns one of:
-        ("local", ptr, llvm_type)          — simple variable
-        ("field", ptr, llvm_type)          — struct field via GEP
-        ("array", arr_reg, idx_reg, elem_llvm)  — runtime-managed array element
-        """
-        if isinstance(node, Identifier):
-            ptr, llvm_type = self.locals[node.name]
-            return ("local", ptr, llvm_type)
-
-        if isinstance(node, MemberAccess):
-            obj_val, obj_llvm = self.gen_expr(node.obj)
-            class_name = obj_llvm.replace("%struct.", "").replace("*", "").strip()
-            fields = self.class_fields.get(class_name, [])
-            idx = next((i for i, (n, _) in enumerate(fields) if n == node.member), None)
-            if idx is None:
-                raise MochaCodeGenError(
-                    f"Internal compiler error: field '{node.member}' not found on '{class_name}'",
-                    node.line, node.col
-                )
-            field_type = to_llvm_type(fields[idx][1])
-            ptr = self.fresh_temp()
-            self.emit(f"  {ptr} = getelementptr %struct.{class_name}, %struct.{class_name}* {obj_val}, i32 0, i32 {idx}")
-            return ("field", ptr, field_type)
-
-        if isinstance(node, IndexAccess):
-            arr_reg, _ = self.gen_expr(node.obj)
-            idx_reg, _ = self.gen_expr(node.index)
-            # Resolve element llvm type same way gen_index_access does
-            mocha_type = self.infer_mocha_type(node.obj)
-            if not mocha_type and isinstance(node.obj, Identifier):
-                mocha_type = self.local_mocha_types.get(node.obj.name, "") or \
-                            self.global_mocha_types.get(node.obj.name, "")
-            elem_llvm = "i32"
-            if mocha_type:
-                bracket = mocha_type.rfind("[")
-                if bracket != -1:
-                    elem_mocha = mocha_type[:bracket]
-                    elem_llvm = to_llvm_type(elem_mocha)
-            return ("array", arr_reg, idx_reg, elem_llvm)
-
-        raise MochaCodeGenError(
-            "Internal compiler error: invalid increment/decrement target",
-            node.line, node.col
-        )
-
 
     def _emit_increment(self, node, return_old: bool):
         lval = self.resolve_lvalue_ptr(node.operand)
@@ -1783,16 +1904,6 @@ class CodeGen:
             self.emit(f"  {tmp} = call {ret_llvm} @{func_name}({arg_str})")
             return (tmp, ret_llvm)
 
-    def get_return_type(self, name, node=None):
-        if name not in self.method_return_types:
-            line = getattr(node, 'line', '?')
-            col  = getattr(node, 'col', '?')
-            raise MochaCodeGenError(
-                f"Unknown function or method '{name}' — did you forget to import a library?",
-                line, col # type: ignore
-            )
-        return self.method_return_types[name]
-
     def gen_struct_method_call(self, obj_ptr, obj_llvm_type, member, node):
         class_name = obj_llvm_type[len("%struct."):-1]
         found = False
@@ -1831,45 +1942,6 @@ class CodeGen:
         args = self._collect_args(node)
         all_args = [(obj_reg, obj_llvm_type)] + args
         return self._emit_call(ret_type, func_name, all_args)
-    
-    def _collect_args(self, node):
-        """Collect positional args, skipping named params (Assignment nodes)."""
-        args = []
-        for arg in node.args:
-            if isinstance(arg, Assignment):
-                continue
-            reg, typ = self.gen_expr(arg)
-            args.append((reg, typ))
-        return args
-
-    def _emit_call(self, ret_type, c_func, all_args):
-        """Emit a call and return (reg, type). Handles void vs non-void."""
-        # resolve native name if this is an extend method with a native mapping
-        c_func = self.ext_native_names.get(c_func, c_func)
-        
-        arg_str = ", ".join(f"{t} {r}" for r, t in all_args)
-        if ret_type == "void":
-            self.emit(f"  call void @{c_func}({arg_str})")
-            return ("void", "void")
-        tmp = self.fresh_temp()
-        self.emit(f"  {tmp} = call {ret_type} @{c_func}({arg_str})")
-        return (tmp, ret_type)
-
-    def _dispatch_struct_method(self, obj_reg, obj_llvm_type, method_map, type_name, member, node):
-        """Generic struct method dispatcher. Assumes obj_reg is already loaded."""
-        if member not in method_map:
-            sanitized = self.sanitize_type_name(type_name)
-            ext_key = f"mocha_ext_{sanitized}_{member}"
-            if ext_key in self.method_return_types:
-                ret_type = self.method_return_types[ext_key]
-                args = self._collect_args(node)
-                all_args = [(obj_reg, obj_llvm_type)] + args
-                return self._emit_call(ret_type, ext_key, all_args)
-            raise MochaCodeGenError(f"{type_name} has no method '{member}'", node.line, node.col)
-        ret_type, c_func = method_map[member]
-        args = self._collect_args(node)
-        all_args = [(obj_reg, obj_llvm_type)] + args
-        return self._emit_call(ret_type, c_func, all_args)
 
     def gen_member_call(self, node):
         obj    = node.name.obj
@@ -2126,45 +2198,6 @@ class CodeGen:
         elif isinstance(obj, StrLiteral):
             obj_reg, obj_type = self.gen_expr(obj)
             return self.gen_str_method_call(obj_reg, member, node)
-    
-    def compute_struct_size(self, class_name: str, visited=None) -> int:
-        """
-        Compute the byte size of a Mocha class struct by summing its fields.
-        Recurses into parent classes for inherited fields.
-        Rounds up to 16-byte alignment.
-        """
-        if visited is None:
-            visited = set()
-        if class_name in visited:
-            return 0
-        visited.add(class_name)
-
-        LLVM_SIZES = {
-            "i1":     1,
-            "i8":     1,
-            "i32":    4,
-            "i64":    8,
-            "double": 8,
-            "i8*":    8,   # pointer
-        }
-
-        fields = self.class_fields.get(class_name, [])
-        size = 0
-        for field_name, llvm_type in fields:
-            if llvm_type in LLVM_SIZES:
-                size += LLVM_SIZES[llvm_type]
-            elif llvm_type.startswith("%struct."):
-                size += 8   # struct pointer
-            elif llvm_type.startswith("["):
-                # fixed array type e.g. [4 x i32] — rare in Mocha but handle it
-                size += 8   # treat as pointer
-            else:
-                size += 8   # safe default for unknown pointer types
-
-        # 16-byte alignment
-        size = ((size + 15) // 16) * 16
-        # minimum 16 bytes even for empty structs
-        return max(size, 16)
 
     def gen_function_call(self, node):
         # -------------------------------------------------------
@@ -2609,6 +2642,10 @@ class CodeGen:
 
         return ("void", "void")
     
+    #=======================
+    # SECTION: LAMBDA
+    #=======================
+    
     def find_captured_vars(self, node, param_names: set) -> list:
         """Walk lambda body AST and find identifiers from outer scope."""
         captured = []
@@ -2828,18 +2865,8 @@ class CodeGen:
             pass #Handled in main generate()
         else:
             self.gen_expr(node)
-    
-    def unique_ptr_name(self, name: str) -> str:
-        """Generate a unique pointer name, deduplicating if needed."""
-        if name not in self.local_name_counts:
-            self.local_name_counts[name] = 0
-            return f"%{name}.ptr"
-        else:
-            self.local_name_counts[name] += 1
-            return f"%{name}.{self.local_name_counts[name]}.ptr"
 
     def gen_var_decl(self, node):
-
         #Tuples!
         if node.type.startswith("("):
             val_reg, val_type = self.gen_expr(node.value)
@@ -3191,20 +3218,6 @@ class CodeGen:
             self.emit(f"  ret {self.current_return_type} null")
         else:
             self.emit(f"  ret {self.current_return_type} {val_reg}")
-
-    def bool_to_i1(self, reg: str, reg_type: str) -> str:
-        if reg_type == "i1":
-            return reg
-        tmp = self.fresh_temp()
-        if reg_type == "i32":
-            self.emit(f"  {tmp} = icmp ne i32 {reg}, 0")
-        elif reg_type == "double":
-            self.emit(f"  {tmp} = fcmp one double {reg}, 0.0")
-        elif reg_type == "i64":
-            self.emit(f"  {tmp} = icmp ne i64 {reg}, 0")
-        else:
-            self.emit(f"  {tmp} = trunc i8 {reg} to i1")
-        return tmp
 
     def gen_if(self, node):
         count    = self.temp_count
@@ -3828,13 +3841,6 @@ class CodeGen:
         self.entry_allocas       = []
 
         return node.name
-    
-    def alloca_at_entry(self, llvm_type: str, name: Optional[str] = None) -> str:
-        if name is None:
-            name = self.fresh_temp()
-        if not any(a.startswith(f"  {name} = alloca") for a in self.entry_allocas):
-            self.entry_allocas.append(f"  {name} = alloca {llvm_type}")
-        return name
 
     #This if for extend block for arrays since [] is not a valid IR Symbol
     def sanitize_type_name(self, type_name: str) -> str:
@@ -4883,6 +4889,10 @@ class CodeGen:
         # after
         self.emit(f"{after_lbl}:")
     
+    #================================
+    # SECTION: RUNTIME STACK TRACING
+    #================================
+    
     def emit_line_update(self, line: int):
         if line > 0 and line != self.current_emitted_line:
             self.emit(f"  call void @mocha_stack_update_line(i32 {line})")
@@ -5234,6 +5244,5 @@ class CodeGen:
             self.emit("  call void @mocha_gc_shutdown()")
             self.emit("  ret i32 0")
             self.emit("}")
-
 
         return self.get_ir()
