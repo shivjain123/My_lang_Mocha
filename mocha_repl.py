@@ -565,8 +565,8 @@ def run_repl():
     print("║   'clear' to reset state         ║")
     print("║   'vars' to show variables       ║")
     print("╚══════════════════════════════════╝")
-    print("⚠️  REPL uses Python runtime for collections.\nType safety is enforced at runtime.\nFor true Mocha semantics (fixed-point, FFI, etc.), compile with `mocha`.")
-
+    print("⚠️  REPL uses Python runtime for collections.\nType safety is enforced at runtime, which is not available here.\nFor true Mocha semantics (type-safe arrays, fixed-point, FFI, imports etc.), compile with `mocha`.")
+    
     buffer = ""
     prompt = "mocha> "
     depth = 0

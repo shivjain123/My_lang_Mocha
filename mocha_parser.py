@@ -1,6 +1,200 @@
 # ============================================================
-# Mocha Language Parser
-# Converts token stream into an AST
+# Mocha Language Parser v0.9
+# mocha_parser.py
+# Pratt-style
+#
+# Converts token stream into an Abstract Syntax Tree (AST)
+# via recursive descent parsing with precedence climbing
+#
+# ============================================================
+#
+#   ── Algorithm ───────────────────────────────────────────
+#   Recursive descent with operator precedence encoding via
+#   parse chain. Intentionally no backtracking — lookahead is
+#   minimal (current token + peek). Pre-scans tokens to collect
+#   class and tag names for use during expression parsing
+#   (enables TagAccess and QualifiedMethodCall detection).
+#
+#   ── Error Handling ──────────────────────────────────────
+#   MochaParseError class captures token location (line/col)
+#   and current token type/value in error message. Synchronization
+#   via synchronize() which consumes tokens until reaching a
+#   top-level declaration boundary (next function/class/import
+#   or unmatched RBRACE at depth 0). On error, continues
+#   parsing remaining top-level items rather than stopping
+#   cold (soft error recovery).
+#
+#   ── Type Parsing ────────────────────────────────────────
+#   Handles all Mocha types:
+#     - Primitives: int, vast, float, str, bool, Result, null
+#     - Tuples: (T, N) where N is literal int count
+#     - Arrays: T[], T[N], T[][N], etc. (1D/2D max; 3D+ rejected)
+#     - Sets: set<T> (type-parameterized)
+#     - Dicts: dict (untyped at parse time)
+#     - Custom: any IDENTIFIER (class/interface names)
+#   Postfix dimension syntax (int[5][]) parsed left-to-right.
+#   No generic syntax e.g. List<T>; parameterized types are
+#   library-level abstractions, not parser-level generics.
+#
+#   ── Operator Precedence (14 levels, low to high) ────────
+#    1. || (logical or)
+#    2. && (logical and)
+#    3. | (bitwise or)
+#    4. ^ (bitwise xor)
+#    5. & (bitwise and)
+#    6. == != (equality)
+#    7. < > <= >= (comparison)
+#    8. << >> (bit shift)
+#    9. + - (addition)
+#   10. * / % (multiplication)
+#   11. ! - ~ (unary: not, negate, bitwise-not)
+#   12. ++ -- (pre/post increment)
+#   13. () [] . # (call, index, member access, tuple access)
+#   14. literals, identifiers, type casts, lambdas (primary)
+#
+#   Climbing from OR down to PRIMARY is how 2+3*4=14 holds
+#   (multiplication parsed deeper = higher precedence).
+#
+#   ── Expressions ─────────────────────────────────────────
+#   - Binary: all arithmetic, comparison, logical, bitwise ops
+#   - Unary: ! (not), - (negate), ~ (bitwise-not), ++ -- (pre)
+#   - Postfix: ++ --, member access (.), index access ([]),
+#     tuple element access (#), function call (())
+#   - Casts: int(x), str(n), float(z) — strict validation,
+#     no implicit coercion at parse time (checked by type checker)
+#   - Literals: int, float, complex (with im suffix), string,
+#     bool, null
+#   - Collections: array [], dict {}, set <>, tuple ()
+#   - Lambda: lambda (x: int) -> int: x * 2
+#   - List comprehension: [x*2 for each x in arr if x > 0]
+#     with optional else clause for filtered values
+#   - Function calls: name(args), Class.obj.method(args) for
+#     qualified dispatch, "mocha-lib".func(args) for cross-lib
+#   - ok(value), error(value) — Result type constructors
+#   - await expr — async operation suspension
+#
+#   ── Collections & Literals ──────────────────────────────
+#   - Array: [1, 2, 3] or [] (empty, type inferred by checker)
+#   - Dict: {"key": val, ...} or {} (untyped at parse time)
+#   - Set: <1, 2, 3> or <> (empty set)
+#   - Tuple: (1, 2, 3) or (x, 5) — homogeneous + fixed size
+#   - Tuple access: expr#0, expr#1 (not expr[0] — enforces
+#     distinction from array indexing; # is index operator)
+#   - 2D array access: arr[i][j], arr[0][] (row slice),
+#     arr[][1] (col slice) — special syntax for clarity
+#   - Trailing commas allowed in all collection literals
+#   - Dict literals require explicit str-typed keys (type checker
+#     enforces string-only keys; parser allows any expression)
+#
+#   ── Control Flow ────────────────────────────────────────
+#   - if/else if/else: conditions must be bool (type checker
+#     enforces; parser accepts any expr)
+#   - while/do-while: same condition rule
+#   - for loops: init stmt, bool condition, step expr
+#   - for-each: for each var in <set> or for each var in iterable
+#     (set iteration uses <> syntax; array/dict use bare iterable)
+#   - match/case: pattern matching with optional when guards
+#     (guards are bool exprs, scoped per-case)
+#   - All loops tracked via loop_depth (break/continue validated
+#     by type checker, not parser)
+#   - Explicit semicolons required (no ASI)
+#
+#   ── Functions ───────────────────────────────────────────
+#   - Regular: function name(params) -> type { body };
+#   - Async: async function name(params) -> type { body };
+#   - Native: function name(params) -> type native c_name;
+#     (zero-body, delegates to C implementation)
+#   - Parameters: name: type, optional default values
+#   - Variadic: function printf(fmt: str, +) -> int native printf;
+#     (+ as last param marker, no parsing of varargs in Mocha
+#     proper — used only for native interop)
+#   - didLoad marker: function main(didLoad, name: str) → entry point
+#     (didLoad must be first param if present; type checker enforces
+#     exactly one didLoad per module)
+#   - Lambda: lambda (params) -> type: expr (expr-only body, no stmts)
+#   - Forward references allowed (type checker resolves)
+#
+#   ── Classes & OOP ───────────────────────────────────────
+#   - Declarations: class Name extends Parent1, Parent2
+#     implements Interface1, Interface2 { ... };
+#   - Multiple inheritance allowed (parser accepts N parents;
+#     type checker detects diamond conflicts on fields, warns
+#     on method conflicts)
+#   - Field declarations: var name: type; or var name: type = default;
+#   - Method declarations: function name(...) { ... };
+#   - Visibility: public (default), private, protected (enforced
+#     by type checker, parsed as modifiers)
+#   - Shared (static): shared function create() { ... };
+#   - this keyword: only valid inside instance methods
+#     (type checker validates; parser just parses as identifier)
+#   - Two-pass checking deferred to type checker (parser does not
+#     validate forward references)
+#
+#   ── Interfaces ──────────────────────────────────────────
+#   - Declarations: interface Name { ... };
+#   - Method signatures only: function name(...) -> type;
+#   - No implementation allowed (parser rejects method bodies)
+#   - Conformance checked by type checker (parser just captures sig)
+#
+#   ── Imports & Modules ───────────────────────────────────
+#   - Module alias: import MochaMath from "mocha-math" as mm;
+#   - Explicit wildcard: from "mocha-math" import *;
+#   - Selective: from "mocha-math" import sin_deg(), PI, cos_deg();
+#   - Function imports recognized by () suffix (purely syntactic;
+#     type checker resolves actual symbol types)
+#   - Source strings are literal paths ("mocha-math", "mocha-bio")
+#   - Circular imports not detected (checked at link time)
+#
+#   ── Tags (Enumerations) ─────────────────────────────────
+#   - Declaration: tag TokenType { IDENTIFIER, INT_LIT, ... };
+#   - Members must be SCREAMING_CASE (enforced at parse time,
+#     matching const naming rule)
+#   - No associated values (pure tag membership, not tagged unions)
+#   - Access: TokenType.IDENTIFIER (parsed as member access,
+#     distinguished from method calls by absence of parentheses)
+#   - Type checker enforces exhaustiveness in match statements
+#
+#   ── Exception Handling ──────────────────────────────────
+#   - try { ... } rescue, e { ... };  (with binding)
+#   - try { ... } rescue { ... };     (without binding)
+#   - fail "message"; (throw, always str message)
+#   - rethrow; (re-raise current exception, only in rescue block)
+#   - Binding is single identifier, scoped to rescue block
+#   - No finally clause (codegen implements via flag)
+#
+#   ── Extension Methods (extend blocks) ────────────────────
+#   - extend PrimitiveType { function method() { ... } };
+#   - Extends built-in types (int, str, float, arrays, etc.)
+#     with new methods
+#   - Parser accepts any type (int[], set<str>, custom classes)
+#   - Methods have implicit 'this' of extended type
+#   - Parser does not validate method signatures; type checker
+#     ensures no conflicts with existing methods
+#
+#   ── Qualified Method Calls (Diamond Inheritance) ────────
+#   - Pattern: Class.obj.method() (detect via pre-scan of classes)
+#   - Example: Bird.p.breathe() resolves via Bird class name
+#   - Parser builds QualifiedMethodCall node; codegen uses
+#     parent-precedence fallback
+#   - Type checker flags ambiguous cases with both candidate
+#     parents named in the error
+#
+#   ── Doc Comments ────────────────────────────────────────
+#   - Lexer produces DOC_COMMENT tokens (~~-prefixed lines)
+#   - Parser collects preceding doc tokens via collect_doc()
+#   - Attached to FunctionDecl, ClassDecl, MethodDecl nodes
+#   - Docs generator extracts and formats for output
+#   - File-top-level restriction enforced by type checker
+#     (parser just captures the tokens)
+#
+#   ── Notable Non-Features ────────────────────────────────
+#   - No generics (List<T>; type parameters are lib-level)
+#   - No function overloading (parser rejects duplicate operators)
+#   - No default parameters in classes (only functions allowed)
+#   - No destructuring in for-each (single var only)
+#   - No guard clauses on function params (only match/case)
+#   - No implicit returns (explicit return required)
+#   - No string interpolation syntax (use .format())
 # ============================================================
 
 from mocha_lexer import Lexer, Token, TokenType
@@ -256,18 +450,23 @@ class Parser:
     # Expressions are parsed in ORDER OF PRECEDENCE
     # lowest precedence first, highest last.
     # This is what makes 2 + 3 * 4 = 14 not 20!
+    # Breaking change has occured when the marked ones were added |_|
     #
     # Precedence ladder (low to high):
     #   1. || (or)
     #   2. && (and)
     #   3. == != (equality)
-    #   4. < > <= >= (comparison)
-    #   5. + - (addition)
-    #   6. * / % (multiplication)
-    #   7. ! - (unary)
-    #   8. ++ -- (increment)
-    #   9. () [] . (call, index, member)
-    #  10. literals, identifiers (primary)
+    #   4. | (bit or) |_|
+    #   5. ^ (bit xor) |_|
+    #   6. & (bit and) |_|
+    #   7. < > <= >= (comparison)
+    #   8. << >> (shift) |_|
+    #   9. + - (addition)
+    #  10. * / % (multiplication)
+    #  11. ! - ~ (unary) |_| (last one)
+    #  12. ++ -- (increment)
+    #  13. () [] . (call, index, member)
+    #  14. literals, identifiers (primary)
     # -------------------------------------------------------
 
     def parse_expression(self) -> Node:
@@ -287,8 +486,41 @@ class Parser:
 
     def parse_and(self) -> Node:
         """ a && b """
-        left = self.parse_equality()
+        left = self.parse_bit_or()
         while self.check(TokenType.AND):
+            tok = self.current()
+            op = self.advance().value
+            right = self.parse_bit_or()
+            left = BinaryOp(left=left, op=op, right=right)
+            left.line = tok.line; left.col = tok.column
+        return left
+    
+    def parse_bit_or(self) -> Node:
+        """ a | b """
+        left = self.parse_bit_xor()
+        while self.check(TokenType.BIT_OR):
+            tok = self.current()
+            op = self.advance().value
+            right = self.parse_bit_xor()
+            left = BinaryOp(left=left, op=op, right=right)
+            left.line = tok.line; left.col = tok.column
+        return left
+
+    def parse_bit_xor(self) -> Node:
+        """ a ^ b """
+        left = self.parse_bit_and()
+        while self.check(TokenType.BIT_XOR):
+            tok = self.current()
+            op = self.advance().value
+            right = self.parse_bit_and()
+            left = BinaryOp(left=left, op=op, right=right)
+            left.line = tok.line; left.col = tok.column
+        return left
+
+    def parse_bit_and(self) -> Node:
+        """ a & b """
+        left = self.parse_equality()
+        while self.check(TokenType.BIT_AND):
             tok = self.current()
             op = self.advance().value
             right = self.parse_equality()
@@ -309,9 +541,20 @@ class Parser:
 
     def parse_comparison(self) -> Node:
         """ a < b  a > b  a <= b  a >= b """
-        left = self.parse_addition()
+        left = self.parse_shift()
         while self.check(TokenType.LT, TokenType.GT,
-                         TokenType.LTE, TokenType.GTE):
+                        TokenType.LTE, TokenType.GTE):
+            tok = self.current()
+            op = self.advance().value
+            right = self.parse_shift()
+            left = BinaryOp(left=left, op=op, right=right)
+            left.line = tok.line; left.col = tok.column
+        return left
+    
+    def parse_shift(self) -> Node:
+        """ a << b  or  a >> b """
+        left = self.parse_addition()
+        while self.check(TokenType.BIT_SHL, TokenType.BIT_SHR):
             tok = self.current()
             op = self.advance().value
             right = self.parse_addition()
@@ -342,7 +585,7 @@ class Parser:
         return left
 
     def parse_unary(self) -> Node:
-        """ !flag  or  -x  or  ++i (pre-increment) """
+        """ !flag  or  -x  or  ++i (pre-increment) or bitwise-not ~x"""
         tok = self.current()
         # Pre-increment: ++i
         if self.check(TokenType.PLUS_PLUS):
@@ -373,6 +616,15 @@ class Parser:
 
         # Negative: -x
         if self.check(TokenType.MINUS):
+            op = self.advance().value
+            right = self.parse_unary()
+            node = UnaryOp(op=op, right=right)
+            node.line = tok.line
+            node.col  = tok.column
+            return node
+        
+        # Bitwise NOT: ~x
+        if self.check(TokenType.BIT_NOT):
             op = self.advance().value
             right = self.parse_unary()
             node = UnaryOp(op=op, right=right)
@@ -1277,9 +1529,6 @@ class Parser:
         tok = self.current()
         
         is_required = False
-        if self.check(TokenType.MUST):
-            self.advance()
-            is_required = True
         
         name = self.expect(TokenType.IDENTIFIER,
                            "Expected parameter name").value

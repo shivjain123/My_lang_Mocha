@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPILER="$SCRIPT_DIR/mocha_compile.py"
+REPL="$SCRIPT_DIR/mocha_repl.py"
+DOC="$SCRIPT_DIR/mocha_doc.py"
+
+if [ $# -eq 0 ]; then
+    echo "Usage: mocha <file.mch>"
+    echo "       mocha --lib <libfile.mch>"
+    echo "       mocha repl"
+    exit 1
+fi
+
+if [ "$1" = "repl" ]; then
+    python3 "$REPL"
+    exit 0
+fi
+
+if [ "$1" = "doc" ]; then
+    python3 "$DOC" "$(realpath "$2")"
+    exit 0
+fi
+
+if [ "$1" = "execute" ]; then
+    INPUT="$(realpath "$2")"
+    OUTPUT="$(dirname "$INPUT")/$(basename "$INPUT" .mch)"
+    python3 "$COMPILER" "$INPUT" "$OUTPUT"
+    if [ $? -eq 0 ]; then
+        "$OUTPUT"
+        echo ""
+        echo "✅ Execution Done."
+    fi
+    exit 0
+fi
+
+if [ "$1" = "--lib" ]; then
+    python3 "$COMPILER" --lib "$(realpath "$2")"
+    exit 0
+fi
+
+INPUT="$(realpath "$1")"
+OUTPUT="$(dirname "$INPUT")/$(basename "$INPUT" .mch)"
+EXTRA_FLAGS=""
+
+if [ "$2" = "--debug" ] || [ "$3" = "--debug" ]; then
+    EXTRA_FLAGS="--debug"
+fi
+
+python3 "$COMPILER" "$INPUT" "$OUTPUT" $EXTRA_FLAGS

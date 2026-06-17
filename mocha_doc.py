@@ -1,6 +1,7 @@
 """
 mocha_doc.py — Mocha documentation generator
 Usage: python mocha_doc.py <file.mch> [--out <output.html>]
+After .bat wrapper it has become, mocha doc file.mch
 """
 
 import sys
@@ -12,7 +13,7 @@ import html
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mocha_lexer  import Lexer,  MochaLexError
 from mocha_parser import Parser, MochaParseError
-from mocha_ast    import FunctionDecl, MethodDecl, ClassDecl, Param
+from mocha_ast    import FunctionDecl, MethodDecl, ClassDecl
 
 
 # ── Doc line parsing ─────────────────────────────────────────────────────────

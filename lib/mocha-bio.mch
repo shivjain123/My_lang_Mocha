@@ -975,6 +975,11 @@ const FENA_PRERENAL_THRESHOLD: float = 1.0;
 const FENA_INTRINSIC_THRESHOLD: float = 2.0;
 const FEUREA_PRERENAL_THRESHOLD: float = 35.0;
 const BUN_CR_PRERENAL_THRESHOLD: float = 20.0;
+const URINE_SG_MIN_NORMAL: float = 1.010;
+const URINE_SG_MAX_NORMAL: float = 1.025;
+const URINE_SG_WATER:      float = 1.000;
+const URINE_SG_MAX_POSSIBLE: float = 1.040;
+
 
 """  ========================
      RENAL VALIDATORS
@@ -989,6 +994,13 @@ function validate_creatinine(cr: float) -> null {
 function validate_potassium(k: float) -> null {
     if (k < POTASSIUM_MIN || k > POTASSIUM_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): potassium out of physiological range (1.0-9.0 mEq/L).");
+    };
+};
+
+function validate_urine_sg(sg: float) -> null {
+    if (sg < URINE_SG_WATER || sg > URINE_SG_MAX_POSSIBLE) {
+        c_print_err("MochaBioError (mocha-bio): Urine specific gravity must be between 1.000 and 1.040.");
+        c_exit(2);
     };
 };
 
@@ -1010,6 +1022,8 @@ tag AkiLikelihood {
     INTRINSIC,
     INDETERMINATE
 };
+
+tag UrineSGInterpretation { LOW, NORMAL, HIGH };
 
 """  ========================
      RENAL FORMULAE
@@ -1249,6 +1263,41 @@ function feurea_value(urine_urea: float, serum_cr: float, serum_urea: float, uri
         return 0.0;
     };
     return ((urine_urea * serum_cr) / (serum_urea * urine_cr)) * 100.0;
+};
+
+// Urine specific gravity from solute and solvent densities
+// SG = density_urine / density_water
+function urine_specific_gravity(density_urine: float, density_water: float) -> float {
+    if (density_water <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Water density must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return density_urine / density_water;
+};
+
+// Interpret urine specific gravity value
+function urine_sg_interpretation(sg: float) -> UrineSGInterpretation {
+    validate_urine_sg(sg);
+    if (sg < URINE_SG_MIN_NORMAL) {
+        return UrineSGInterpretation.LOW;
+    };
+    if (sg <= URINE_SG_MAX_NORMAL) {
+        return UrineSGInterpretation.NORMAL;
+    };
+    return UrineSGInterpretation.HIGH;
+};
+
+// Clinical message for urine SG interpretation
+function urine_sg_message(sg: float) -> str {
+    validate_urine_sg(sg);
+    if (sg < URINE_SG_MIN_NORMAL) {
+        return "Low urine specific gravity (<1.010): suggests overhydration, diabetes insipidus, or impaired renal concentrating ability.";
+    };
+    if (sg <= URINE_SG_MAX_NORMAL) {
+        return "Normal urine specific gravity (1.010-1.025): adequate renal concentrating function.";
+    };
+    return "High urine specific gravity (>1.025): suggests dehydration, SIADH, or excessive solute load (glycosuria, proteinuria).";
 };
 
 """  ========================
@@ -2242,4 +2291,855 @@ function transferrin_saturation(serum_iron: float, tibc: float) -> float {
         c_print_err("MochaBioWarning (mocha-bio): transferrin saturation > 50% — iron overload, consider haemochromatosis.");
     };
     return tsat;
+};
+
+"""  ========================
+     BURNS / FLUID RESUSCITATION
+     ========================  """
+
+const TBSA_MIN: float = 0.0;
+const TBSA_MAX: float = 100.0;
+const BURN_REGION_MIN: float = 0.0;
+const BURN_REGION_MAX: float = 100.0;
+
+function validate_tbsa(tbsa: float) -> null {
+    if (tbsa < TBSA_MIN || tbsa > TBSA_MAX) {
+        c_print_err("MochaBioError (mocha-bio): TBSA must be between 0 and 100.");
+        c_exit(2);
+    };
+};
+
+function validate_burn_region(val: float, region: str) -> null {
+    if (val < BURN_REGION_MIN || val > BURN_REGION_MAX) {
+        c_print_err("MochaBioError (mocha-bio): Burn region percentage must be between 0 and 100.");
+        c_exit(2);
+    };
+};
+
+// Rule of Nines — estimates total body surface area burned (% TBSA)
+// Each param is the percentage of THAT region that is burned (0-100)
+// Weightings: head=9%, chest=18%, abdomen=18%,
+//             left_arm=9%, right_arm=9%,
+//             left_leg=18%, right_leg=18%, perineum=1%
+function rule_of_nines(head: float, chest: float, abdomen: float,
+                       left_arm: float, right_arm: float,
+                       left_leg: float, right_leg: float,
+                       perineum: float) -> float {
+    validate_burn_region(head,      "head");
+    validate_burn_region(chest,     "chest");
+    validate_burn_region(abdomen,   "abdomen");
+    validate_burn_region(left_arm,  "left_arm");
+    validate_burn_region(right_arm, "right_arm");
+    validate_burn_region(left_leg,  "left_leg");
+    validate_burn_region(right_leg, "right_leg");
+    validate_burn_region(perineum,  "perineum");
+
+    var tbsa: float =
+        (head      / 100.0) * 9.0  +
+        (chest     / 100.0) * 18.0 +
+        (abdomen   / 100.0) * 18.0 +
+        (left_arm  / 100.0) * 9.0  +
+        (right_arm / 100.0) * 9.0  +
+        (left_leg  / 100.0) * 18.0 +
+        (right_leg / 100.0) * 18.0 +
+        (perineum  / 100.0) * 1.0;
+
+    return tbsa;
+};
+
+// Parkland formula — total IV fluid (mL) in first 24 hours post-burn
+// Standard: 4 mL * weight_kg * %TBSA_burned
+// First half given in first 8 hours, second half over next 16 hours
+// Returns total 24hr volume in mL
+function parkland(weight_kg: float, tbsa_burned: float) -> float {
+    validate_bsa_inputs(weight_kg, 100.0);  // reuse weight validation
+    validate_tbsa(tbsa_burned);
+    return 4.0 * weight_kg * tbsa_burned;
+};
+
+// Parkland first 8 hours — mL/hr rate for first 8 hours
+function parkland_first_8hr_rate(weight_kg: float, tbsa_burned: float) -> float {
+    var total: float = parkland(weight_kg, tbsa_burned);
+    return (total / 2.0) / 8.0;
+};
+
+// Parkland next 16 hours — mL/hr rate for hours 8-24
+function parkland_next_16hr_rate(weight_kg: float, tbsa_burned: float) -> float {
+    var total: float = parkland(weight_kg, tbsa_burned);
+    return (total / 2.0) / 16.0;
+};
+
+// Burn severity classification by TBSA
+// Returns: 0 = minor (<10%), 1 = moderate (10-20%), 2 = major (>20%)
+tag BurnSeverity { MINOR, MODERATE, MAJOR };
+
+function burn_severity(tbsa: float) -> BurnSeverity {
+    validate_tbsa(tbsa);
+    if (tbsa < 10.0) {
+        return BurnSeverity.MINOR;
+    };
+    if (tbsa < 20.0) {
+        return BurnSeverity.MODERATE;
+    };
+    return BurnSeverity.MAJOR;
+};
+
+"""  ========================
+     IV THERAPY / INFUSION
+     ========================  """
+
+const DROP_FACTOR_MIN: float = 1.0;
+const INFUSION_RATE_MIN: float = 0.0;
+const INFUSION_TIME_MIN: float = 0.0;
+const INFUSION_VOLUME_MIN: float = 0.0;
+const CONCENTRATION_IV_MIN: float = 0.0;
+
+function validate_drop_factor(drop_factor: float) -> null {
+    if (drop_factor < DROP_FACTOR_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Drop factor must be positive (typically 10, 15, 20, or 60).");
+        c_exit(2);
+    };
+};
+
+function validate_infusion_rate(rate: float) -> null {
+    if (rate <= INFUSION_RATE_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Infusion rate must be greater than 0.");
+        c_exit(2);
+    };
+};
+
+function validate_infusion_time(time: float) -> null {
+    if (time <= INFUSION_TIME_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Infusion time must be greater than 0.");
+        c_exit(2);
+    };
+};
+
+function validate_infusion_volume(volume: float) -> null {
+    if (volume <= INFUSION_VOLUME_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Infusion volume must be greater than 0.");
+        c_exit(2);
+    };
+};
+
+function validate_concentration_iv(conc: float) -> null {
+    if (conc <= CONCENTRATION_IV_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Concentration must be greater than 0.");
+        c_exit(2);
+    };
+};
+
+// ---- Basic Rate / Volume / Time ----
+
+// Drip rate in gtt/min
+// drop_factor: drops per mL (typically 10, 15, 20 for macrodrip; 60 for microdrip)
+function drip_rate_gtt_min(volume_ml: float, time_hr: float, drop_factor: float) -> float {
+    validate_infusion_volume(volume_ml);
+    validate_infusion_time(time_hr);
+    validate_drop_factor(drop_factor);
+    return (volume_ml * drop_factor) / (time_hr * 60.0);
+};
+
+// Infusion time in hours given volume and rate
+function infusion_time_hr(volume_ml: float, rate_ml_hr: float) -> float {
+    validate_infusion_volume(volume_ml);
+    validate_infusion_rate(rate_ml_hr);
+    return volume_ml / rate_ml_hr;
+};
+
+// Total volume to infuse given rate and time
+function volume_to_infuse(rate_ml_hr: float, time_hr: float) -> float {
+    validate_infusion_rate(rate_ml_hr);
+    validate_infusion_time(time_hr);
+    return rate_ml_hr * time_hr;
+};
+
+// ---- Weight-Based Dosing ----
+
+// Convert mcg/kg/min dose to mL/hr pump rate
+// e.g. norepinephrine, dopamine, dobutamine, propofol
+function mcg_kg_min_to_ml_hr(dose_mcg_kg_min: float, weight_kg: float, concentration_mcg_ml: float) -> float {
+    validate_bsa_inputs(weight_kg, 100.0);
+    validate_concentration_iv(concentration_mcg_ml);
+    if (dose_mcg_kg_min <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Dose must be greater than 0.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (dose_mcg_kg_min * weight_kg * 60.0) / concentration_mcg_ml;
+};
+
+// Convert mL/hr pump rate back to mcg/kg/min dose
+function ml_hr_to_mcg_kg_min(rate_ml_hr: float, weight_kg: float, concentration_mcg_ml: float) -> float {
+    validate_infusion_rate(rate_ml_hr);
+    validate_bsa_inputs(weight_kg, 100.0);
+    validate_concentration_iv(concentration_mcg_ml);
+    return (rate_ml_hr * concentration_mcg_ml) / (weight_kg * 60.0);
+};
+
+// Convert mg/hr dose to mL/hr pump rate (non-weight-based)
+// e.g. heparin units/hr, morphine mg/hr
+function mg_hr_to_ml_hr(dose_mg_hr: float, concentration_mg_ml: float) -> float {
+    if (dose_mg_hr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Dose must be greater than 0.");
+        c_exit(2);
+        return 0.0;
+    };
+    validate_concentration_iv(concentration_mg_ml);
+    return dose_mg_hr / concentration_mg_ml;
+};
+
+// Convert mL/hr pump rate back to mg/hr dose (non-weight-based)
+function ml_hr_to_mg_hr(rate_ml_hr: float, concentration_mg_ml: float) -> float {
+    validate_infusion_rate(rate_ml_hr);
+    validate_concentration_iv(concentration_mg_ml);
+    return rate_ml_hr * concentration_mg_ml;
+};
+
+// ---- Bolus ----
+
+// Bolus pump rate in mL/hr to deliver volume_ml over time_min minutes
+function bolus_rate_ml_hr(volume_ml: float, time_min: float) -> float {
+    validate_infusion_volume(volume_ml);
+    if (time_min <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Bolus time must be greater than 0.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (volume_ml / time_min) * 60.0;
+};
+
+// ---- Units/hr (for heparin, insulin — same as mg_hr_to_ml_hr but named clearly) ----
+
+// Convert units/hr to mL/hr (e.g. heparin 1000 units/mL bag)
+function units_hr_to_ml_hr(dose_units_hr: float, concentration_units_ml: float) -> float {
+    if (dose_units_hr <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Dose must be greater than 0.");
+        c_exit(2);
+        return 0.0;
+    };
+    validate_concentration_iv(concentration_units_ml);
+    return dose_units_hr / concentration_units_ml;
+};
+
+// Convert mL/hr back to units/hr
+function ml_hr_to_units_hr(rate_ml_hr: float, concentration_units_ml: float) -> float {
+    validate_infusion_rate(rate_ml_hr);
+    validate_concentration_iv(concentration_units_ml);
+    return rate_ml_hr * concentration_units_ml;
+};
+
+"""  ========================
+     GYNECOLOGY
+     ========================  """
+
+// ---- Tags ----
+
+tag BmiFertilityRisk { UNDERWEIGHT_RISK, NORMAL, OVERWEIGHT_RISK, OBESE_RISK };
+tag OvarianReserve   { LOW, NORMAL, HIGH };
+tag UterineResistance { NORMAL, ELEVATED, HIGH };
+tag SpermConcentration { AZOOSPERMIA, OLIGOSPERMIA, NORMAL };
+tag SpermMotility { ASTHENOSPERMIA, NORMAL };
+
+// ---- Constants ----
+
+const AMH_LOW_THRESHOLD:    float = 1.0;
+const AMH_HIGH_THRESHOLD:   float = 3.5;
+const RI_ELEVATED_THRESHOLD: float = 0.58;
+const RI_HIGH_THRESHOLD:     float = 0.70;
+const SPERM_AZOOSPERMIA_THRESHOLD:  float = 0.0;
+const SPERM_OLIGOSPERMIA_THRESHOLD: float = 16.0;
+const SPERM_MOTILITY_THRESHOLD:     float = 42.0;
+const FREE_T_ALBUMIN_BINDING:       float = 3.4;
+const FREE_T_SHBG_KA:               float = 5.97E8;
+const FREE_T_ALB_KA:                float = 4.06E4;
+
+// ---- Validation ----
+
+function validate_cycle_length(days: float) -> null {
+    if (days < 21.0 || days > 35.0) {
+        c_print_err("MochaBioError (mocha-bio): Cycle length must be between 21 and 35 days.");
+        c_exit(2);
+    };
+};
+
+function validate_amh(amh: float) -> null {
+    if (amh < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): AMH cannot be negative.");
+        c_exit(2);
+    };
+};
+
+function validate_doppler(val: float, name: str) -> null {
+    if (val <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Doppler velocity values must be positive.");
+        c_exit(2);
+    };
+};
+
+function validate_kupperman_score(score: int, symptom: str) -> null {
+    if (score < 0 || score > 3) {
+        c_print_err("MochaBioError (mocha-bio): Kupperman symptom score must be 0-3.");
+        c_exit(2);
+    };
+};
+
+// ---- Female Reproductive ----
+
+// Naegele's rule — estimated due date returned as (day, month, year)
+// Add 7 days and 9 months (or subtract 3 months and add 1 year) to LMP
+function naegele_edd(lmp_day: int, lmp_month: int, lmp_year: int) -> (int, 3) {
+    var day:   int = lmp_day + 7;
+    var month: int = lmp_month + 9;
+    var year:  int = lmp_year;
+
+    // Handle month overflow
+    if (month > 12) {
+        month = month - 12;
+        year  = year + 1;
+    };
+
+    // Handle day overflow (approximate — use 30-day month rule)
+    var days_in_month: int = 30;
+    if (month == 1 || month == 3 || month == 5 || month == 7 ||
+        month == 8 || month == 10 || month == 12) {
+        days_in_month = 31;
+    };
+    if (month == 2) {
+        days_in_month = 28;
+    };
+    if (day > days_in_month) {
+        day   = day - days_in_month;
+        month = month + 1;
+        if (month > 12) {
+            month = 1;
+            year  = year + 1;
+        };
+    };
+
+    return (day, month, year);
+};
+
+// Gestational age in total days from LMP to current date
+// Approximate: uses 30-day months
+function gestational_age_days(lmp_day: int, lmp_month: int, lmp_year: int,
+                               cur_day: int, cur_month: int, cur_year: int) -> int {
+    var lmp_total: int = lmp_year * 365 + lmp_month * 30 + lmp_day;
+    var cur_total: int = cur_year * 365 + cur_month * 30 + cur_day;
+    var diff: int = cur_total - lmp_total;
+    if (diff < 0) {
+        diff = 0;
+    };
+    return diff;
+};
+
+// Gestational age as (weeks, days) tuple
+function gestational_age_weeks(lmp_day: int, lmp_month: int, lmp_year: int,
+                                cur_day: int, cur_month: int, cur_year: int) -> (int, 2) {
+    var total: int = gestational_age_days(lmp_day, lmp_month, lmp_year,
+                                          cur_day, cur_month, cur_year);
+    var weeks: int = total / 7;
+    var days:  int = total % 7;
+    return (weeks, days);
+};
+
+// BMI-based fertility risk
+function bmi_fertility_risk(bmi: float) -> BmiFertilityRisk {
+    if (bmi < 18.5) {
+        return BmiFertilityRisk.UNDERWEIGHT_RISK;
+    };
+    if (bmi < 25.0) {
+        return BmiFertilityRisk.NORMAL;
+    };
+    if (bmi < 30.0) {
+        return BmiFertilityRisk.OVERWEIGHT_RISK;
+    };
+    return BmiFertilityRisk.OBESE_RISK;
+};
+
+// AMH-based ovarian reserve interpretation
+function amh_ovarian_reserve(amh_ng_ml: float) -> OvarianReserve {
+    validate_amh(amh_ng_ml);
+    if (amh_ng_ml < AMH_LOW_THRESHOLD) {
+        return OvarianReserve.LOW;
+    };
+    if (amh_ng_ml <= AMH_HIGH_THRESHOLD) {
+        return OvarianReserve.NORMAL;
+    };
+    return OvarianReserve.HIGH;
+};
+
+// Kupperman Menopausal Index
+// 11 symptoms scored 0-3 (none/mild/moderate/severe)
+// Weighted sum: hot_flushes×4, sweating×2, insomnia×2, nervousness×2,
+// depression×1, dizziness×1, fatigue×1, joint_pain×1,
+// headache×1, palpitations×1, paraesthesia×1
+// Total ≤ 20 = mild, 21-35 = moderate, > 35 = severe
+function kupperman_index(hot_flushes: int, sweating: int, insomnia: int,
+                          nervousness: int, depression: int, dizziness: int,
+                          fatigue: int, joint_pain: int, headache: int,
+                          palpitations: int, paraesthesia: int) -> int {
+    validate_kupperman_score(hot_flushes,  "hot_flushes");
+    validate_kupperman_score(sweating,     "sweating");
+    validate_kupperman_score(insomnia,     "insomnia");
+    validate_kupperman_score(nervousness,  "nervousness");
+    validate_kupperman_score(depression,   "depression");
+    validate_kupperman_score(dizziness,    "dizziness");
+    validate_kupperman_score(fatigue,      "fatigue");
+    validate_kupperman_score(joint_pain,   "joint_pain");
+    validate_kupperman_score(headache,     "headache");
+    validate_kupperman_score(palpitations, "palpitations");
+    validate_kupperman_score(paraesthesia, "paraesthesia");
+
+    return hot_flushes  * 4 +
+           sweating     * 2 +
+           insomnia     * 2 +
+           nervousness  * 2 +
+           depression   * 1 +
+           dizziness    * 1 +
+           fatigue      * 1 +
+           joint_pain   * 1 +
+           headache     * 1 +
+           palpitations * 1 +
+           paraesthesia * 1;
+};
+
+// LH surge timing — estimated day of LH surge from cycle length
+// Occurs approximately 14 days before next period
+function lh_surge_day(cycle_length: float) -> float {
+    validate_cycle_length(cycle_length);
+    return cycle_length - 14.0;
+};
+
+// Uterine resistance index (RI) from Doppler waveform
+// RI = (S - D) / S
+// S = peak systolic velocity, D = end diastolic velocity
+function uterine_ri(peak_systolic: float, end_diastolic: float) -> float {
+    validate_doppler(peak_systolic,  "peak_systolic");
+    validate_doppler(end_diastolic, "end_diastolic");
+    if (end_diastolic > peak_systolic) {
+        c_print_err("MochaBioError (mocha-bio): End diastolic velocity cannot exceed peak systolic.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (peak_systolic - end_diastolic) / peak_systolic;
+};
+
+// Uterine pulsatility index (PI) from Doppler waveform
+// PI = (S - D) / mean_velocity
+function uterine_pi(peak_systolic: float, end_diastolic: float, mean_velocity: float) -> float {
+    validate_doppler(peak_systolic,  "peak_systolic");
+    validate_doppler(end_diastolic, "end_diastolic");
+    validate_doppler(mean_velocity, "mean_velocity");
+    if (end_diastolic > peak_systolic) {
+        c_print_err("MochaBioError (mocha-bio): End diastolic velocity cannot exceed peak systolic.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (peak_systolic - end_diastolic) / mean_velocity;
+};
+
+// Uterine resistance interpretation from RI value
+function uterine_resistance(peak_systolic: float, end_diastolic: float) -> UterineResistance {
+    var ri: float = uterine_ri(peak_systolic, end_diastolic);
+    if (ri <= RI_ELEVATED_THRESHOLD) {
+        return UterineResistance.NORMAL;
+    };
+    if (ri <= RI_HIGH_THRESHOLD) {
+        return UterineResistance.ELEVATED;
+    };
+    return UterineResistance.HIGH;
+};
+
+// ---- Shared: Fertility Window ----
+
+// First day of fertility window (5 days before ovulation)
+function fertility_window_begin(cycle_length: float) -> float {
+    validate_cycle_length(cycle_length);
+    return cycle_length - 19.0;
+};
+
+// Peak fertility day (ovulation — 14 days before next period)
+function fertility_window_peak(cycle_length: float) -> float {
+    validate_cycle_length(cycle_length);
+    return cycle_length - 14.0;
+};
+
+// ---- Male Reproductive ----
+
+// Free testosterone estimation — Vermeulen equation (simplified)
+// total_t: nmol/L, shbg: nmol/L, albumin: g/dL
+// Returns free testosterone in pmol/L
+function free_testosterone(total_t: float, shbg: float, albumin: float) -> float {
+    if (total_t <= 0.0 || shbg <= 0.0 || albumin <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Testosterone, SHBG, and albumin must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    // Convert albumin g/dL → g/L
+    var alb_gl: float = albumin * 10.0;
+    // Albumin concentration in nmol/L (MW albumin ~66500 g/mol)
+    var alb_nmol: float = (alb_gl / 66500.0) * 1_000_000_000.0;
+    // Simplified Vermeulen: FT = TT / (1 + Ka_shbg*SHBG + Ka_alb*alb_nmol)
+    var denominator: float = 1.0 + (FREE_T_SHBG_KA * shbg) + (FREE_T_ALB_KA * alb_nmol);
+    return (total_t / denominator) * 1000.0;
+};
+
+// Sperm concentration interpretation (WHO 2021 reference: ≥16 million/mL normal)
+function sperm_concentration(million_per_ml: float) -> SpermConcentration {
+    if (million_per_ml < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Sperm concentration cannot be negative.");
+        c_exit(2);
+        return SpermConcentration.AZOOSPERMIA;
+    };
+    if (million_per_ml == 0.0) {
+        return SpermConcentration.AZOOSPERMIA;
+    };
+    if (million_per_ml < SPERM_OLIGOSPERMIA_THRESHOLD) {
+        return SpermConcentration.OLIGOSPERMIA;
+    };
+    return SpermConcentration.NORMAL;
+};
+
+// Sperm motility interpretation (WHO 2021 reference: ≥42% total motility normal)
+function sperm_motility(motility_pct: float) -> SpermMotility {
+    if (motility_pct < 0.0 || motility_pct > 100.0) {
+        c_print_err("MochaBioError (mocha-bio): Sperm motility must be between 0 and 100.");
+        c_exit(2);
+        return SpermMotility.ASTHENOSPERMIA;
+    };
+    if (motility_pct < SPERM_MOTILITY_THRESHOLD) {
+        return SpermMotility.ASTHENOSPERMIA;
+    };
+    return SpermMotility.NORMAL;
+};
+
+"""  ========================
+     POPULATION ECOLOGY
+     ========================  """
+
+const POP_R_MIN:  float = -10.0;
+const POP_R_MAX:  float = 10.0;
+const POP_K_MIN:  float = 1.0;
+const POP_AREA_MIN: float = 0.0;
+
+function validate_population(n: float) -> null {
+    if (n < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Population size cannot be negative.");
+        c_exit(2);
+    };
+};
+
+function validate_growth_rate(r: float) -> null {
+    if (r < POP_R_MIN || r > POP_R_MAX) {
+        c_print_err("MochaBioError (mocha-bio): Growth rate r must be between -10 and 10.");
+        c_exit(2);
+    };
+};
+
+function validate_carrying_capacity(k: float) -> null {
+    if (k < POP_K_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Carrying capacity K must be >= 1.");
+        c_exit(2);
+    };
+};
+
+// Exponential growth: N(t) = N0 * e^(rt)
+function exponential_growth(n0: float, r: float, t: float) -> float {
+    validate_population(n0);
+    validate_growth_rate(r);
+    return n0 * c_exp(r * t);
+};
+
+// Logistic growth (S-curve): N(t) = K / (1 + ((K - N0) / N0) * e^(-r*t))
+function logistic_growth(n0: float, r: float, k: float, t: float) -> float {
+    validate_population(n0);
+    validate_growth_rate(r);
+    validate_carrying_capacity(k);
+    if (n0 == 0.0) {
+        return 0.0;
+    };
+    var exponent: float = c_exp(-1.0 * r * t);
+    var denom: float    = 1.0 + ((k - n0) / n0) * exponent;
+    return k / denom;
+};
+
+// Doubling time: t = ln(2) / r
+function doubling_time(r: float) -> float {
+    if (r <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Doubling time requires positive growth rate r.");
+        c_exit(2);
+        return 0.0;
+    };
+    return 0.6931471805599453 / r;
+};
+
+// Carrying capacity utilization — what fraction of K is currently used
+function carrying_capacity_usage(n: float, k: float) -> float {
+    validate_population(n);
+    validate_carrying_capacity(k);
+    return (n / k) * 100.0;
+};
+
+// Population density — individuals per unit area
+function population_density(population: float, area: float) -> float {
+    validate_population(population);
+    if (area <= POP_AREA_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Area must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    return population / area;
+};
+
+// Lotka-Volterra predator-prey — one time step
+// prey:     dN/dt = alpha*N - beta*N*P
+// predator: dP/dt = delta*N*P - gamma*P
+// alpha = prey birth rate, beta = predation rate,
+// delta = predator reproduction per prey eaten, gamma = predator death rate
+// dt = time step size
+// Returns (prey_next, predator_next) as (float, 2) tuple
+function lotka_volterra(prey: float, predator: float,
+                         alpha: float, beta: float,
+                         delta: float, gamma: float,
+                         dt: float) -> (float, 2) {
+    validate_population(prey);
+    validate_population(predator);
+    var d_prey:     float = (alpha * prey) - (beta * prey * predator);
+    var d_predator: float = (delta * prey * predator) - (gamma * predator);
+    var prey_next:     float = prey     + d_prey     * dt;
+    var predator_next: float = predator + d_predator * dt;
+    if (prey_next < 0.0) {
+        prey_next = 0.0;
+    };
+    if (predator_next < 0.0) {
+        predator_next = 0.0;
+    };
+    return (prey_next, predator_next);
+};
+
+
+"""  ========================
+     MOLECULAR & BIOCHEMICAL
+     ========================  """
+
+const MICHAELIS_KM_MIN:    float = 0.0;
+const MICHAELIS_VMAX_MIN:  float = 0.0;
+const BEER_EPSILON_MIN:    float = 0.0;
+const BEER_PATH_MIN:       float = 0.0;
+
+function validate_km(km: float) -> null {
+    if (km <= MICHAELIS_KM_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Michaelis constant Km must be positive.");
+        c_exit(2);
+    };
+};
+
+function validate_vmax(vmax: float) -> null {
+    if (vmax <= MICHAELIS_VMAX_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Maximum reaction rate Vmax must be positive.");
+        c_exit(2);
+    };
+};
+
+// Michaelis-Menten enzyme kinetics: v = Vmax * [S] / (Km + [S])
+function michaelis_menten(vmax: float, km: float, substrate: float) -> float {
+    validate_vmax(vmax);
+    validate_km(km);
+    if (substrate < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Substrate concentration cannot be negative.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (vmax * substrate) / (km + substrate);
+};
+
+// Substrate concentration at half-maximal velocity (Km definition check)
+// Returns substrate concentration giving v = Vmax/2 — always equals Km
+function half_velocity_substrate(km: float) -> float {
+    validate_km(km);
+    return km;
+};
+
+// Reaction velocity as fraction of Vmax
+function velocity_fraction(km: float, substrate: float) -> float {
+    validate_km(km);
+    if (substrate < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Substrate concentration cannot be negative.");
+        c_exit(2);
+        return 0.0;
+    };
+    return substrate / (km + substrate);
+};
+
+// Beer-Lambert law: A = epsilon * l * c
+// epsilon = molar attenuation coefficient (L/mol/cm)
+// l = path length (cm), c = concentration (mol/L)
+function absorbance(epsilon: float, path_length: float, concentration: float) -> float {
+    if (epsilon <= BEER_EPSILON_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Molar attenuation coefficient must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (path_length <= BEER_PATH_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Path length must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (concentration < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Concentration cannot be negative.");
+        c_exit(2);
+        return 0.0;
+    };
+    return epsilon * path_length * concentration;
+};
+
+// Concentration from Beer-Lambert: c = A / (epsilon * l)
+function concentration_from_absorbance(absorbance_val: float, epsilon: float, path_length: float) -> float {
+    if (epsilon <= BEER_EPSILON_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Molar attenuation coefficient must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (path_length <= BEER_PATH_MIN) {
+        c_print_err("MochaBioError (mocha-bio): Path length must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (absorbance_val < 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Absorbance cannot be negative.");
+        c_exit(2);
+        return 0.0;
+    };
+    return absorbance_val / (epsilon * path_length);
+};
+
+// Henderson-Hasselbalch: pH = pKa + log10([A-] / [HA])
+function henderson_hasselbalch(pka: float, base_conc: float, acid_conc: float) -> float {
+    if (base_conc <= 0.0 || acid_conc <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Buffer concentrations must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var ratio: float  = base_conc / acid_conc;
+    var log10_ratio: float = ratio.log().real / 2.302585092994046;
+    return pka + log10_ratio;
+};
+
+// Q10 temperature coefficient — rate change per 10°C
+// Q10 = (R2 / R1) ^ (10 / (T2 - T1))
+function q10(r1: float, r2: float, t1: float, t2: float) -> float {
+    if (r1 <= 0.0 || r2 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Reaction rates must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (t2 == t1) {
+        c_print_err("MochaBioError (mocha-bio): Temperatures T1 and T2 must differ.");
+        c_exit(2);
+        return 0.0;
+    };
+    var ratio: float    = r2 / r1;
+    var exponent: float = 10.0 / (t2 - t1);
+    var ln_ratio: float = ratio.log().real;
+    return c_exp(exponent * ln_ratio);
+};
+
+// Rate at new temperature using Q10: R2 = R1 * Q10 ^ ((T2-T1)/10)
+function rate_at_temperature(r1: float, q10_val: float, t1: float, t2: float) -> float {
+    if (r1 <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Reaction rate must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (q10_val <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Q10 must be positive.");
+        c_exit(2);
+        return 0.0;
+    };
+    var exponent: float = (t2 - t1) / 10.0;
+    var ln_q10: float   = q10_val.log().real;
+    return r1 * c_exp(exponent * ln_q10);
+};
+
+
+"""  ========================
+     GENETICS
+     ========================  """
+
+function validate_allele_freq(p: float) -> null {
+    if (p < 0.0 || p > 1.0) {
+        c_print_err("MochaBioError (mocha-bio): Allele frequency must be between 0 and 1.");
+        c_exit(2);
+    };
+};
+
+function validate_mutation_rate(mu: float) -> null {
+    if (mu < 0.0 || mu > 1.0) {
+        c_print_err("MochaBioError (mocha-bio): Mutation rate must be between 0 and 1.");
+        c_exit(2);
+    };
+};
+
+// Hardy-Weinberg genotype frequencies
+// Given dominant allele frequency p, returns (p², 2pq, q²)
+// p² = homozygous dominant, 2pq = heterozygous, q² = homozygous recessive
+function hardy_weinberg(p: float) -> (float, 3) {
+    validate_allele_freq(p);
+    var q: float    = 1.0 - p;
+    var pp: float   = p * p;
+    var tpq: float  = 2.0 * p * q;
+    var qq: float   = q * q;
+    return (pp, tpq, qq);
+};
+
+// Hardy-Weinberg equilibrium check — returns true if p² + 2pq + q² ≈ 1
+function hardy_weinberg_check(homo_dom: float, hetero: float, homo_rec: float) -> bool {
+    var total: float = homo_dom + hetero + homo_rec;
+    return total > 0.999 && total < 1.001;
+};
+
+// Allele frequency after one generation of mutation pressure
+// p_next = p * (1 - mu_forward) + q * mu_reverse
+// mu_forward: rate of A→a, mu_reverse: rate of a→A
+function allele_freq_after_mutation(p: float, mu_forward: float, mu_reverse: float) -> float {
+    validate_allele_freq(p);
+    validate_mutation_rate(mu_forward);
+    validate_mutation_rate(mu_reverse);
+    var q: float = 1.0 - p;
+    return p * (1.0 - mu_forward) + q * mu_reverse;
+};
+
+// Allele frequency after one generation of natural selection
+// Assumes diploid, selection against recessive homozygote (q²)
+// s = selection coefficient (0 = neutral, 1 = lethal)
+// p_next = p² + p*q / (1 - s*q²)   [mean fitness denominator]
+function allele_freq_after_selection(p: float, s: float) -> float {
+    validate_allele_freq(p);
+    if (s < 0.0 || s > 1.0) {
+        c_print_err("MochaBioError (mocha-bio): Selection coefficient must be between 0 and 1.");
+        c_exit(2);
+        return 0.0;
+    };
+    var q: float             = 1.0 - p;
+    var mean_fitness: float = 1.0 - s * q * q;
+    if (mean_fitness <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Mean fitness <= 0; selection too strong.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (p * p + p * q) / mean_fitness;
+};
+
+// Effective population size from census size and sex ratio
+// Ne = 4 * Nm * Nf / (Nm + Nf)
+function effective_population_size(n_male: float, n_female: float) -> float {
+    validate_population(n_male);
+    validate_population(n_female);
+    if (n_male + n_female == 0.0) {
+        c_print_err("MochaBioError (mocha-bio): Total population cannot be zero.");
+        c_exit(2);
+        return 0.0;
+    };
+    return (4.0 * n_male * n_female) / (n_male + n_female);
 };

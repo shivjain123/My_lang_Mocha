@@ -250,6 +250,44 @@ extend float[] {
         };
         return result;
     };
+
+    // ===========================================================
+    // SKEWNESS — population and sample (Fisher-Pearson)
+    // ===========================================================
+
+    // Population skewness — third standardized moment
+    function skewness() -> float {
+        var n: int = this.length;
+        var mu: float = this.mean();
+        var sigma: float = this.std_popu();
+
+        var sum_cubed: float = 0.0;
+        var i: int = 0;
+        while (i < n) {
+            var diff: float = this[i] - mu;
+            sum_cubed = sum_cubed + (diff * diff * diff);
+            i = i + 1;
+        };
+
+        var m3: float = sum_cubed / float(n);
+        return m3 / (sigma * sigma * sigma);
+    };
+
+    // Sample skewness — bias-corrected (Fisher-Pearson adjusted)
+    // G1 = [sqrt(n*(n-1)) / (n-2)] * g1
+    function skewness_sample() -> float {
+        var n: int = this.length;
+        if (n < 3) {
+            c_print_err("MochaStatsError (mocha-stats): skewness_sample requires at least 3 values.");
+            c_exit(2);
+            return 0.0;
+        };
+
+        var g1: float = this.skewness();
+        var nf: float = float(n);
+        var correction: float = c_sqrt(nf * (nf - 1.0)) / (nf - 2.0);
+        return correction * g1;
+    };
 };
 
 function covar(x: float[], y: float[]) -> float {
@@ -315,6 +353,80 @@ function chi(observed: float[], expected: float[]) -> float {
     };
     return result;
 };
+
+// ===========================================================
+    // SPEARMAN RANK CORRELATION
+    // ===========================================================
+
+    // Compute ranks for an array, averaging ranks for tied values
+    function ranks_of(a: float[]) -> float[] {
+        var n: int = a.length;
+        var result: float[] = [];
+        var i: int = 0;
+        while (i < n) {
+            result.push(0.0);
+            i = i + 1;
+        };
+
+        // sorted indices, ascending by value (insertion sort on index array)
+        var order: int[] = [];
+        i = 0;
+        while (i < n) {
+            order.push(i);
+            i = i + 1;
+        };
+        var p: int = 1;
+        while (p < n) {
+            var key: int = order[p];
+            var key_val: float = a[key];
+            var q: int = p - 1;
+            while (q >= 0 && a[order[q]] > key_val) {
+                order[q + 1] = order[q];
+                q = q - 1;
+            };
+            order[q + 1] = key;
+            p = p + 1;
+        };
+
+        // assign average ranks for tie groups
+        var idx: int = 0;
+        while (idx < n) {
+            var begin: int = idx;
+            var end: int = idx;
+            while (end + 1 < n && a[order[end + 1]] == a[order[begin]]) {
+                end = end + 1;
+            };
+            // ranks are 1-indexed; average rank for [begin, end]
+            var rank_sum: float = 0.0;
+            var r: int = begin;
+            while (r <= end) {
+                rank_sum = rank_sum + float(r + 1);
+                r = r + 1;
+            };
+            var avg_rank: float = rank_sum / float(end - begin + 1);
+
+            var j: int = begin;
+            while (j <= end) {
+                result[order[j]] = avg_rank;
+                j = j + 1;
+            };
+            idx = end + 1;
+        };
+
+        return result;
+    };
+
+    // Spearman's rank correlation coefficient
+    function spearman(x: float[], y: float[]) -> float {
+        if (x.length != y.length) {
+            c_print_err("MochaStatsError (mocha-stats): spearman requires arrays of equal length.");
+            c_exit(2);
+            return 0.0;
+        };
+        var rx: float[] = ranks_of(x);
+        var ry: float[] = ranks_of(y);
+        return corr(rx, ry);
+    };
 
 """     DISTANCES    """
 

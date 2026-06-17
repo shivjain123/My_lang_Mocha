@@ -1,17 +1,104 @@
 # ============================================================
-# Mocha Type Checker
+# Mocha Type Checker v0.9
+# mocha_typeChecker.py
 #
 # Walks the AST and verifies:
-# - Variables are declared before use
-# - Types match on assignments
-# - Function return types are correct
-# - Operations are between compatible types
-# - Constants are never reassigned
-# - Private fields are not accessed from outside
+#
+#   ── Core Checks ────────────────────────────────────────────
+#   - Variables declared before use, never redeclared in scope
+#   - Types match on assignments, declarations, and returns
+#   - No implicit coercion (Mocha is strict — only int/vast/
+#     float/Complex intermix in arithmetic)
+#   - Constants never reassigned or mutated (incl. via mutating
+#     array/set methods: push, pop, insert, delete, etc.)
+#   - Function overloading prohibited — duplicate top-level
+#     function names raise a compile error showing both sigs
+#   - Exactly one 'didLoad' entry point required
+#
+#   ── Operators ──────────────────────────────────────────────
+#   - Arithmetic (+ - * / %): numeric-only, tag types blocked,
+#     str + str allowed (concat), Complex promotes over all
+#   - Comparison (< > <= >=): tag types blocked (unordered,
+#     unlike Python Enum), types must match or both numeric
+#   - Equality (== !=): strict type match, null always allowed
+#   - Logical (&& ||): strict bool only, no truthy coercion
+#   - Bitwise (& | ^ << >>): int/vast only
+#   - Unary (! - ~): bool/numeric/int-vast respectively
+#   - Increment/decrement (++ --): int/vast only
+#   - Compile-time division-by-zero detection on literals
+#
+#   ── Types & Casts ──────────────────────────────────────────
+#   - int(x)/float(x)/str(x) casts validated (bool→numeric and
+#     str→numeric direct casts rejected; routes to .toInt()/
+#     .toFloat() from mocha-string instead)
+#   - Tuple types are homogeneous and fixed-size: (T, N)
+#   - 3D+ arrays rejected (2D max; suggests a class instead)
+#   - str fields/vars can never be null
+#
+#   ── Collections ────────────────────────────────────────────
+#   - Array literals: element type consistency, empty-array
+#     inference, 1D/2D index type + bounds-shape checking
+#   - Tuple literals/access: homogeneity, '#' index range check
+#   - Set literals/methods: element type consistency, has/
+#     insert/delete/union/intersect/xor/rel_diff/min/max/retype
+#     (min/max blocked for set<bool> — unordered)
+#   - Dict literals/methods: str-only keys, has/allKeys/
+#     allValues/remove/clean/merge (incl. override= kwarg check)
+#   - HashTable: put/get/has/size/keys/values/remove/clear/free
+#   - 2D array .occs() requires explicit row= or col= kwarg
+#
+#   ── Control Flow ───────────────────────────────────────────
+#   - if/while/do-while/for conditions must be bool (no
+#     truthy/falsy coercion anywhere)
+#   - for-each over arrays, dicts (untyped), and sets (typed
+#     via SetIterable, 'for each x in <s>')
+#   - match: requires a 'default' case; 'when' guards must be
+#     bool; bound pattern identifiers scoped per-case
+#   - break/continue tracked via loop_depth, rejected outside
+#     loops; rethrow tracked via rescue_depth
+#   - return type matches enclosing function; has_return()
+#     walks if/else, match (all-cases-return-or-break + default
+#     required), and intentionally never trusts while bodies
+#     (halting-problem dodge — always requires a trailing
+#     return after a while loop)
+#   - try/rescue: scoped try/rescue bodies, optional exception
+#     binding declared as str in rescue scope; fail requires a
+#     str message
+#
+#   ── Classes & OOP ──────────────────────────────────────────
+#   - Two-pass class checking: fields/methods declared first
+#     (so methods can forward-reference each other), then
+#     bodies checked
+#   - Multiple inheritance: diamond detection for both fields
+#     (hard error — ambiguous memory layout, must rename) and
+#     methods (soft — logged to diamond_conflicts, resolved by
+#     qualified call Class.obj.method() or left to codegen's
+#     parent-precedence fallback)
+#   - Visibility enforcement: private (current class only) and
+#     protected (class or subclass only) field/method access
+#   - Interface conformance: missing methods get a hint with
+#     the exact signature to paste in; mismatched return type,
+#     param count, or param types each get a specific error
+#   - 'this' validated: only inside a class, never in a shared
+#     (static) method
+#   - extend (primitive/stdlib type extension methods) checked
+#     in their own scope with 'this' bound to the extended type
+#
+#   ── Calls & Dispatch ───────────────────────────────────────
+#   - Lambda type inference: params scoped, declared return
+#     type checked against body if present; call sites return
+#     "unknown" (codegen infers concretely — see gen_function_call)
+#   - Module alias calls (import ... as alias) resolved via
+#     "alias.func" symbol lookup
+#   - Diamond-conflict calls flagged at the call site with both
+#     candidate parents named in the error
+#   - Per-type method return inference for dict / HashTable /
+#     set<T> / str before falling through to general symbol
+#     lookup (qualified "Type.method" then bare name)
+#
 # ============================================================
 
 from mocha_ast import *
-
 
 # ============================================================
 # TYPE CHECKER ERROR
@@ -317,6 +404,20 @@ class TypeChecker:
                     f"Right side of '{op}' must be bool, got '{right}'", node
                 )
             return "bool"
+        
+        # Bitwise binary: & | ^ << >>
+        if op in ("&", "|", "^", "<<", ">>"):
+            if left not in ("int", "vast"):
+                self.error(
+                    f"Bitwise operator '{op}' requires int or vast, got '{left}'", node
+                )
+            if right not in ("int", "vast"):
+                self.error(
+                    f"Bitwise operator '{op}' requires int or vast, got '{right}'", node
+                )
+            if left == "vast" or right == "vast":
+                return "vast"
+            return "int"
 
         return "unknown"
 
@@ -705,6 +806,11 @@ class TypeChecker:
             ">=": ">=",
             "&&": "and",
             "||": "or",
+            "&":  "bit_and",
+            "|":  "bit_or",
+            "^":  "bit_xor",
+            "<<": "bit_shl",
+            ">>": "bit_shr",
         }[op]
 
     def check_binary_op(self, node: BinaryOp) -> str:
@@ -764,6 +870,12 @@ class TypeChecker:
         elif node.op in ("&&", "||"):
             node.op_kind = f"{result_type}_{self.op_name(node.op)}"
         
+        elif node.op in ("&", "|", "^", "<<", ">>"):
+            if left_type == "vast" or right_type == "vast":
+                node.op_kind = f"vast_{self.op_name(node.op)}"
+            else:
+                node.op_kind = f"int_{self.op_name(node.op)}"
+        
         return result_type
 
     def check_unary_op(self, node: UnaryOp) -> str:
@@ -783,12 +895,19 @@ class TypeChecker:
                 )
             return right_type
 
+        if node.op == "~":
+            if right_type not in ("int", "vast"):
+                self.error(
+                    f"'~' requires int or vast, got '{right_type}'", node
+                )
+            return right_type
+
         return "unknown"
 
     def check_increment(self, node) -> str:
         """
         i++, i--, ++i, --i
-        Operand must be int!
+        Operand must be int or vast!
         """
         operand_type = self.check_expr(node.operand)
         if operand_type not in ("int", "vast"):
@@ -1076,6 +1195,15 @@ class TypeChecker:
             self.check_expr(node)
 
     def check_var_decl(self, node: VarDecl):
+        # 3D arrays not supported
+        if node.type.count("[") > 2:
+            dims = node.type.count("[")
+            self.error(
+                f"{dims}D arrays are not supported in Mocha. "
+                f"Use a class or 2D array instead.",
+                node
+            )
+            
         value_type = self.check_expr(node.value)
 
         # Empty array literal [] is compatible with any array type
@@ -1103,6 +1231,14 @@ class TypeChecker:
         const MAX_SIZE: int = 100;
         SCREAMING_CASE already enforced by parser!
         """
+        if node.type.count("[") > 2:
+            dims = node.type.count("[")
+            self.error(
+                f"{dims}D arrays are not supported in Mocha. "
+                f"Use a class or 2D array instead.",
+                node
+            )
+            
         value_type = self.check_expr(node.value)
 
         # Empty array literal [] is compatible with any array type

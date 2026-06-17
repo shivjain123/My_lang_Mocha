@@ -3,7 +3,7 @@ from typing import Optional, Set
 from mocha_lexer import Lexer, MochaLexError
 from mocha_parser import Parser, MochaParseError
 from mocha_typeChecker import TypeChecker
-from mocha_codegen import CodeGen, MochaCodeGenError, mangle_function_name, C_STDLIB_NAMES, LLVM_TYPES, to_llvm_type, _tag_types_registry
+from mocha_codegen import CodeGen, MochaCodeGenError, mangle_function_name, to_llvm_type, _tag_types_registry
 from mocha_ast import (
     FieldDecl, ImportStmt, FunctionDecl, MethodDecl, ConstDecl, 
     ExtendDecl, ReturnStmt, ClassDecl, ArrayLiteral,
@@ -16,6 +16,12 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 import functools
 print = functools.partial(print, flush=True)
+
+import platform
+IS_WINDOWS = platform.system() == "Windows"
+IS_MACOS   = platform.system() == "Darwin"
+IS_LINUX   = platform.system() == "Linux"
+EXE_EXT    = ".exe" if IS_WINDOWS else ""
 
 # ============================================================
 # AUTO-DETECT COMPILER TOOLS
@@ -53,12 +59,12 @@ SQLITE3_C   = os.path.join(SCRIPT_DIR, "sqlite-amalgamation-3510300", "sqlite3.c
 SQLITE3_OBJ = os.path.join(SCRIPT_DIR, "sqlite-amalgamation-3510300", "sqlite3.o")
 CPP_FILE    = os.path.join(SCRIPT_DIR, "hello_cpp.cpp")
 CPP_OBJ     = os.path.join(SCRIPT_DIR, "hello_cpp.o")
-LUA_DIR     = os.path.join(SCRIPT_DIR, "lua-5.5.0_Win64_dllw6_lib")
+RUST_LIB    = os.path.join(SCRIPT_DIR, "rust_ffi.a")
+ZIG_PATH    = os.path.join(SCRIPT_DIR, "zig.exe" if IS_WINDOWS else "zig")
+ZIG_LIB     = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "zig_ffi.a")
+LUA_DIR     = os.path.join(SCRIPT_DIR, "lua-5.5.0_Win64_dllw6_lib" if IS_WINDOWS else "lua-5.5.0_unix")
 LUA_LIB     = os.path.join(LUA_DIR, "liblua55.a")
 LUA_INCLUDE = os.path.join(LUA_DIR, "include")
-RUST_LIB    = os.path.join(SCRIPT_DIR, "rust_ffi.a")
-ZIG_LIB  = os.path.join(SCRIPT_DIR, "zig_ffi.lib")
-ZIG_PATH = os.path.join(SCRIPT_DIR, "zig.exe")
 WREN_DIR     = os.path.join(SCRIPT_DIR, "wren")
 WREN_C       = os.path.join(SCRIPT_DIR, "build", "wren.c")
 WREN_OBJ     = os.path.join(SCRIPT_DIR, "build", "wren.o")
@@ -82,11 +88,22 @@ if not MINGW_GCC:
 assert CLANG_PATH is not None
 assert MINGW_GCC is not None
 
+def get_clang_flags() -> tuple[str, str | None]:
+    if IS_WINDOWS:
+        mingw_sysroot = os.path.dirname(os.path.dirname(MINGW_GCC)) if MINGW_GCC else None
+        return "x86_64-w64-mingw32", mingw_sysroot
+    elif IS_MACOS:
+        return "x86_64-apple-darwin", None
+    else:
+        return "x86_64-linux-gnu", None
+
 # ============================================================
 # CODE SIGNING
 # ============================================================
 
 def sign_executable(exe_path: str) -> str:
+    if not IS_WINDOWS:
+        return "skipped"  # code signing handled differently on Linux/macOS
     sign_cmd = [
         "powershell", "-Command",
         f'$cert = Get-ChildItem Cert:\\LocalMachine\\My | Where-Object Subject -eq "CN=MochaLang" | Select-Object -First 1; '
@@ -213,6 +230,22 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
                 type_checker.symbols.declare(key, field_type)
             except Exception:
                 pass
+
+        elif line.startswith("class ") and " function " in line and " field " not in line:
+            parts = line.split(" function ")
+            class_name = parts[0][6:].strip()
+            after_func = parts[1]
+            func_name  = after_func[:after_func.index("(")].strip()
+            ret_part   = after_func.split("->")[1].strip().rstrip(";").strip()
+            if " native " in ret_part:
+                ret_type = ret_part.split(" native ")[0].strip()
+            else:
+                ret_type = ret_part
+            key = f"{class_name}.{func_name}"
+            try:
+                type_checker.symbols.declare(key, ret_type, is_function=True)
+            except Exception:
+                pass
         
         elif line.startswith("tag "):
             tag_name = line[4:line.index("{")].strip()
@@ -220,12 +253,13 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             members = [m.strip() for m in members_str.split(",") if m.strip()]
             try:
                 type_checker.symbols.declare(tag_name, tag_name, is_class=True)
+                type_checker.tag_types.add(tag_name)
             except Exception:
                 pass
             for i, member in enumerate(members):
                 key = f"{tag_name}.{member}"
                 try:
-                    type_checker.symbols.declare(key, "int")
+                    type_checker.symbols.declare(key, tag_name)
                 except Exception:
                     pass
 
@@ -244,7 +278,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
 #   is_native — skips global init registration if True
 #   seen      — circular dep guard, always pass None from outside
 #
-# HANDLES FOUR LINE TYPES IN .mchi:
+# HANDLES FIVE LINE TYPES IN .mchi:
 #   // mocha-lib-deps:  → recursively register deps first
 #   function            → register in lib_functions + emit declare
 #   const               → register in lib_constants
@@ -252,6 +286,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
 #   class ... function  → register class method + emit declare
 #                         (added for clang — without it, calls to
 #                          lib class methods produce unknown symbol errors)
+#   tag
 #
 # FINALLY: if lib has top-level globals, registers its
 #   __mocha_globals_init_* so main() calls it at startup
@@ -824,9 +859,13 @@ def compile_lib(source_file: str) -> bool:
 
     generate_manifest(ast, mchi_file, source_file)
 
+    clang_target, mingw_sysroot = get_clang_flags()
+    clang_flags = ["-O2", "-march=native", "-flto", "-target", clang_target]
+    if mingw_sysroot:
+        clang_flags += ["--sysroot", mingw_sysroot]
+
     result = subprocess.run(
-        [str(CLANG_PATH), "-c", ll_file, "-o", obj_file,
-         "-target", "x86_64-w64-mingw32"],
+        [str(CLANG_PATH)] + clang_flags + ["-c", ll_file, "-o", obj_file],
         capture_output=True, text=True, encoding='utf-8'
     )
     if result.returncode != 0:
@@ -837,6 +876,98 @@ def compile_lib(source_file: str) -> bool:
     print(f"✅ Manifest generated: {mchi_file}")
     print(f"   Import with: import {lib_name} from \"{lib_name}\" as alias;")
     print(f"            OR: from \"{lib_name}\" import *;")
+    return True
+
+def get_lib_deps(source_file: str) -> list[str]:
+    """Extract direct dependencies from a lib's .mchi manifest."""
+    deps = []
+    mchi_path = os.path.splitext(source_file)[0] + ".mchi"
+    if not os.path.exists(mchi_path):
+        # fallback to source parsing if manifest not yet generated
+        with open(source_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('from "') and 'import' in line:
+                    parts = line.split('"')
+                    if len(parts) >= 2:
+                        dep = parts[1]
+                        if dep and not dep.startswith("./"):
+                            deps.append(dep)
+                if line.startswith("// mocha-lib-deps:"):
+                    for dep in line.replace("// mocha-lib-deps:", "").strip().split(","):
+                        if dep.strip():
+                            deps.append(dep.strip())
+        return list(dict.fromkeys(deps))
+    
+    with open(mchi_path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("// mocha-lib-deps:"):
+                for dep in line.replace("// mocha-lib-deps:", "").strip().split(","):
+                    if dep.strip():
+                        deps.append(dep.strip())
+    return list(dict.fromkeys(deps))
+
+
+def resolve_lib_build_order(source_file: str, lib_dir: str,
+                             visited: Optional[Set] = None, stack: Optional[list] = None) -> list[str]:
+    """Topological sort of lib dependencies. Returns list of lib names to
+    compile in order, deepest dependency first."""
+    if visited is None:
+        visited = set()
+    if stack is None:
+        stack = []
+
+    lib_name = os.path.splitext(os.path.basename(source_file))[0]
+    if lib_name in visited:
+        return stack
+    visited.add(lib_name)
+
+    deps = get_lib_deps(source_file)
+    for dep in deps:
+        dep_mch = os.path.join(lib_dir, dep, f"{dep}.mch")
+        if os.path.exists(dep_mch):
+            resolve_lib_build_order(dep_mch, lib_dir, visited, stack)
+
+    stack.append(source_file)
+    return stack
+
+
+def compile_lib_with_deps(source_file: str) -> bool:
+    """Compile a lib and all its transitive dependencies in topological order,
+    skipping any that are already up to date."""
+    lib_dir = LIB_DIR
+    build_order = resolve_lib_build_order(source_file, lib_dir)
+
+    print(f"🔍 Dependency build order:")
+    for path in build_order:
+        name = os.path.splitext(os.path.basename(path))[0]
+        obj  = os.path.splitext(path)[0] + ".o"
+        status = "needs compile" if needs_recompile(path, obj) else "✅ up to date"
+        print(f"   {name} — {status}")
+    print()
+
+    recompiled = set()  # track what we rebuilt this run
+
+    for lib_path in build_order:
+        lib_name = os.path.splitext(os.path.basename(lib_path))[0]
+        obj_file = os.path.splitext(lib_path)[0] + ".o"
+
+        # Recompile if: source newer than obj, OR any dep was recompiled this run
+        deps = get_lib_deps(lib_path)
+        dep_was_recompiled = any(d in recompiled for d in deps)
+
+        if needs_recompile(lib_path, obj_file) or dep_was_recompiled:
+            if dep_was_recompiled and not needs_recompile(lib_path, obj_file):
+                print(f"  ↻ Recompiling {lib_name} (dependency changed)")
+            success = compile_lib(lib_path)
+            if not success:
+                print(f"  ❌ Failed at {lib_name}, stopping.")
+                return False
+            recompiled.add(lib_name)
+        else:
+            print(f"  ⚡ {lib_name} cached")
+
     return True
 
 # ============================================================
@@ -857,7 +988,7 @@ def compile_lib(source_file: str) -> bool:
 #   class StandardScaler;
 #   class StandardScaler function transform(...) -> float[];
 #
-# HANDLES FOUR NODE TYPES:
+# HANDLES FIVE NODE TYPES:
 #
 #   FunctionDecl — three sub-cases:
 #     is_native     → emit as-is with native c_name
@@ -879,6 +1010,7 @@ def compile_lib(source_file: str) -> bool:
 #               then one line per non-constructor method as
 #               "class Name function method(...) -> type;"
 #               constructor skipped — never called by name externally
+#   TagDecl - ...
 #
 # DEP PRESERVATION:
 #   Copies // mocha-lib-deps: line from source file verbatim
@@ -1020,6 +1152,10 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
 
     with open(source_file, 'r', encoding='utf-8') as f:
         source = f.read()
+    
+    # ── FFI detection (source-level, for compile-time flags) ──
+    needs_lua  = 'mocha_lua_'  in source
+    needs_wren = 'mocha_wren_' in source
 
     print("Step 1: Lexing...")
     try:
@@ -1099,7 +1235,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
         if " " in class_name:
             continue
         # remove any existing opaque definition first
-        existing = [d for d in codegen.type_declarations if f"%struct.{class_name}" in d]
+        existing = [d for d in codegen.type_declarations if d.startswith(f"%struct.{class_name} ")]
         for e in existing:
             codegen.type_declarations.remove(e)
         
@@ -1130,35 +1266,45 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
         return False
 
     assert CLANG_PATH is not None
-    assert MINGW_GCC is not None
+
+    if IS_WINDOWS:
+        assert MINGW_GCC is not None
+        MINGW_SYSROOT = os.path.dirname(os.path.dirname(MINGW_GCC))
+        CLANG_TARGET  = "x86_64-w64-mingw32"
+    elif IS_MACOS:
+        MINGW_SYSROOT = None
+        CLANG_TARGET  = "x86_64-apple-darwin"
+    else:
+        MINGW_SYSROOT = None
+        CLANG_TARGET  = "x86_64-linux-gnu"
     
-    MINGW_SYSROOT = os.path.dirname(os.path.dirname(MINGW_GCC))
-    CLANG_TARGET  = "x86_64-w64-mingw32"
+    clang_target, mingw_sysroot = get_clang_flags()
+    def base_clang_flags():
+        flags = ["-O2", "-march=native", "-flto", "-target", clang_target]
+        if mingw_sysroot:
+            flags += ["--sysroot", mingw_sysroot]
+        return flags
 
     # Compile C runtime
     if needs_recompile(RUNTIME_C, RUNTIME_OBJ):
-        result = subprocess.run(
-            [CLANG_PATH, "-O2", "-march=native", "-flto", "-c", RUNTIME_C, "-o", RUNTIME_OBJ,
-             "-target", CLANG_TARGET,
-             "--sysroot", MINGW_SYSROOT,
-             f"-I{LUA_INCLUDE}",
-             f"-I{WREN_INCLUDE}"],
-            capture_output=True, text=True, encoding='utf-8'
-        )
+        runtime_compile_cmd = [CLANG_PATH] + base_clang_flags() + ["-c", RUNTIME_C, "-o", RUNTIME_OBJ]
+        if needs_lua:
+            runtime_compile_cmd += [f"-I{LUA_INCLUDE}", "-DMOCHA_WITH_LUA"]
+        if needs_wren:
+            runtime_compile_cmd += [f"-I{WREN_INCLUDE}", "-DMOCHA_WITH_WREN"]
+        result = subprocess.run(runtime_compile_cmd, capture_output=True, text=True, encoding='utf-8')
         if result.returncode != 0:
             print(f"  ❌ runtime compile failed:\n{result.stderr}")
             return False
     else:
         print("  ⚡ runtime cached", flush=True)
-    
+
     # Compile C++ file
     if os.path.exists(CPP_FILE):
         if needs_recompile(CPP_FILE, CPP_OBJ):
+            clangpp = CLANG_PATH.replace("clang.exe", "clang++.exe") if IS_WINDOWS else CLANG_PATH.replace("clang", "clang++")
             result = subprocess.run(
-                [CLANG_PATH.replace("clang.exe", "clang++.exe"),
-                "-O2", "-march=native", "-flto", "-c", CPP_FILE, "-o", CPP_OBJ,
-                "-target", CLANG_TARGET,
-                "--sysroot", MINGW_SYSROOT],
+                [clangpp] + base_clang_flags() + ["-c", CPP_FILE, "-o", CPP_OBJ],
                 capture_output=True, text=True, encoding='utf-8'
             )
             if result.returncode != 0:
@@ -1170,9 +1316,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
     # Compile sqlite3
     if needs_recompile(SQLITE3_C, SQLITE3_OBJ):
         result = subprocess.run(
-            [CLANG_PATH, "-O2", "-march=native", "-flto", "-c", SQLITE3_C, "-o", SQLITE3_OBJ,
-            "-target", CLANG_TARGET,
-            "--sysroot", MINGW_SYSROOT],
+            [CLANG_PATH] + base_clang_flags() + ["-c", SQLITE3_C, "-o", SQLITE3_OBJ],
             capture_output=True, text=True, encoding='utf-8'
         )
         if result.returncode != 0:
@@ -1180,28 +1324,31 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
             return False
     else:
         print("  ⚡ sqlite3 cached", flush=True)
-    
+
     # Compile Wren
-    if needs_recompile(WREN_C, WREN_OBJ):
-        result = subprocess.run(
-            [CLANG_PATH, "-O2", "-march=native", "-flto", "-c", WREN_C, "-o", WREN_OBJ,
-            "-target", CLANG_TARGET,
-            "--sysroot", MINGW_SYSROOT,
-            f"-I{WREN_INCLUDE}"],
-            capture_output=True, text=True, encoding='utf-8'
-        )
-        if result.returncode != 0:
-            print(f"  ❌ wren compile failed:\n{result.stderr}")
-            return False
-    else:
-        print("  ⚡ wren cached", flush=True)
+    if needs_wren:
+        if needs_recompile(WREN_C, WREN_OBJ):
+            result = subprocess.run(
+                [CLANG_PATH] + base_clang_flags() + ["-c", WREN_C, "-o", WREN_OBJ, f"-I{WREN_INCLUDE}"],
+                capture_output=True, text=True, encoding='utf-8'
+            )
+            if result.returncode != 0:
+                print(f"  ❌ wren compile failed:\n{result.stderr}")
+                return False
+        else:
+            print("  ⚡ wren cached", flush=True)
 
     # Compile Zig
-    if needs_recompile("zig_ffi.zig", "zig_ffi.lib"):
+    zig_src = os.path.join(SCRIPT_DIR, "zig_ffi.zig")
+    zig_out = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "zig_ffi.a")
+    if needs_recompile(zig_src, zig_out):
+        zig_target = "x86_64-windows-gnu" if IS_WINDOWS else \
+                     "x86_64-macos-none"   if IS_MACOS  else \
+                     "x86_64-linux-gnu"
         result = subprocess.run(
             [ZIG_PATH, "build-lib", "zig_ffi.zig",
             "--zig-lib-dir", os.path.join(SCRIPT_DIR, "zig-lib"),
-            "-target", "x86_64-windows-gnu",
+            "-target", zig_target,
             "-O", "ReleaseFast"],
             capture_output=True, text=True, encoding='utf-8',
             cwd=SCRIPT_DIR
@@ -1215,14 +1362,13 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
     # Compile IR to object file
     obj_file = f"{output_name}.o"
     result = subprocess.run(
-        [CLANG_PATH, "-O2", "-march=native", "-flto", "-c", ll_file, "-o", obj_file,
-         "-target", CLANG_TARGET,
-         "--sysroot", MINGW_SYSROOT],
+        [CLANG_PATH] + base_clang_flags() + ["-c", ll_file, "-o", obj_file],
         capture_output=True, text=True, encoding='utf-8'
     )
     if result.returncode != 0:
         print(f"  ❌ clang failed:\n{result.stderr}")
         return False
+
 
     # Detect which FFI libs are actually needed
     with open(ll_file, 'r', encoding='utf-8') as f:
@@ -1232,100 +1378,146 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
     needs_cpp  = 'mocha_cpp_'  in ir_content
     needs_zig  = 'mocha_zig_'  in ir_content
     needs_cuda = 'mocha_tensor_' in ir_content or 'mocha_cuda_' in ir_content
+    needs_lua  = 'mocha_lua_'  in ir_content   # ← confirm at IR level too
+    needs_wren = 'mocha_wren_' in ir_content   # ← confirm at IR level too
 
-    exe_file = f"{output_name}.exe"
+    exe_file = f"{output_name}{EXE_EXT}"
 
     if needs_cuda:
-        msvc_bin  = os.path.dirname(MSVC_CL)
-        cuda_env  = os.environ.copy()
-        cuda_env["PATH"] = msvc_bin + os.pathsep + cuda_env["PATH"]
+        if IS_WINDOWS:
+            # Windows CUDA path — MSVC COFF format required by nvcc
+            msvc_bin  = os.path.dirname(MSVC_CL)
+            cuda_env  = os.environ.copy()
+            cuda_env["PATH"] = msvc_bin + os.pathsep + cuda_env["PATH"]
 
-        # Recompile IR → MSVC COFF
-        msvc_obj = f"{output_name}_msvc.obj"
-        result = subprocess.run(
-            [CLANG_PATH, "-O2", "-c", ll_file, "-o", msvc_obj,
-             "-target", "x86_64-pc-windows-msvc"],
-            capture_output=True, text=True, encoding='utf-8'
-        )
-        if result.returncode != 0:
-            print(f"  ❌ msvc IR compile failed:\n{result.stderr}")
-            return False
-
-        # Recompile runtime → MSVC COFF
-        msvc_runtime_obj = os.path.join(SCRIPT_DIR, "mocha_runtime_msvc.obj")
-        if needs_recompile(RUNTIME_C, msvc_runtime_obj):
+            # Recompile IR → MSVC COFF
+            msvc_obj = f"{output_name}_msvc.obj"
             result = subprocess.run(
-                [CLANG_PATH, "-O2", "-c", RUNTIME_C, "-o", msvc_runtime_obj,
-                 "-target", "x86_64-pc-windows-msvc",
-                 f"-I{LUA_INCLUDE}", f"-I{WREN_INCLUDE}"],
-                capture_output=True, text=True, encoding='utf-8'
-            )
-            if result.returncode != 0:
-                print(f"  ❌ msvc runtime compile failed:\n{result.stderr}")
-                return False
-
-        # Recompile sqlite3 → MSVC COFF
-        msvc_sqlite_obj = os.path.join(SCRIPT_DIR, "sqlite3_msvc.obj")
-        if needs_recompile(SQLITE3_C, msvc_sqlite_obj):
-            result = subprocess.run(
-                [CLANG_PATH, "-O2", "-c", SQLITE3_C, "-o", msvc_sqlite_obj,
+                [CLANG_PATH, "-O2", "-c", ll_file, "-o", msvc_obj,
                  "-target", "x86_64-pc-windows-msvc"],
                 capture_output=True, text=True, encoding='utf-8'
             )
             if result.returncode != 0:
-                print(f"  ❌ msvc sqlite3 compile failed:\n{result.stderr}")
+                print(f"  ❌ msvc IR compile failed:\n{result.stderr}")
                 return False
 
-        # Recompile Wren → MSVC COFF
-        msvc_wren_obj = os.path.join(SCRIPT_DIR, "wren_msvc.obj")
-        if needs_recompile(WREN_C, msvc_wren_obj):
-            result = subprocess.run(
-                [CLANG_PATH, "-O2", "-c", WREN_C, "-o", msvc_wren_obj,
-                 "-target", "x86_64-pc-windows-msvc",
-                 f"-I{WREN_INCLUDE}"],
-                capture_output=True, text=True, encoding='utf-8'
-            )
-            if result.returncode != 0:
-                print(f"  ❌ msvc wren compile failed:\n{result.stderr}")
-                return False
-        
-        # Recompile lib objects to MSVC COFF format using their .ll files
-        msvc_link_objects = []
-        for obj in link_objects:
-            msvc_obj_path = obj.replace(".o", "_msvc.obj")
-            ll_path = obj.replace(".o", ".ll")
-            if os.path.exists(ll_path):
-                if needs_recompile(ll_path, msvc_obj_path):
+            # Recompile runtime → MSVC COFF
+            msvc_runtime_obj = os.path.join(SCRIPT_DIR, "mocha_runtime_msvc.obj")
+            if needs_recompile(RUNTIME_C, msvc_runtime_obj):
+                msvc_runtime_cmd = [
+                    CLANG_PATH, "-O2", "-c", RUNTIME_C, "-o", msvc_runtime_obj,
+                    "-target", "x86_64-pc-windows-msvc",
+                ]
+                if needs_lua:
+                    msvc_runtime_cmd += [f"-I{LUA_INCLUDE}", "-DMOCHA_WITH_LUA"]
+                if needs_wren:
+                    msvc_runtime_cmd += [f"-I{WREN_INCLUDE}", "-DMOCHA_WITH_WREN"]
+                result = subprocess.run(msvc_runtime_cmd, capture_output=True, text=True, encoding='utf-8')
+                if result.returncode != 0:
+                    print(f"  ❌ msvc runtime compile failed:\n{result.stderr}")
+                    return False
+
+            # Recompile sqlite3 → MSVC COFF
+            msvc_sqlite_obj = os.path.join(SCRIPT_DIR, "sqlite3_msvc.obj")
+            if needs_recompile(SQLITE3_C, msvc_sqlite_obj):
+                result = subprocess.run(
+                    [CLANG_PATH, "-O2", "-c", SQLITE3_C, "-o", msvc_sqlite_obj,
+                     "-target", "x86_64-pc-windows-msvc"],
+                    capture_output=True, text=True, encoding='utf-8'
+                )
+                if result.returncode != 0:
+                    print(f"  ❌ msvc sqlite3 compile failed:\n{result.stderr}")
+                    return False
+
+            # Recompile Wren → MSVC COFF
+            if needs_wren:
+                msvc_wren_obj = os.path.join(SCRIPT_DIR, "wren_msvc.obj")
+                if needs_recompile(WREN_C, msvc_wren_obj):
                     result = subprocess.run(
-                        [CLANG_PATH, "-O2", "-c", ll_path, "-o", msvc_obj_path,
-                        "-target", "x86_64-pc-windows-msvc"],
+                        [CLANG_PATH, "-O2", "-c", WREN_C, "-o", msvc_wren_obj,
+                         "-target", "x86_64-pc-windows-msvc",
+                         f"-I{WREN_INCLUDE}"],
                         capture_output=True, text=True, encoding='utf-8'
                     )
                     if result.returncode != 0:
-                        print(f"  ❌ msvc lib compile failed for {obj}:\n{result.stderr}")
+                        print(f"  ❌ msvc wren compile failed:\n{result.stderr}")
                         return False
-            else:
-                print(f"  ⚠️  No .ll for {obj}, using MinGW .o (may fail)")
-                msvc_obj_path = obj
-            msvc_link_objects.append(msvc_obj_path)
 
-        # Link everything with nvcc
-        cuda_link_cmd = [
-            NVCC_PATH, "-O2", "-arch=sm_86",
-            msvc_obj, msvc_runtime_obj, msvc_sqlite_obj,
-            msvc_wren_obj, CUDA_OBJ,
-        ] + msvc_link_objects + [
-            "-o", exe_file,
-            f"-L{CUDA_LIB_DIR}",
-            "-lcublas", "-lcudart",
-            LUA_MSVC_LIB,
-            CLANG_RT_LIB,
-        ]
-        result = subprocess.run(cuda_link_cmd, capture_output=True, text=True,
-                                encoding='utf-8', env=cuda_env)
-        if result.returncode != 0:
-            print(f"  ❌ cuda linking failed:\n{result.stderr}\n{result.stdout}")
-            return False
+            # Recompile lib objects → MSVC COFF
+            msvc_link_objects = []
+            for obj in link_objects:
+                msvc_obj_path = obj.replace(".o", "_msvc.obj")
+                ll_path = obj.replace(".o", ".ll")
+                if os.path.exists(ll_path):
+                    if needs_recompile(ll_path, msvc_obj_path):
+                        result = subprocess.run(
+                            [CLANG_PATH, "-O2", "-c", ll_path, "-o", msvc_obj_path,
+                            "-target", "x86_64-pc-windows-msvc"],
+                            capture_output=True, text=True, encoding='utf-8'
+                        )
+                        if result.returncode != 0:
+                            print(f"  ❌ msvc lib compile failed for {obj}:\n{result.stderr}")
+                            return False
+                else:
+                    print(f"  ⚠️  No .ll for {obj}, using MinGW .o (may fail)")
+                    msvc_obj_path = obj
+                msvc_link_objects.append(msvc_obj_path)
+
+            # Link with nvcc on Windows
+            cuda_link_cmd = [
+                NVCC_PATH, "-O2", "-arch=sm_86",
+                msvc_obj, msvc_runtime_obj, msvc_sqlite_obj,
+                CUDA_OBJ,
+            ]
+            if needs_wren:
+                cuda_link_cmd.append(msvc_wren_obj)
+            cuda_link_cmd += msvc_link_objects + [
+                "-o", exe_file,
+                f"-L{CUDA_LIB_DIR}",
+                "-lcublas", "-lcudart",
+                CLANG_RT_LIB,
+            ]
+            if needs_lua:
+                cuda_link_cmd.append(LUA_MSVC_LIB)
+
+            result = subprocess.run(cuda_link_cmd, capture_output=True, text=True,
+                                    encoding='utf-8', env=cuda_env)
+            if result.returncode != 0:
+                print(f"  ❌ cuda linking failed:\n{result.stderr}\n{result.stdout}")
+                return False
+
+        else:
+            # Linux/macOS CUDA path — ELF objects, no MSVC dance needed
+            cuda_obj = f"{output_name}_cuda.o"
+            result = subprocess.run(
+                [CLANG_PATH] + base_clang_flags() + ["-c", ll_file, "-o", cuda_obj],
+                capture_output=True, text=True, encoding='utf-8'
+            )
+            if result.returncode != 0:
+                print(f"  ❌ cuda IR compile failed:\n{result.stderr}")
+                return False
+
+            cuda_link_cmd = [
+                NVCC_PATH, "-O2", "-arch=sm_86",
+                cuda_obj, RUNTIME_OBJ, SQLITE3_OBJ,
+                CUDA_OBJ,
+            ]
+            if needs_wren:
+                cuda_link_cmd.append(WREN_OBJ)
+            cuda_link_cmd += link_objects + [
+                "-o", exe_file,
+                f"-L{CUDA_LIB_DIR}",
+                "-lcublas", "-lcudart",
+            ]
+            if needs_lua:
+                cuda_link_cmd.append(LUA_LIB)
+
+            result = subprocess.run(cuda_link_cmd, capture_output=True, text=True,
+                                    encoding='utf-8')
+            if result.returncode != 0:
+                print(f"  ❌ cuda linking failed:\n{result.stderr}\n{result.stdout}")
+                return False
+
         print("  ⚡ Linked with CUDA")
 
     else:
@@ -1337,28 +1529,40 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
         if needs_cpp:
             link_cmd.append(CPP_OBJ)
 
-        link_cmd += link_objects + [
-            "-o", exe_file,
-            "-target", CLANG_TARGET,
-            "--sysroot", MINGW_SYSROOT,
-            "-fuse-ld=lld",
-            "-lm",
-            "-lbcrypt",
-            LUA_LIB,
-            WREN_OBJ
-        ]
+        link_cmd += link_objects + ["-o", exe_file]
+        link_cmd += ["-target", CLANG_TARGET]
 
+        if IS_WINDOWS:
+            link_cmd += [
+                "--sysroot", MINGW_SYSROOT,
+                "-fuse-ld=lld",
+                "-lm",
+                "-lbcrypt",
+            ]
+        else:
+            link_cmd += [
+                "-fuse-ld=lld",
+                "-lm",
+            ]
+
+        if needs_lua:
+            link_cmd.append(LUA_LIB)
+        if needs_wren:
+            link_cmd.append(WREN_OBJ)
         if needs_rust:
             link_cmd.append(RUST_LIB)
         if needs_zig:
             link_cmd.append(ZIG_LIB)
 
-        link_cmd += ["-lgcc_eh", "-lgcc"]
+        if IS_WINDOWS:
+            link_cmd += ["-lgcc_eh", "-lgcc"]
 
         result = subprocess.run(link_cmd, capture_output=True, text=True, encoding='utf-8')
         if result.returncode != 0:
             print(f"  ❌ linking failed:\n{result.stderr}\n{result.stdout}")
             return False
+        else:
+            print(f"✅ Linking succeeded!")
 
     # Sign the executable
     print("  🔏 Signing executable...")
@@ -1370,7 +1574,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
     elif sign_result == "expired":
         print(f"  ⚠️  MochaLang cert expired — run setup_cert.ps1 to renew it")
     else:
-        print(f"  ⚠️  Signing skipped")
+        print(f"  ⚠️  Signing skipped due to powershell internal issue or you might be on Linux/Macintosh.")
 
     print(f"  ✅ Generated {exe_file}\n")
     print(f"🎉 Compilation successful!")
@@ -1399,7 +1603,7 @@ if __name__ == "__main__":
         if len(args) < 3:
             print("Usage: mocha --lib <libfile.mch>")
             sys.exit(1)
-        success = compile_lib(args[2])
+        success = compile_lib_with_deps(args[2])
         sys.exit(0 if success else 1)
 
     source_file = args[1]

@@ -16,20 +16,13 @@ function c_day_now() -> str native mocha_wrap_day_now;
 function c_month_now() -> str native mocha_wrap_month_now;
 function c_year_now() -> str native mocha_wrap_year_now;
 function c_wall_ms() -> float native mocha_wrap_wall_ms;
+function c_wait_ms(ms: float) -> null native mocha_stopwatch_wait;
 
 // ── Raw timestamp functions ──
 
-function now_ms() -> float {
-    return c_time_ms();
-};
-
-function wall_ms() -> float {
-    return c_wall_ms();
-};
-
-function unix_time() -> float {
-    return c_unix_time();
-};
+function now_ms() -> float { return c_time_ms(); };
+function wall_ms() -> float { return c_wall_ms(); };
+function unix_time() -> float { return c_unix_time(); };
 
 // ── Human readable datetime ──
 
@@ -130,5 +123,14 @@ class Stopwatch {
 
     function is_running() -> bool {
         return this.running == 1;
+    };
+
+    function wait(ms: float) -> null {
+        if (ms < 0.0) {
+            c_print_err("MochaStopwatchError: wait() called with negative duration.");
+            c_exit(2);
+            return;
+        };
+        c_wait_ms(ms);
     };
 };

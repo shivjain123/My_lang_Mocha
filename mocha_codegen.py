@@ -705,18 +705,17 @@ class CodeGen:
         raise MochaCodeGenError(f"Cannot generate code for: {type(node).__name__}", node.line, node.col)
     
     def box_value(self, val_reg: str, val_type: str) -> str:
-        if val_type == "i8*":
-            slot = self.fresh_temp()  # unique name every time
-            self.entry_allocas.append(f"  {slot} = alloca i8*")  # goes to entry block
-            self.emit(f"  store i8* {val_reg}, i8** {slot}")
-            return slot
-        # original unchanged
-        slot = self.fresh_temp()
+        size = {"i32": 4, "double": 8, "i8": 1, "i64": 8, "i8*": 8}.get(val_type, 8)
+        ptr  = self.fresh_temp()
         cast = self.fresh_temp()
-        self.emit(f"  {slot} = alloca {val_type}")
-        self.emit(f"  store {val_type} {val_reg}, {val_type}* {slot}")
-        self.emit(f"  {cast} = bitcast {val_type}* {slot} to i8*")
-        return cast
+        self.emit(f"  {ptr} = call i8* @malloc(i64 {size})")
+        if val_type == "i8*":
+            self.emit(f"  {cast} = bitcast i8* {ptr} to i8**")
+            self.emit(f"  store i8* {val_reg}, i8** {cast}")
+        else:
+            self.emit(f"  {cast} = bitcast i8* {ptr} to {val_type}*")
+            self.emit(f"  store {val_type} {val_reg}, {val_type}* {cast}")
+        return ptr
 
     def gen_int_literal(self, node):
         tmp = self.fresh_temp()
@@ -1174,6 +1173,35 @@ class CodeGen:
             
             return (tmp, "i1")
 
+        # --- BITWISE OPS ---
+        bitwise_map = {
+            "int_bit_and": ("and", "i32"),
+            "int_bit_or":  ("or",  "i32"),
+            "int_bit_xor": ("xor", "i32"),
+            "int_bit_shl": ("shl", "i32"),
+            "int_bit_shr": ("ashr","i32"),
+            "vast_bit_and": ("and", "i64"),
+            "vast_bit_or":  ("or",  "i64"),
+            "vast_bit_xor": ("xor", "i64"),
+            "vast_bit_shl": ("shl", "i64"),
+            "vast_bit_shr": ("ashr","i64"),
+        }
+
+        if op_kind in bitwise_map:
+            instr, llvm_type = bitwise_map[op_kind]
+            # promote i32 → i64 if vast
+            if llvm_type == "i64":
+                if left_type == "i32":
+                    p = self.fresh_temp()
+                    self.emit(f"  {p} = sext i32 {left_reg} to i64")
+                    left_reg = p
+                if right_type == "i32":
+                    p = self.fresh_temp()
+                    self.emit(f"  {p} = sext i32 {right_reg} to i64")
+                    right_reg = p
+            self.emit(f"  {tmp} = {instr} {llvm_type} {left_reg}, {right_reg}")
+            return (tmp, llvm_type)
+
         # --- FALLBACK ---
         raise MochaCodeGenError(f"Unknown binary operator: '{op_kind}'", node.line, node.col)
 
@@ -1191,6 +1219,14 @@ class CodeGen:
             else:
                 self.emit(f"  {tmp} = sub i32 0, {right_reg}")
             return (tmp, right_type)
+        
+        if node.op == "~":
+            if right_type == "i64":
+                self.emit(f"  {tmp} = xor i64 {right_reg}, -1")
+                return (tmp, "i64")
+            else:
+                self.emit(f"  {tmp} = xor i32 {right_reg}, -1")
+                return (tmp, "i32")
         raise MochaCodeGenError(f"Unknown unary operator: '{node.op}'", node.line, node.col)
 
     def resolve_lvalue_ptr(self, node):
@@ -2090,6 +2126,45 @@ class CodeGen:
         elif isinstance(obj, StrLiteral):
             obj_reg, obj_type = self.gen_expr(obj)
             return self.gen_str_method_call(obj_reg, member, node)
+    
+    def compute_struct_size(self, class_name: str, visited=None) -> int:
+        """
+        Compute the byte size of a Mocha class struct by summing its fields.
+        Recurses into parent classes for inherited fields.
+        Rounds up to 16-byte alignment.
+        """
+        if visited is None:
+            visited = set()
+        if class_name in visited:
+            return 0
+        visited.add(class_name)
+
+        LLVM_SIZES = {
+            "i1":     1,
+            "i8":     1,
+            "i32":    4,
+            "i64":    8,
+            "double": 8,
+            "i8*":    8,   # pointer
+        }
+
+        fields = self.class_fields.get(class_name, [])
+        size = 0
+        for field_name, llvm_type in fields:
+            if llvm_type in LLVM_SIZES:
+                size += LLVM_SIZES[llvm_type]
+            elif llvm_type.startswith("%struct."):
+                size += 8   # struct pointer
+            elif llvm_type.startswith("["):
+                # fixed array type e.g. [4 x i32] — rare in Mocha but handle it
+                size += 8   # treat as pointer
+            else:
+                size += 8   # safe default for unknown pointer types
+
+        # 16-byte alignment
+        size = ((size + 15) // 16) * 16
+        # minimum 16 bytes even for empty structs
+        return max(size, 16)
 
     def gen_function_call(self, node):
         # -------------------------------------------------------
@@ -2313,6 +2388,7 @@ class CodeGen:
 
         # -------------------------------------------------------
         # Step 4: Constructor call
+        # Since step 3b has intercepted the customs ones, now normal ones follow
         # -------------------------------------------------------
         if is_constructor_candidate and func_name in self.classes_with_constructors:
             class_name      = func_name
@@ -2321,9 +2397,10 @@ class CodeGen:
             raw  = self.fresh_temp()
             obj  = self.fresh_temp()
             size = self.fresh_temp()
-            self.emit(f"  {size} = add i64 0, 1024  ; sizeof {class_name}")
+            computed = self.compute_struct_size(class_name) # type: ignore
+            self.emit(f"  {size} = add i64 0, {computed}  ; sizeof {class_name}")
             self.emit(f"  {raw} = call i8* @malloc(i64 {size})")
-            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 1024, i1 false)")  # ← ADD THIS
+            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 {computed}, i1 false)")
             self.emit(f"  {obj} = bitcast i8* {raw} to {struct_ptr_type}")
             args.insert(0, (obj, struct_ptr_type))
             arg_str = ", ".join(f"{t} {r}" for r, t in args)
@@ -2335,7 +2412,8 @@ class CodeGen:
             raw  = self.fresh_temp()
             obj  = self.fresh_temp()
             size = self.fresh_temp()
-            self.emit(f"  {size} = add i64 0, 64  ; sizeof {func_name}")
+            computed = self.compute_struct_size(func_name) # type: ignore
+            self.emit(f"  {size} = add i64 0, {computed}  ; sizeof {func_name}")
             self.emit(f"  {raw} = call i8* @malloc(i64 {size})")
             self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 64, i1 false)")
             self.emit(f"  {obj} = bitcast i8* {raw} to {struct_ptr_type}")
@@ -2361,7 +2439,7 @@ class CodeGen:
             return (obj, struct_ptr_type)
 
         # -------------------------------------------------------
-        # Step 4b: Global lib functions (syntax 2/3 imports)
+        # Step 5: Global lib functions (syntax 2/3 imports)
         # -------------------------------------------------------
         if func_name in self.lib_functions:
             entry = self.lib_functions[func_name]
@@ -2392,7 +2470,7 @@ class CodeGen:
                 return (tmp, llvm_ret)
 
         # -------------------------------------------------------
-        # Step 5: Normal function call
+        # Step 6: Normal function call
         # -------------------------------------------------------
         tmp      = self.fresh_temp()
         arg_str  = ", ".join(f"{t} {r}" for r, t in args)
@@ -2490,7 +2568,7 @@ class CodeGen:
         return ("void", "void")
     
     # -------------------------------------------------------
-    # Sorting (Merge+Slct, N=16)!
+    # Sorting (Merge+Select, N=16)!
     # -------------------------------------------------------
 
     def gen_sort(self, args: list, node) -> tuple:
@@ -2903,13 +2981,18 @@ class CodeGen:
             self.gen_var_decl(node)
 
     def gen_assignment(self, node):
-        val_reg, val_type = self.gen_expr(node.value)
 
         if isinstance(node.target, Identifier):
             if node.target.name not in self.locals:
                 raise MochaCodeGenError(f"Assignment to undeclared variable '{node.target.name}'", node.line, node.col)
             ptr, llvm_type = self.locals[node.target.name]
-            
+
+            # Set expected type from the variable's declared Mocha type,
+            # so array-literal RHS (e.g. x = []) infers element size correctly
+            self.expected_assign_type = self.local_mocha_types.get(node.target.name)
+            val_reg, val_type = self.gen_expr(node.value)
+            self.expected_assign_type = None
+
             # Coerce value type to match the target variable's declared type.
             # This handles cases where expressions return a different LLVM type
             # than what the variable expects — common with lambda returns (always i8)
@@ -2958,7 +3041,21 @@ class CodeGen:
             if not (obj_type.startswith("%struct.") and obj_type.endswith("*")):
                 return
             class_name = obj_type[len("%struct."):-1]
-            fields     = self.class_fields.get(class_name, [])
+
+            # Look up the field's declared Mocha type (e.g. "int[]") so that
+            # array-literal RHS (this.field = []) infers element size correctly
+            mocha_fields = self.class_mocha_fields.get(class_name, [])
+            field_mocha_type = None
+            for fname, ftype in mocha_fields:
+                if fname == node.target.member:
+                    field_mocha_type = ftype
+                    break
+
+            self.expected_assign_type = field_mocha_type
+            val_reg, val_type = self.gen_expr(node.value)
+            self.expected_assign_type = None
+
+            fields = self.class_fields.get(class_name, [])
             for idx, (fname, ftype) in enumerate(fields):
                 if fname == node.target.member:
                     llvm_ftype = ftype if ftype.startswith("%") or ftype in ("i32", "i64", "double", "i8", "i8*", "void") else to_llvm_type(ftype) # ← convert here
@@ -2977,6 +3074,7 @@ class CodeGen:
 
         # --- Index assignment: arr[i] = value ---
         elif isinstance(node.target, IndexAccess):
+            val_reg, val_type = self.gen_expr(node.value)
             arr_reg, _ = self.gen_expr(node.target.obj)
             idx_reg, _ = self.gen_expr(node.target.index)
             elem_llvm  = val_type

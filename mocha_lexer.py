@@ -1,6 +1,101 @@
 # ============================================================
-# Mocha Language Lexer v0.2
+# Mocha Language Lexer v0.9
+# mocha_lexer.py
+#
 # Converts raw Mocha source code into a stream of tokens
+#
+# ============================================================
+#
+#   ── Token Types ────────────────────────────────────────────
+#   Comprehensive token catalog covering:
+#     - Literals: INT_LIT, FLOAT_LIT, STR_LIT, BOOL_LIT,
+#       COMPLEX_LIT (with 'im' suffix), NULL
+#     - Identifiers: IDENTIFIER, CONST_IDENT (SCREAMING_CASE),
+#       NATIVE
+#     - Keywords: 50+ reserved words (var, function, class,
+#       if, while, for, import, try, etc.)
+#     - Types: int, vast, float, str, bool, Result, dict, set
+#     - Operators: arithmetic, comparison, logical, bitwise,
+#       compound assignment (+=, -=, etc.), increment/decrement
+#     - Delimiters: (), {}, [], comma, colon, semicolon, dot,
+#       hash (#)
+#     - Special: ARROW (->), RANGE (..), DOC_COMMENT (~~),
+#       EOF
+#
+#   ── Number Lexing ──────────────────────────────────────────
+#   - Integers and floats (3.14, 1E10, 2.5E-3 all valid)
+#   - Scientific notation with UPPERCASE E ONLY — lowercase 'e'
+#     raises explicit error guiding user to Mocha convention
+#     (consistency across codebase; prevents silent misparse)
+#   - Underscores for readability (1_000_000 → stored as
+#     1000000; validation: underscores only between digits,
+#     never leading/trailing/consecutive)
+#   - Complex numbers via imaginary suffix: 3im, 2.5im
+#     (stored with TokenType.COMPLEX_LIT)
+#   - Compile-time error on malformed numbers (e.g. 1.2.3,
+#     E with no exponent digits)
+#
+#   ── String Lexing ──────────────────────────────────────────
+#   - Double-quoted literals only ("hello", "line\nbreak")
+#   - Escape sequences: \n, \t, \\, \" (others preserved
+#     verbatim: \x → stored as \x)
+#   - No single-quoted chars ('a') — explicit error directing
+#     to strings ("a"); char-literal syntax is foreign to
+#     Mocha's vision and confuses intent
+#   - Unterminated string → compile error with line/col
+#   - Multiline strings via triple quotes ("""...""")
+#   - No raw string prefix (r"..."); raw behavior via explicit
+#     escape handling in string methods (mocha-string)
+#
+#   ── Comments ───────────────────────────────────────────────
+#   - Single-line: // comment (ignored, not tokenized)
+#   - Doc comments: ~~ docstring (tokenized as DOC_COMMENT,
+#     passed to docs generator; file-top-level only per spec)
+#   - Multiline: """comment""" (ignored, not tokenized)
+#   - Nesting not supported (first closing """ ends comment)
+#
+#   ── Identifiers & Keywords ─────────────────────────────────
+#   - Identifiers: alphanumeric + underscore, leading letter
+#     or underscore (standard)
+#   - CONST_IDENT detection: all uppercase, letters + digits +
+#     underscores, at least one letter (signals Tag members,
+#     module constants to type checker)
+#   - Keyword map: 50+ reserved words mapped at lex time
+#     (immutable; no user-defined keywords)
+#   - Reserved words case-sensitive (If, CLASS rejected as
+#     identifiers — user must use lowercase keywords)
+#
+#   ── Operators ──────────────────────────────────────────────
+#   - Arithmetic: + - * / %
+#   - Comparison: < > <= >=
+#   - Equality: == !=
+#   - Logical: && ||, ! (not compound from & and |)
+#   - Bitwise: & | ^ ~ << >>
+#   - Compound assignment: += -= *= /=
+#   - Increment/decrement: ++ --
+#   - Function arrow: ->
+#   - Range operator: ..
+#   - All two-char operators detected via lookahead (match_char)
+#   - No ** operator — scientific notation uses E, exponentiation
+#     via fast_pow(base, exp_int) or c_pow(base, exp_float)
+#
+#   ── Error Reporting ────────────────────────────────────────
+#   - MochaLexError class: line/column pinpointing, message +
+#     context (e.g. "Single-quoted char literals not supported;
+#     use double-quoted strings")
+#   - Compile fails fast on syntax error; no error recovery
+#   - Unicode non-ASCII characters silently skipped (emoji in
+#     comments, etc.); raises error only on non-printable
+#     ASCII (ord(ch) < 127 check)
+#
+#   ── Special Cases ──────────────────────────────────────────
+#   - Whitespace: space, tab, CR, LF all consumed; NL bumps
+#     line counter, resets column to 1
+#   - Position tracking: line, column maintained for all tokens
+#     (enables type checker to report errors at exact location)
+#   - No automatic semicolon insertion (explicit ; required)
+#   - No string interpolation (use .format(...) from mocha-string)
+#
 # ============================================================
 
 from enum import Enum, auto
@@ -109,6 +204,13 @@ class TokenType(Enum):
     OR           = auto()   # ||
     NOT          = auto()   # !
     RANGE        = auto()   # ..
+    #Bitwise
+    BIT_AND      = auto()   # &
+    BIT_OR       = auto()   # |
+    BIT_XOR      = auto()   # ^
+    BIT_NOT      = auto()   # ~
+    BIT_SHL      = auto()   # 
+    BIT_SHR      = auto()   # >>
 
     # --- Increment / Decrement ---
     PLUS_PLUS    = auto()   # ++
@@ -145,7 +247,6 @@ class TokenType(Enum):
     EXTEND       = auto()
     TAG = auto()            # My Enum!
     DOC_COMMENT = auto ()
-    MUST = auto()
 
 
 # ============================================================
@@ -209,7 +310,6 @@ KEYWORDS = {
     "rescue":     TokenType.RESCUE,
     "fail":       TokenType.FAIL,
     "rethrow":    TokenType.RETHROW,
-    "must":       TokenType.MUST
 }
 
 # ============================================================
@@ -356,7 +456,7 @@ class Lexer:
 
         self.advance()  # closing "
         return self.make_token(TokenType.STR_LIT, result, line, col)
-    
+
     # --- Lex number ---
 
     def lex_number(self, first: str, line, col) -> Token:
@@ -364,7 +464,7 @@ class Lexer:
         num = first
         is_float = False
 
-        while self.current() is not None and self.current().isdigit(): # pyright: ignore[reportOptionalMemberAccess]
+        while self.current() is not None and (self.current().isdigit() or self._is_valid_underscore()):# pyright: ignore[reportOptionalMemberAccess]
             num += self.advance()
 
         # Check for float: digit.digit (not ..)
@@ -374,8 +474,39 @@ class Lexer:
                 and self.peek().isdigit()): # pyright: ignore[reportOptionalMemberAccess]
             is_float = True
             num += self.advance()   # consume .
-            while self.current() is not None and self.current().isdigit(): # pyright: ignore[reportOptionalMemberAccess]
+            while self.current() is not None and (self.current().isdigit() or self._is_valid_underscore()): # pyright: ignore[reportOptionalMemberAccess]
                 num += self.advance()
+
+        # Check for scientific notation: 1.5E10, 2E-3, 3.14E+6
+        # Only uppercase E is accepted — Mocha convention
+        # Lowercase e — explicit error guiding user to uppercase E
+        if self.current() == 'e':
+            raise MochaLexError(
+                "Mocha enforces uppercase 'E' for scientific notation (e.g. 1.5E10, not 1.5e10)",
+                self.line, self.column
+            )
+
+        if self.current() == 'E':
+            next_ch = self.peek()
+            if next_ch is not None and (next_ch.isdigit() or next_ch in ('+', '-')):
+                is_float = True
+                num += self.advance()  # consume 'E'
+                # consume optional sign
+                if self.current() in ('+', '-'):
+                    num += self.advance()
+                # must have at least one digit after E / E+ / E-
+                if self.current() is not None and self.current().isdigit(): # pyright: ignore[reportOptionalMemberAccess]
+                    while self.current() is not None and self.current().isdigit(): # pyright: ignore[reportOptionalMemberAccess]
+                        num += self.advance()
+                else:
+                    # E with no digits after — not scientific notation, back off
+                    num = num[:-1]
+                    self.pos -= 1
+                    self.column -= 1
+                    is_float = False if '.' not in num else True
+
+        # Strip underscores before storing — they're purely for readability
+        num = num.replace("_", "")
 
         token_type = TokenType.FLOAT_LIT if is_float else TokenType.INT_LIT
 
@@ -384,8 +515,17 @@ class Lexer:
             self.advance()  # consume 'i'
             self.advance()  # consume 'm'
             return self.make_token(TokenType.COMPLEX_LIT, num, line, col)
-        
+
         return self.make_token(token_type, num, line, col)
+
+    def _is_valid_underscore(self) -> bool:
+        """ Underscore is valid only if surrounded by digits on both sides
+            (no leading/trailing/consecutive underscores) """
+        if self.current() != "_":
+            return False
+        prev = self.source[self.pos - 1] if self.pos > 0 else ""
+        nxt  = self.peek()
+        return prev.isdigit() and nxt is not None and nxt.isdigit()
 
     # --- Lex identifier or keyword ---
 
@@ -409,7 +549,7 @@ class Lexer:
 
         return self.make_token(TokenType.IDENTIFIER, word, line, col)
 
-    # --- Main tokenise loop ---
+    # --- Main Lexer loop ---
 
     def tokenise(self) -> list[Token]:
 
@@ -532,7 +672,10 @@ class Lexer:
                         self.make_token(TokenType.NOT, "!", line, col))
 
             elif ch == "<":
-                if self.match_char("="):
+                if self.match_char("<"):
+                    self.tokens.append(
+                        self.make_token(TokenType.BIT_SHL, "<<", line, col))
+                elif self.match_char("="):
                     self.tokens.append(
                         self.make_token(TokenType.LTE, "<=", line, col))
                 else:
@@ -540,7 +683,10 @@ class Lexer:
                         self.make_token(TokenType.LT, "<", line, col))
 
             elif ch == ">":
-                if self.match_char("="):
+                if self.match_char(">"):
+                    self.tokens.append(
+                        self.make_token(TokenType.BIT_SHR, ">>", line, col))
+                elif self.match_char("="):
                     self.tokens.append(
                         self.make_token(TokenType.GTE, ">=", line, col))
                 else:
@@ -552,20 +698,24 @@ class Lexer:
                     self.tokens.append(
                         self.make_token(TokenType.AND, "&&", line, col))
                 else:
-                    raise MochaLexError(
-                        "Single '&' is not valid in Mocha. Use '&&'",
-                        line, col
-                    )
+                    self.tokens.append(
+                        self.make_token(TokenType.BIT_AND, "&", line, col))
 
             elif ch == "|":
                 if self.match_char("|"):
                     self.tokens.append(
                         self.make_token(TokenType.OR, "||", line, col))
                 else:
-                    raise MochaLexError(
-                        "Single '|' is not valid in Mocha. Use '||'",
-                        line, col
-                    )
+                    self.tokens.append(
+                        self.make_token(TokenType.BIT_OR, "|", line, col))
+            
+            elif ch == "^":
+                self.tokens.append(
+                    self.make_token(TokenType.BIT_XOR, "^", line, col))
+            
+            elif ch == "~":
+                self.tokens.append(
+                    self.make_token(TokenType.BIT_NOT, "~", line, col))
 
             elif ch == ".":
                 if self.match_char("."):

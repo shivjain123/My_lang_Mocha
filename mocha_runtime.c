@@ -2,17 +2,27 @@
  * ============================================================
  * Mocha Language Runtime
  * mocha_runtime.c
+ * ============================================================
  *
- * Implements:
+ * PLATFORM SUPPORT
+ * ──────────────────────────────────────────────────────────
+ *   Windows / macOS / Linux, branched via #ifdef at:
+ *     - top-level includes
+ *     - Cryptographic RNG          (Windows: BCrypt | else: /dev/urandom or arc4random)
+ *     - Lua 5.5 + Wren FFI          (entire section gated; Windows | macOS | Linux)
+ *     - mocha-ink show()            (Windows: start | macOS: open | Linux: xdg-open)
+ *     - ctype wrapper: hypot
+ *     - stopwatch: wall_ms, wait    (Windows: QueryPerformanceCounter | macOS/Linux: clock_gettime)
+ *   Pattern: #ifdef _WIN32 → #elif defined(__APPLE__) → #else (Linux)
  *
- *   ── Memory Management ──────────────────────────────────────
+ * ── MEMORY MANAGEMENT ──────────────────────────────────────
  *   - Reference Counting (MochaRCHeader, rc_alloc/retain/release)
  *     Active for all heap allocations; replaces GC for strings.
  *   - Mark-and-Sweep GC (ORPHANED — codegen does not emit GC
  *     calls; kept as inert arena allocator for string literals
  *     pending full RC migration)
  *
- *   ── Core Types ─────────────────────────────────────────────
+ * ── CORE TYPES ─────────────────────────────────────────────
  *   - String operations (alloc via GC arena, concat, compare,
  *     case, charAt, length, isalpha/isdigit)
  *   - String formatting (.format — positional $0/$1 and named
@@ -26,7 +36,7 @@
  *   - Fixed-point arithmetic (scaled by 10^12, __int128
  *     overflow guard — add, sub, mul, div, mod)
  *
- *   ── Collections ────────────────────────────────────────────
+ * ── COLLECTIONS ────────────────────────────────────────────
  *   - 1D Array runtime (MochaArray — dynamic and fixed/alloc
  *     modes, push/pop/push_front, min/max, occs, copy, sort
  *     bridge, map_float straggler)
@@ -45,14 +55,14 @@
  *     toString, reverse with UTF-8 codepoint awareness,
  *     clear, length, free)
  *
- *   ── Sorting ────────────────────────────────────────────────
+ * ── SORTING ────────────────────────────────────────────────
  *   - Hybrid sort: selection sort (≤16 elems) + merge sort
  *   - Typed natural order:    sort_int, sort_float, sort_str
  *   - Simple comparator:      sort_{type}_cmp
  *   - Closure comparator:     sort_{type}_cmp_env
  *     (MochaClosureBundle — fn ptr + captured environment)
  *
- *   ── Math Extensions ────────────────────────────────────────
+ * ── MATH EXTENSIONS ────────────────────────────────────────
  *   - Trig: sin, cos, tan, cosec, sec, cot (rad/deg)
  *   - Inverse trig: inv_sin, inv_cos, inv_tan, inv_cosec,
  *     inv_sec, inv_cot (complex return on out-of-domain)
@@ -68,30 +78,32 @@
  *   - Numerical integral (adaptive Simpson's rule)
  *   - Limit (left/right average, h=1e-9) and limit_inf
  *
- *   ── Random ─────────────────────────────────────────────────
+ * ── RANDOM ─────────────────────────────────────────────────
  *   - Standard RNG (rand-based: rand_int, rand_vast,
  *     rand_float, rand_seed)
- *   - Cryptographic RNG (BCryptGenRandom — Windows only:
- *     bcrypt_rand_int, bcrypt_rand_float, bcrypt_rand_unit,
- *     bcrypt_rand_bool, bcrypt_rand_ints, bcrypt_rand_seed)
+ *   - Cryptographic RNG — Mocha-side renamed bcrypt_* → crypto_*
+ *     (C names unchanged: bcrypt_rand_int, bcrypt_rand_float,
+ *     bcrypt_rand_unit, bcrypt_rand_bool, bcrypt_rand_ints,
+ *     bcrypt_rand_seed; Windows: BCryptGenRandom |
+ *     macOS/Linux: platform-native secure source)
  *
- *   ── I/O ────────────────────────────────────────────────────
+ * ── I/O ────────────────────────────────────────────────────
  *   - File I/O (MochaFile — read/write/append, readline,
  *     exists; "read"/"write"/"append" mode strings)
  *   - tell() — blocking stdin input with optional prompt
  *
- *   ── Exception Handling ─────────────────────────────────────
+ * ── EXCEPTION HANDLING ─────────────────────────────────────
  *   - try/rescue/fail via setjmp/longjmp (Linux/macOS) and
  *     RtlCaptureContext/RtlRestoreContext (Windows)
  *   - Nested exception frames (MochaExFrame stack)
  *   - mocha_ex_throw, mocha_ex_rethrow, mocha_ex_push/pop
  *
- *   ── Runtime Stack Tracking ─────────────────────────────────
+ * ── RUNTIME STACK TRACKING ─────────────────────────────────
  *   - Call stack of 256 frames (func name, file, line)
  *   - mocha_stack_push/pop/update_line/print
  *   - exit() macro overridden to print traceback before _Exit
  *
- *   ── FFI Wrappers ───────────────────────────────────────────
+ * ── FFI WRAPPERS ───────────────────────────────────────────
  *   - SQLite3 (open/exec/query/close; result cache API —
  *     query_run, query_rows/cols/cell/colname; table_exists,
  *     last_rowid, changes, errmsg)
@@ -103,13 +115,21 @@
  *   - ctype (isalpha, isdigit, toupper, tolower)
  *   - math (hypot, fmod, erf, tgamma, lgamma, exp)
  *   - system (system call wrapper)
- *   - time/stopwatch (clock, time_ms, unix_time, wall_ms via
- *     QueryPerformanceCounter; datetime_now, date_now,
- *     time_now, ampm_now, day_now, month_now, year_now)
- *   - Rust, C++, and Zig are in interfaced with Mocha but do not
- *     need wrappers because they are directly linked by fuse-ld=lld
+ *   - time/stopwatch (clock, time_ms, unix_time, wall_ms,
+ *     wait; datetime_now, date_now, time_now, ampm_now,
+ *     day_now, month_now, year_now)
+ *   - Rust, C++, and Zig are interfaced with Mocha but do not
+ *     need wrappers because they are directly linked via
+ *     -fuse-ld=lld
  *
- *   ── Straggler Lib Wrappers ──────────────────────────────────
+ * ── MISC / LIB SUPPORT ─────────────────────────────────────
+ *   - mocha_missing_arg — CLI default-param error (main()
+ *     param with no default and no arg supplied; not part of
+ *     try/rescue exception handling)
+ *   - ht_djb2 — DJB2 hash for mocha-ds Bloom Filters (mocha-ds
+ *     is otherwise pure Mocha; this is its one native helper)
+ *
+ * ── STRAGGLER LIB WRAPPERS ─────────────────────────────────
  *   - mocha-processing: mocha_map_float (float array lambda map)
  *   - mocha-matvec:     mocha_wrap_sqrt_f
  *   - mocha-SymCha:     mocha_wrap_{sin,cos,tan,log,
@@ -118,7 +138,7 @@
  *     (plain C math passthroughs — map directly to x86 fsin/
  *     fcos/fsqrt; remainder of each lib is dogfooded in Mocha)
  *
- *   ── mocha-ink SVG Visualisation ─────────────────────────────
+ * ── MOCHA-INK SVG VISUALISATION ─────────────────────────────
  *   - Shared infrastructure: palette (Tableau-8), named color
  *     map, nice tick/range calculation, coordinate mapping,
  *     clip regions, legend rendering
@@ -145,8 +165,22 @@
  *   - LMPlot
  *   - NetworkGraph
  *   - SankeyChart
- *   All charts: ink_*_save(path) and ink_*_show() (opens
- *   in default browser; cross-platform: start/open/xdg-open)
+ *   All charts: ink_*_save(path) and ink_*_show() (opens in
+ *   default browser; cross-platform: start/open/xdg-open)
+ *
+ * ── MOCHA-METEORO v0.1 ─────────────────────────────────────
+ *   Professional meteorology library. Default units: Celsius,
+ *   km/h, mb, meters. Depends on mocha-math.
+ *     1. Thermodynamics
+ *     2. Humidity
+ *     3. Pressure & Altitude
+ *     4. Wind
+ *     5. Precipitation
+ *     6. Severe Weather Indices
+ *     7. Visibility, Fog & AQI
+ *     8. Solar & Radiation
+ *     9. Climate Statistics
+ *    10. Large-Scale Climate Indices
  *
  * ============================================================
  */
@@ -159,13 +193,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <windows.h>
 #include <setjmp.h>
 #include <signal.h>
 
-//RANDOM NUMBER
-#include <bcrypt.h>
-#pragma comment(lib, "bcrypt.lib")
+#ifdef _WIN32
+    #include <windows.h>
+    #include <bcrypt.h>
+    #pragma comment(lib, "bcrypt.lib")
+#else
+    #include <sys/random.h>   // getrandom (Linux) / getentropy (macOS)
+    #include <time.h>         // clock_gettime — already included above but
+                              // needed explicitly for CLOCK_MONOTONIC on some distros
+#endif
 
 // ── Crash handler — replaces SIGSEGV with a readable error ────────────────
 static void mocha_crash_handler(int sig) {
@@ -185,7 +224,10 @@ static void mocha_crash_handler(int sig) {
 }
 
 /* ===============================================================
-   Mocha Reference Counting
+   Mocha Reference Counting (This is also partially working since \
+   full was not possible yet.) \
+   For now, it masks gc, and helps strings not baloon up somewhat, \
+   better than nothing but not full \
    =============================================================== */
 
 typedef struct {
@@ -358,6 +400,13 @@ typedef struct {
         exit(2); \
     }
 
+static inline void* mocha_malloc_safe(size_t size) {
+    void* ptr = malloc(size);
+    MOCHA_OOM_CHECK(ptr);
+    return ptr;
+}
+#define malloc(size) mocha_malloc_safe(size)
+
 /* ---- Bounds Checking ---- */
 
 #define MOCHA_BOUNDS_CHECK_ROW(arr, row) \
@@ -380,9 +429,6 @@ double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
 /* ---- Garbage Collector (orphaned) ---- */
 #define GC_THRESHOLD  1024
 #define MAX_ROOTS     4096
-
-/* ---- Fixed-Point Arithmetic ---- */
-#define MOCHA_DECIMAL_SCALE 1000000000000LL
 
 /* ---- Math ---- */
 #define MOCHA_MATH_PI 3.14159265358979323846
@@ -705,7 +751,7 @@ char* mocha_str_format(const char* template, char** args, int argc) {
             p += 2;
         } else if (*p == '$' && (isalpha(*(p+1)) || *(p+1) == '_')) {
             fprintf(stderr,
-                "[Mocha] format error: positional format string contains named "
+                "MochaRuntimeError (.format): positional format string contains named "
                 "placeholder '$%c...'. Do not mix positional and named placeholders.\n",
                 *(p+1));
             exit(2);
@@ -998,7 +1044,7 @@ MochaComplex* mocha_complex_conjugate(MochaComplex* c) {
 /* ============================================================
  * PRINT FUNCTIONS
  * newline: 1 = print newline before value, 0 = don't
- * NEED SO MANY BECAUSE C DOES NOT HAVE GENERICS (PATTERN SAME IN ALL FROM NOW ON)
+ * my \n is unique. it precees the string not suceeds it
  * ============================================================ */
 
 void mocha_print_str(char *s, int8_t newline) {
@@ -1017,9 +1063,9 @@ void mocha_print_int(int32_t n, int8_t newline) {
 void mocha_print_float(double f, int8_t newline) {
     if (newline) printf("\n");
     if (isinf(f)) {
-        printf("%s", f > 0 ? "Inf" : "-Inf");
+        printf("%s", f > 0 ? "POS Infinity" : "NEG Infinity");
     } else if (isnan(f)) {
-        printf("NaN");
+        printf("From C's NaN: Number does exist.");
     } else if (f == (int64_t)f && f >= -1e15 && f <= 1e15) {
         printf("%.1f", f);
     } else {
@@ -1048,6 +1094,9 @@ void mocha_print_vast(int64_t n, int8_t newline) {
  * 
  * Upgraded with __int128 for add/sub to prevent overflow
  * ============================================================ */
+
+ /* ---- Fixed-Point Arithmetic ---- */
+#define MOCHA_DECIMAL_SCALE 1000000000000LL
 
 typedef __int128 mocha_decimal;
 
@@ -2163,68 +2212,89 @@ void* mocha_rand_seed(int32_t seed) {
 }
 
 /* ============================================================
- * BCryptGenRandom — Cryptographic RNG
- * Much better than rand() — uses OS entropy source
+ * Cryptographic RNG — cross-platform
+ * Windows:        BCryptGenRandom
+ * Linux/macOS:    getrandom() (Linux 3.17+) / getentropy() (macOS 10.12+)
  * ============================================================ */
 
-/* Random int between min and max inclusive */
+#ifdef _WIN32
+    #include <bcrypt.h>
+    #pragma comment(lib, "bcrypt.lib")
+
+    static void crypto_random_bytes(void* buf, size_t n) {
+        BCryptGenRandom(NULL, (PUCHAR)buf, (ULONG)n, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    }
+
+#elif defined(__APPLE__)
+    #include <sys/random.h>
+
+    static void crypto_random_bytes(void* buf, size_t n) {
+        getentropy(buf, n);   // blocks until entropy available, never fails on macOS 10.12+
+    }
+
+#else
+    // Linux
+    #include <sys/random.h>
+
+    static void crypto_random_bytes(void* buf, size_t n) {
+        ssize_t got = getrandom(buf, n, 0);  // 0 = block until ready
+        (void)got;
+    }
+
+#endif
+
+/* ── All functions below are now platform-agnostic ── */
+
 int mocha_bcrypt_rand_int(int min, int max) {
     if (min >= max) return min;
     unsigned int range = (unsigned int)(max - min + 1);
-    unsigned int limit = UINT_MAX - (UINT_MAX % range); // largest multiple of range
+    unsigned int limit = UINT_MAX - (UINT_MAX % range);
     unsigned int raw;
     do {
-        BCryptGenRandom(NULL, (PUCHAR)&raw, sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-    } while (raw >= limit); // reject the biased tail
+        crypto_random_bytes(&raw, sizeof(raw));
+    } while (raw >= limit);
     return min + (int)(raw % range);
 }
 
-/* Random float between min and max */
 double mocha_bcrypt_rand_float(double min, double max) {
     unsigned int raw = 0;
-    BCryptGenRandom(NULL, (PUCHAR)&raw, sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    crypto_random_bytes(&raw, sizeof(raw));
     double normalized = (double)raw / (double)UINT_MAX;
     return min + normalized * (max - min);
 }
 
-/* Random float between 0.0 and 1.0 */
 double mocha_bcrypt_rand_unit() {
     unsigned int raw = 0;
-    BCryptGenRandom(NULL, (PUCHAR)&raw, sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    crypto_random_bytes(&raw, sizeof(raw));
     return (double)raw / (double)UINT_MAX;
 }
 
-/* Fill a buffer with n random ints */
-/* Returns them as a pipe-separated string "42|17|99|..." */
-/* Mocha can split on | to get the array */
 const char* mocha_bcrypt_rand_ints(int min, int max, int count) {
     if (count <= 0 || count > 10000) return "";
-    static char buf[131072];  // 128KB — enough for 10000 ints
+    static char buf[131072];
     buf[0] = '\0';
     int pos = 0;
     for (int i = 0; i < count; i++) {
         unsigned int raw = 0;
-        BCryptGenRandom(NULL, (PUCHAR)&raw, sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+        crypto_random_bytes(&raw, sizeof(raw));
         int range = max - min + 1;
         int val = min + (int)(raw % (unsigned int)range);
-        pos += snprintf(buf + pos, sizeof(buf) - pos, 
+        pos += snprintf(buf + pos, sizeof(buf) - pos,
                        i < count-1 ? "%d|" : "%d", val);
     }
     return buf;
 }
 
-/* Random bool — cryptographically fair coin flip */
 int mocha_bcrypt_rand_bool() {
     unsigned char raw = 0;
-    BCryptGenRandom(NULL, &raw, sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    crypto_random_bytes(&raw, sizeof(raw));
     return raw % 2;
 }
 
-/* Random seed — get a good seed for other RNGs */
 int mocha_bcrypt_rand_seed() {
     unsigned int raw = 0;
-    BCryptGenRandom(NULL, (PUCHAR)&raw, sizeof(raw), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-    return (int)(raw & 0x7FFFFFFF);  // positive int
+    crypto_random_bytes(&raw, sizeof(raw));
+    return (int)(raw & 0x7FFFFFFF);
 }
 
 /* ============================================================
@@ -2237,6 +2307,7 @@ int mocha_bcrypt_rand_seed() {
  * directly to hardware instructions (x86: fsin, fcos, fsqrt)
  * via C's math.h. Calling them through Mocha would add
  * unnecessary indirection over already-optimal CPU ops.
+ * Also these are needed when I cannot affor my great Complex Semantices 😂
  * ============================================================ */
 
 double mocha_wrap_sin(double x)  { return sin(x);  }
@@ -2721,7 +2792,7 @@ char* mocha_set_max_str(MochaSet *s) {
 }
 
 /* ============================================================
- * STOPWATCH / TIME FFI
+ * MOCHA-STOPWATCH LIB FFI
  * ============================================================ */
 
 int mocha_wrap_clock()              { return (int)clock();  }
@@ -2786,13 +2857,43 @@ char* mocha_wrap_year_now() {
 }
 
 static double mocha_wall_start = 0.0;
+
 double mocha_wrap_wall_ms() {
+#ifdef _WIN32
     LARGE_INTEGER freq, count;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&count);
     double ms = (double)count.QuadPart / (double)freq.QuadPart * 1000.0;
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    double ms = ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+#endif
     if (mocha_wall_start == 0.0) { mocha_wall_start = ms; }
     return ms - mocha_wall_start;
+}
+
+void mocha_stopwatch_wait(double ms) {
+#ifdef _WIN32
+    LARGE_INTEGER freq, start, now;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+    double target_counts = ms * 0.001 * (double)freq.QuadPart;
+    while (1) {
+        QueryPerformanceCounter(&now);
+        if ((double)(now.QuadPart - start.QuadPart) >= target_counts) break;
+    }
+#else
+    struct timespec start, now;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    double target_ns = ms * 1e6;
+    while (1) {
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        double elapsed = (now.tv_sec - start.tv_sec) * 1e9
+                       + (now.tv_nsec - start.tv_nsec);
+        if (elapsed >= target_ns) break;
+    }
+#endif
 }
 
 /* ============================================================
@@ -2809,7 +2910,13 @@ int mocha_wrap_toupper(int c) { return toupper(c); }
 int mocha_wrap_tolower(int c) { return tolower(c); }
 
 /* ---- math wrappers ---- */
-double mocha_wrap_hypot(double x, double y) { return _hypot(x, y); }
+double mocha_wrap_hypot(double x, double y) { 
+#ifdef _WIN32
+    return _hypot(x, y);
+#else
+    return hypot(x, y);
+#endif
+}
 double mocha_wrap_fmod(double x, double y)  { return fmod(x, y);   }
 double mocha_wrap_erf(double x)    { return erf(x);    }
 double mocha_wrap_tgamma(double x) { return tgamma(x); }
@@ -3030,6 +3137,7 @@ int mocha_sqlite3_table_exists(void *db, const char *table) {
  * LUA FFI
  * ============================================================ */
 
+#ifdef MOCHA_WITH_LUA
 #include "lua-5.5.0_Win64_dllw6_lib/include/lua.h"
 #include "lua-5.5.0_Win64_dllw6_lib/include/lualib.h"
 #include "lua-5.5.0_Win64_dllw6_lib/include/lauxlib.h"
@@ -3243,10 +3351,13 @@ const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
     return r;
 }
 
+#endif /* MOCHA_WITH_LUA */
+
 /* ============================================================
  * WREN FFI
  * ============================================================ */
 
+#ifdef MOCHA_WITH_WREN
 #include "wren/include/wren.h"
 
 /* Module load callback — returns source for imported modules */
@@ -3517,6 +3628,8 @@ const char* mocha_wren_safe_dostring(void* vm, const char* module, const char* c
     WrenInterpretResult r = wrenInterpret((WrenVM*)vm, module, code);
     return (r == WREN_RESULT_SUCCESS) ? "" : "WrenError: script failed";
 }
+
+#endif /* MOCHA_WITH_WREN */
 
 /* INSERT HERE NEXT FFI*/
 
@@ -3789,7 +3902,7 @@ int8_t mocha_file_exists(char *path) {
 /* ---- Internal helpers ---- */
 
 //FNV-1a hash — fast, excellent string distribution
-static uint32_t ht_fnv1a(const char *key) {
+uint32_t ht_fnv1a(const char *key) { //static removed for mocha-ds lib Bloom Filter
     uint32_t hash = 2166136261u;
     while (*key) {
         hash ^= (uint8_t)*key++;
@@ -4150,7 +4263,7 @@ void mocha_ex_rethrow(void) {
         fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
         exit(2);
     }
-    MocrafFrame* frame = (MochaExFrame*)mocha_ex_top;
+    MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
     frame->message = msg;
     frame->active  = 1;
     longjmp(frame->env, 1);
@@ -4745,7 +4858,8 @@ void ink_show(InkPlot* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
-#elif __APPLE__
+#elif defined(__APPLE__)
+    char cmd[512];
     snprintf(cmd, sizeof(cmd), "open %s", tmp);
     system(cmd);
 #else
@@ -5236,6 +5350,10 @@ void ink_bar_show(InkBarChart* p) {
         char cmd[512];
         snprintf(cmd, sizeof(cmd), "start %s", tmp);
         system(cmd);
+    #elif defined(__APPLE__)
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "open %s", tmp);
+        system(cmd);
     #else
         char cmd[512];
         snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -5561,6 +5679,10 @@ void ink_hm_show(InkHeatmap* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
 #else
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -5809,6 +5931,10 @@ void ink_pie_show(InkPieChart* p) {
 #ifdef _WIN32
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
+    system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
     system(cmd);
 #else
     char cmd[512];
@@ -6213,6 +6339,10 @@ void ink_hist_show(InkHistogram* p) {
 #ifdef _WIN32
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
+    system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
     system(cmd);
 #else
     char cmd[512];
@@ -6747,6 +6877,10 @@ void ink_box_show(InkBoxPlot* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
 #else
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -7256,6 +7390,10 @@ void ink_violin_show(InkViolinPlot* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
 #else
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -7745,6 +7883,10 @@ void ink_bubble_show(InkBubbleChart* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
 #else
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -8127,6 +8269,10 @@ void ink_curve_show(InkCurvePlot* p) {
 #ifdef _WIN32
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
+    system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
     system(cmd);
 #else
     char cmd[512];
@@ -8570,6 +8716,10 @@ void ink_errorplot_show(InkErrorPlot* p) {
 #ifdef _WIN32
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
+    system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
     system(cmd);
 #else
     char cmd[512];
@@ -9055,6 +9205,10 @@ void ink_lm_show(InkLMPlot* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
 #else
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -9416,6 +9570,10 @@ void ink_net_show(InkNetChart* p) {
 #ifdef _WIN32
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
+    system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
     system(cmd);
 #else
     char cmd[512];
@@ -9819,6 +9977,10 @@ void ink_sk_show(InkSkChart* p) {
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "start %s", tmp);
     system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
 #else
     char cmd[512];
     snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
@@ -9839,4 +10001,1532 @@ void ink_sk_show_mocha(InkSkChart* p)                                          {
 void mocha_missing_arg(const char* name, const char* type) {
     fprintf(stderr, "MochaRuntimeError: required argument '%s: %s' was not provided.\n", name, type);
     exit(1);
+}
+
+//For Mocha-ds, Bloom Filters
+uint32_t ht_djb2(const char *key) {
+    uint32_t hash = 5381u;
+    while (*key) {
+        hash = hash * 33u + (uint8_t)*key++;
+    }
+    return hash;
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Thermodynamics
+ * All temperatures in Celsius, pressure in mb, speed in km/h
+ * Calls into mocha runtime for precision-safe arithmetic
+ * ============================================================ */
+
+/* Forward declarations of runtime functions we use */
+extern double mocha_float_add(double a, double b);
+extern double mocha_float_sub(double a, double b);
+extern double mocha_float_mul(double a, double b);
+extern double mocha_float_div(double a, double b);
+extern double mocha_ext_float_sin(double x, int32_t mes);
+extern double mocha_ext_float_cos(double x, int32_t mes);
+extern double mocha_ext_float_inv_tan(double x);
+extern MochaComplex* mocha_ext_float_log(double x);
+extern MochaComplex* mocha_ext_float_sqrt(double x);
+
+/* Saturation vapour pressure — Buck equation, returns mb */
+double metero_sat_vp(double t_c) {
+    /* 6.1121 * exp((18.678 - t/234.5) * (t/(257.14 + t))) */
+    double a = mocha_float_sub(18.678, mocha_float_div(t_c, 234.5));
+    double b = mocha_float_div(t_c, mocha_float_add(257.14, t_c));
+    return mocha_float_mul(6.1121, exp(mocha_float_mul(a, b)));
+}
+
+/* Dew point from temp and relative humidity — Magnus inverse */
+double metero_dewpoint(double t_c, double rh) {
+    double a     = 17.625;
+    double b     = 243.04;
+    double log_rh = mocha_ext_float_log(mocha_float_div(rh, 100.0))->real;
+    double num   = mocha_float_mul(a, t_c);
+    double den   = mocha_float_add(b, t_c);
+    double alpha = mocha_float_add(log_rh, mocha_float_div(num, den));
+    return mocha_float_div(
+        mocha_float_mul(b, alpha),
+        mocha_float_sub(a, alpha)
+    );
+}
+
+/* Wet bulb — Stull 2011 empirical */
+double metero_wetbulb(double t_c, double rh) {
+    double a1 = mocha_ext_float_inv_tan(
+                    mocha_float_mul(0.151977,
+                        mocha_ext_float_sqrt(mocha_float_add(rh, 8.313659))->real));
+    double a2 = mocha_ext_float_inv_tan(mocha_float_add(t_c, rh));
+    double a3 = mocha_ext_float_inv_tan(mocha_float_sub(rh, 1.676331));
+    double a4 = mocha_float_mul(
+                    mocha_float_mul(0.00391838, pow(rh, 1.5)),
+                    mocha_ext_float_inv_tan(mocha_float_mul(0.023101, rh)));
+
+    /* sum terms with fixed-point add */
+    double s = mocha_float_mul(t_c, a1);
+    s = mocha_float_add(s, a2);
+    s = mocha_float_sub(s, a3);
+    s = mocha_float_add(s, a4);
+    s = mocha_float_sub(s, 4.686035);
+    return s;
+}
+
+/* Heat index — Rothfusz NWS regression, fixed-point polynomial */
+double metero_heat_index(double t_c, double rh) {
+    double t_f = mocha_float_add(mocha_float_mul(t_c, 1.8), 32.0);
+    double t2  = mocha_float_mul(t_f, t_f);
+    double r2  = mocha_float_mul(rh, rh);
+    double tr  = mocha_float_mul(t_f, rh);
+
+    /* Nine Rothfusz terms accumulated with fixed-point add */
+    double terms[9] = {
+        -42.379,
+        mocha_float_mul( 2.04901523,  t_f),
+        mocha_float_mul(10.14333127,  rh),
+        mocha_float_mul(-0.22475541,  tr),
+        mocha_float_mul(-0.00683783,  t2),
+        mocha_float_mul(-0.05481717,  r2),
+        mocha_float_mul( 0.00122874,  mocha_float_mul(t2, rh)),
+        mocha_float_mul( 0.00085282,  mocha_float_mul(t_f, r2)),
+        mocha_float_mul(-0.00000199,  mocha_float_mul(t2, r2)),
+    };
+
+    double hi_f = terms[0];
+    for (int i = 1; i < 9; i++)
+        hi_f = mocha_float_add(hi_f, terms[i]);
+
+    return mocha_float_div(mocha_float_sub(hi_f, 32.0), 1.8);
+}
+
+/* Wind chill — NWS 2001, input km/h */
+double metero_wind_chill(double t_c, double speed_kmh) {
+    double t_f     = mocha_float_add(mocha_float_mul(t_c, 1.8), 32.0);
+    double mph     = mocha_float_mul(speed_kmh, 0.621371);
+    double mph016  = pow(mph, 0.16);  /* pow fine here — single call, correctly rounded */
+    double wc_f    = mocha_float_add(35.74,
+                     mocha_float_add(mocha_float_mul(0.6215,  t_f),
+                     mocha_float_add(mocha_float_mul(-35.75,  mph016),
+                                     mocha_float_mul(mocha_float_mul(0.4275, t_f), mph016))));
+    return mocha_float_div(mocha_float_sub(wc_f, 32.0), 1.8);
+}
+
+/* Feels-like — heat index above 27°C, wind chill below 10°C, else actual */
+double metero_feels_like(double t_c, double rh, double speed_kmh) {
+    if (t_c >= 27.0)  return metero_heat_index(t_c, rh);
+    if (t_c <= 10.0)  return metero_wind_chill(t_c, speed_kmh);
+    return t_c;
+}
+
+/* Potential temperature theta — kelvin, then back to C */
+double metero_potential_temp(double t_c, double pressure_mb) {
+    double t_k    = mocha_float_add(t_c, 273.15);
+    double ratio  = mocha_float_div(1000.0, pressure_mb);
+    double theta_k = mocha_float_mul(t_k, exp(mocha_float_mul(0.2854, mocha_ext_float_log(ratio)->real)));
+    return mocha_float_sub(theta_k, 273.15);
+}
+
+/* Virtual temperature — moisture correction */
+double metero_virtual_temp(double t_c, double mixing_ratio_gkg) {
+    double t_k = mocha_float_add(t_c, 273.15);
+    double w   = mocha_float_div(mixing_ratio_gkg, 1000.0);
+    double tv_k = mocha_float_mul(t_k, mocha_float_add(1.0, mocha_float_mul(1.6078, w)));
+    return mocha_float_sub(tv_k, 273.15);
+}
+
+/* Equivalent potential temperature — Bolton 1980 */
+/* Returns KELVIN — do NOT convert to Celsius */
+double metero_equiv_potential_temp(double t_c, double dewpoint_c, double pressure_mb) {
+    double t_k  = mocha_float_add(t_c, 273.15);
+    double td_k = mocha_float_add(dewpoint_c, 273.15);
+    double e    = metero_sat_vp(dewpoint_c);
+    double w    = mocha_float_div(mocha_float_mul(0.622, e),
+                                   mocha_float_sub(pressure_mb, e));
+    double tl   = mocha_float_add(
+                    mocha_float_div(1.0,
+                        mocha_float_add(
+                            mocha_float_div(1.0, mocha_float_sub(td_k, 56.0)),
+                            mocha_float_div(mocha_ext_float_log(mocha_float_div(t_k, td_k))->real, 800.0)
+                        )),
+                    56.0);
+    double exp1 = mocha_float_mul(0.2854, mocha_float_sub(1.0, mocha_float_mul(0.28, w)));
+    double exp2 = mocha_float_sub(mocha_float_div(3.376, tl), 0.00254);
+    
+    double theta_e_k = mocha_float_mul(
+        mocha_float_mul(t_k, exp(mocha_float_mul(exp1, mocha_ext_float_log(mocha_float_div(1000.0, pressure_mb))->real))),
+        exp(mocha_float_mul(exp2, mocha_float_mul(w, mocha_float_add(1.0, mocha_float_mul(0.81, w)))))
+    );
+    
+    return theta_e_k;  // KELVIN — DO NOT convert to Celsius
+}
+
+/* Lifting condensation level temperature */
+double metero_lcl_temp(double t_c, double dewpoint_c) {
+    /* Bolton 1980: Tl = 1/(1/(Td-56) + ln(T/Td)/800) + 56 */
+    double t_k  = mocha_float_add(t_c, 273.15);
+    double td_k = mocha_float_add(dewpoint_c, 273.15);
+    return mocha_float_sub(
+        mocha_float_div(1.0,
+            mocha_float_add(
+                mocha_float_div(1.0, mocha_float_sub(td_k, 56.0)),
+                mocha_float_div(mocha_ext_float_log(mocha_float_div(t_k, td_k))->real, 800.0)
+            )),
+        273.15 - 56.0);
+}
+
+/* LCL pressure */
+double metero_lcl_pressure(double t_c, double dewpoint_c, double pressure_mb) {
+    double t_k   = mocha_float_add(t_c, 273.15);
+    double tl_k  = mocha_float_add(metero_lcl_temp(t_c, dewpoint_c), 273.15);
+    return mocha_float_mul(pressure_mb, exp(mocha_float_mul(3.5, mocha_ext_float_log(mocha_float_div(tl_k, t_k))->real)));
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Humidity
+ * ============================================================ */
+
+/* Absolute humidity (g/m³) from temp and relative humidity */
+double metero_absolute_humidity(double t_c, double rh) {
+    double svp = metero_sat_vp(t_c);
+    double vp  = mocha_float_mul(mocha_float_div(rh, 100.0), svp);
+    /* Clausius-Clapeyron: AH = 216.7 * vp / (t_k) */
+    double t_k = mocha_float_add(t_c, 273.15);
+    return mocha_float_div(mocha_float_mul(216.7, vp), t_k);
+}
+
+/* Specific humidity (g/kg) from vapour pressure and total pressure */
+double metero_specific_humidity(double vp_mb, double pressure_mb) {
+    return mocha_float_div(
+        mocha_float_mul(621.97, vp_mb),
+        mocha_float_sub(pressure_mb, mocha_float_mul(0.378, vp_mb))
+    );
+}
+
+/* Mixing ratio (g/kg) */
+double metero_mixing_ratio(double vp_mb, double pressure_mb) {
+    return mocha_float_div(
+        mocha_float_mul(621.97, vp_mb),
+        mocha_float_sub(pressure_mb, vp_mb)
+    );
+}
+
+/* Relative humidity from temp and dew point */
+double metero_rh_from_dewpoint(double t_c, double dewpoint_c) {
+    double svp = metero_sat_vp(t_c);
+    double dp  = metero_sat_vp(dewpoint_c);
+    return mocha_float_mul(100.0, mocha_float_div(dp, svp));
+}
+
+/* Vapour pressure from temp and relative humidity */
+double metero_vapour_pressure(double t_c, double rh) {
+    return mocha_float_mul(
+        mocha_float_div(rh, 100.0),
+        metero_sat_vp(t_c)
+    );
+}
+
+/* Vapour pressure deficit (mb) — how far from saturation */
+double metero_vpd(double t_c, double rh) {
+    double svp = metero_sat_vp(t_c);
+    double vp  = mocha_float_mul(mocha_float_div(rh, 100.0), svp);
+    return mocha_float_sub(svp, vp);
+}
+
+/* Precipitable water (mm) from surface to top
+   Takes arrays of specific humidity (g/kg) and pressure levels (mb)
+   Integrates using trapezoidal rule */
+double metero_precipitable_water(double* q_gkg, double* p_mb, int32_t n) {
+    if (n < 2) return 0.0;
+    double sum = 0.0;
+    for (int32_t i = 0; i < n - 1; i++) {
+        double q_avg = mocha_float_div(
+            mocha_float_add(q_gkg[i], q_gkg[i+1]), 2.0);
+        double dp = mocha_float_sub(p_mb[i], p_mb[i+1]); /* pressure decreases upward */
+        /* PW contribution: q * dp / (g * rho_w) — simplified to q*dp*0.1 in mm */
+        sum = mocha_float_add(sum,
+            mocha_float_mul(mocha_float_mul(q_avg, dp), 0.1));
+    }
+    return sum;
+}
+
+/* Humidex — Canadian apparent temperature */
+double metero_humidex(double t_c, double dewpoint_c) {
+    double vp = metero_sat_vp(dewpoint_c);
+    return mocha_float_add(t_c,
+        mocha_float_mul(0.5555,
+            mocha_float_sub(vp, 10.0)));
+}
+
+/* Wet bulb globe temperature — simplified outdoor WBGT */
+double metero_wbgt_outdoor(double t_c, double rh, double solar_wm2) {
+    double wb = metero_wetbulb(t_c, rh);
+    /* WBGT = 0.7*Twb + 0.2*Tg + 0.1*Tdb */
+    /* Globe temp estimate: Tg ≈ Tdb + 0.012 * solar */
+    double tg = mocha_float_add(t_c, mocha_float_mul(0.012, solar_wm2));
+    return mocha_float_add(
+        mocha_float_add(
+            mocha_float_mul(0.7, wb),
+            mocha_float_mul(0.2, tg)),
+        mocha_float_mul(0.1, t_c));
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Pressure & Altitude
+ * ============================================================ */
+
+/* Barometric formula — pressure at altitude from sea level pressure */
+double metero_pressure_at_altitude(double pressure_sl_mb, double altitude_m, double temp_c) {
+    double t_k = mocha_float_add(temp_c, 273.15);
+    /* P = P0 * exp(-M*g*h / R*T) — simplified with scale height */
+    /* Using hypsometric with standard lapse rate */
+    double exp_arg = mocha_float_div(
+        mocha_float_mul(-0.0341631, altitude_m), t_k);
+    return mocha_float_mul(pressure_sl_mb, exp(exp_arg));
+}
+
+/* Altitude from pressure — hypsometric equation */
+double metero_altitude_from_pressure(double pressure_mb, double pressure_sl_mb, double temp_c) {
+    double t_k   = mocha_float_add(temp_c, 273.15);
+    double ratio = mocha_float_div(pressure_sl_mb, pressure_mb);
+    return mocha_float_mul(
+        mocha_float_mul(t_k, 29.271),
+        mocha_ext_float_log(ratio)->real
+    );
+}
+
+/* Pressure altitude (m) — altitude in ISA where pressure equals observed */
+double metero_pressure_altitude(double pressure_mb) {
+    /* PA = 44330 * (1 - (P/1013.25)^0.1903) */
+    double ratio = mocha_float_div(pressure_mb, 1013.25);
+    return mocha_float_mul(44330.0,
+        mocha_float_sub(1.0, exp(mocha_float_mul(0.1903,
+            mocha_ext_float_log(ratio)->real))));
+}
+
+/* Density altitude (m) — pressure altitude corrected for temp */
+double metero_density_altitude(double pressure_mb, double temp_c) {
+    double pa   = metero_pressure_altitude(pressure_mb);
+    double isa  = mocha_float_sub(15.0, mocha_float_mul(0.0065, pa));
+    return mocha_float_add(pa,
+        mocha_float_mul(118.8, mocha_float_sub(temp_c, isa)));
+}
+
+/* QNH from QFE — aerodrome pressure to sea level */
+double metero_qnh_from_qfe(double qfe_mb, double elevation_m, double temp_c) {
+    double t_k = mocha_float_add(temp_c, 273.15);
+    double exp_arg = mocha_float_div(
+        mocha_float_mul(0.0341631, elevation_m), t_k);
+    return mocha_float_mul(qfe_mb, exp(exp_arg));
+}
+
+/* QFE from QNH */
+double metero_qfe_from_qnh(double qnh_mb, double elevation_m, double temp_c) {
+    double t_k = mocha_float_add(temp_c, 273.15);
+    double exp_arg = mocha_float_div(
+        mocha_float_mul(-0.0341631, elevation_m), t_k);
+    return mocha_float_mul(qnh_mb, exp(exp_arg));
+}
+
+/* ISA temperature at altitude */
+double metero_isa_temp(double altitude_m) {
+    /* Troposphere: 15 - 6.5*h/1000 C up to 11000m */
+    /* Stratosphere: -56.5 C from 11000 to 20000m */
+    if (altitude_m <= 11000.0)
+        return mocha_float_sub(15.0, mocha_float_mul(0.0065, altitude_m));
+    return -56.5;  // stratosphere
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Wind
+ * ============================================================ */
+
+/* U component (east-west) from speed and direction */
+double metero_wind_u(double speed_kmh, double direction_deg) {
+    double dir_rad = mocha_float_mul(direction_deg, 0.017453293);
+    return mocha_float_mul(-speed_kmh, mocha_ext_float_sin(dir_rad, 0));
+}
+
+/* V component (north-south) from speed and direction */
+double metero_wind_v(double speed_kmh, double direction_deg) {
+    double dir_rad = mocha_float_mul(direction_deg, 0.017453293);
+    return mocha_float_mul(-speed_kmh, mocha_ext_float_cos(dir_rad, 0));
+}
+
+/* Wind speed from u/v components */
+double metero_wind_speed_from_uv(double u, double v) {
+    return mocha_ext_float_sqrt(
+        mocha_float_add(mocha_float_mul(u, u),
+                        mocha_float_mul(v, v)))->real;
+}
+
+/* Wind direction from u/v components (degrees, meteorological) */
+double metero_wind_dir_from_uv(double u, double v) {
+    double dir = mocha_float_mul(
+        atan2(-u, -v) * 180.0 / 3.14159265358979323846, 1.0);
+    if (dir < 0.0) dir = mocha_float_add(dir, 360.0);
+    return dir;
+}
+
+/* Crosswind component for runway — angle between wind and runway */
+double metero_crosswind(double speed_kmh, double wind_dir_deg, double runway_dir_deg) {
+    double angle_rad = mocha_float_mul(
+        mocha_float_sub(wind_dir_deg, runway_dir_deg),
+        0.017453293);
+    return mocha_float_mul(speed_kmh,
+        fabs(mocha_ext_float_sin(angle_rad, 0)));
+}
+
+/* Headwind component — along runway axis */
+double metero_headwind(double speed_kmh, double wind_dir_deg, double runway_dir_deg) {
+    double angle_rad = mocha_float_mul(
+        mocha_float_sub(wind_dir_deg, runway_dir_deg),
+        0.017453293);
+    return mocha_float_mul(speed_kmh, mocha_ext_float_cos(angle_rad, 0));
+}
+
+/* Wind power density (W/m²) — energy available per unit area */
+double metero_wind_power_density(double speed_ms, double air_density_kgm3) {
+    return mocha_float_mul(
+        mocha_float_mul(0.5, air_density_kgm3),
+        mocha_float_mul(speed_ms, mocha_float_mul(speed_ms, speed_ms)));
+}
+
+/* Gust factor — ratio of gust to mean wind */
+double metero_gust_factor(double gust_kmh, double mean_kmh) {
+    if (mean_kmh == 0.0) return 1.0;
+    return mocha_float_div(gust_kmh, mean_kmh);
+}
+
+/* Wind rose sector (0-15) from direction — 16-point compass */
+int32_t metero_wind_rose_sector(double direction_deg) {
+    double sector = mocha_float_div(
+        mocha_float_add(direction_deg, 11.25), 22.5);
+    return (int32_t)sector % 16;
+}
+
+/* Beaufort number from speed in km/h */
+int32_t metero_beaufort(double speed_kmh) {
+    if (speed_kmh < 1.0)   return 0;
+    if (speed_kmh < 5.5)   return 1;
+    if (speed_kmh < 11.0)  return 2;
+    if (speed_kmh < 19.0)  return 3;
+    if (speed_kmh < 28.0)  return 4;
+    if (speed_kmh < 38.0)  return 5;
+    if (speed_kmh < 49.0)  return 6;
+    if (speed_kmh < 61.0)  return 7;
+    if (speed_kmh < 74.0)  return 8;
+    if (speed_kmh < 88.0)  return 9;
+    if (speed_kmh < 102.0) return 10;
+    if (speed_kmh < 117.0) return 11;
+    return 12;
+}
+
+/* Mean wind from vector average of u/v arrays */
+double metero_mean_wind_speed(double* speeds, double* dirs_deg, int32_t n) {
+    double u_sum = 0.0, v_sum = 0.0;
+    for (int32_t i = 0; i < n; i++) {
+        u_sum = mocha_float_add(u_sum, metero_wind_u(speeds[i], dirs_deg[i]));
+        v_sum = mocha_float_add(v_sum, metero_wind_v(speeds[i], dirs_deg[i]));
+    }
+    double u_mean = mocha_float_div(u_sum, (double)n);
+    double v_mean = mocha_float_div(v_sum, (double)n);
+    return metero_wind_speed_from_uv(u_mean, v_mean);
+}
+
+/* Mean wind direction from vector average */
+double metero_mean_wind_dir(double* speeds, double* dirs_deg, int32_t n) {
+    double u_sum = 0.0, v_sum = 0.0;
+    for (int32_t i = 0; i < n; i++) {
+        u_sum = mocha_float_add(u_sum, metero_wind_u(speeds[i], dirs_deg[i]));
+        v_sum = mocha_float_add(v_sum, metero_wind_v(speeds[i], dirs_deg[i]));
+    }
+    return metero_wind_dir_from_uv(
+        mocha_float_div(u_sum, (double)n),
+        mocha_float_div(v_sum, (double)n));
+}
+
+/* Wind shear magnitude between two levels */
+double metero_wind_shear(double spd1_kmh, double dir1_deg,
+                          double spd2_kmh, double dir2_deg,
+                          double dz_m) {
+    double du = mocha_float_sub(metero_wind_u(spd2_kmh, dir2_deg),
+                                 metero_wind_u(spd1_kmh, dir1_deg));
+    double dv = mocha_float_sub(metero_wind_v(spd2_kmh, dir2_deg),
+                                 metero_wind_v(spd1_kmh, dir1_deg));
+    double shear_vec = metero_wind_speed_from_uv(du, dv);
+    return mocha_float_div(shear_vec, dz_m);
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Precipitation
+ * ============================================================ */
+
+/* Z-R relationship — radar reflectivity (dBZ) to rain rate (mm/hr)
+   Marshall-Palmer: Z = 200 * R^1.6 → R = (Z/200)^(1/1.6) */
+double metero_dbz_to_rainrate(double dbz) {
+    double z = exp(mocha_float_mul(mocha_float_mul(dbz, 0.1),
+                   mocha_ext_float_log(10.0)->real));
+    return exp(mocha_float_mul(
+        mocha_float_div(1.0, 1.6),
+        mocha_ext_float_log(mocha_float_div(z, 200.0))->real));
+}
+
+/* Rain rate to dBZ */
+double metero_rainrate_to_dbz(double rain_rate_mmhr) {
+    double z = mocha_float_mul(200.0,
+        exp(mocha_float_mul(1.6,
+            mocha_ext_float_log(rain_rate_mmhr)->real)));
+    return mocha_float_div(
+        mocha_ext_float_log(z)->real,
+        mocha_float_mul(0.1, mocha_ext_float_log(10.0)->real));
+}
+
+/* Snow water equivalent — density-based */
+double metero_snow_water_equivalent(double snow_depth_cm, double snow_density_kgm3) {
+    /* SWE (mm) = depth (cm) * density (kg/m³) / 100 */
+    return mocha_float_div(
+        mocha_float_mul(snow_depth_cm, snow_density_kgm3),
+        100.0);
+}
+
+/* Snow density estimate from temperature */
+double metero_snow_density(double temp_c) {
+    /* Hedstrom & Pomeroy 1998 */
+    if (temp_c <= -15.0) return 50.0;
+    if (temp_c <= -5.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(3.0, mocha_float_add(temp_c, 15.0)));
+    /* Wet snow near 0C */
+    return mocha_float_add(100.0,
+        mocha_float_mul(10.0, mocha_float_add(temp_c, 5.0)));
+}
+
+/* Snowfall rate from rain equivalent */
+double metero_rain_to_snowfall(double rain_mm, double temp_c) {
+    double density = metero_snow_density(temp_c);
+    /* snow depth (cm) = rain (mm) * 100 / density */
+    return mocha_float_div(
+        mocha_float_mul(rain_mm, 100.0),
+        density);
+}
+
+/* Hail size category — returns mm diameter estimate from dBZ */
+double metero_hail_size_from_dbz(double dbz) {
+    /* Empirical: D (mm) = 0.1 * (dbz - 40)^1.5 for dbz > 40 */
+    if (dbz <= 40.0) return 0.0;
+    double diff = mocha_float_sub(dbz, 40.0);
+    return mocha_float_mul(0.1,
+        exp(mocha_float_mul(1.5,
+            mocha_ext_float_log(diff)->real)));
+}
+
+/* Accumulated precipitation from rate array and time steps */
+double metero_accumulate_precip(double* rates_mmhr, double* dt_hr, int32_t n) {
+    double total = 0.0;
+    for (int32_t i = 0; i < n; i++)
+        total = mocha_float_add(total,
+            mocha_float_mul(rates_mmhr[i], dt_hr[i]));
+    return total;
+}
+
+/* Antecedent precipitation index — weighted sum of past rainfall */
+/* weights decay exponentially: w_i = k^i, k typically 0.85-0.98 */
+double metero_api(double* daily_rain_mm, int32_t n, double k) {
+    double api = 0.0;
+    double weight = 1.0;
+    for (int32_t i = 0; i < n; i++) {
+        api = mocha_float_add(api,
+            mocha_float_mul(daily_rain_mm[i], weight));
+        weight = mocha_float_mul(weight, k);
+    }
+    return api;
+}
+
+/* Runoff estimation — SCS curve number method */
+double metero_runoff_cn(double rainfall_mm, double curve_number) {
+    /* S = 25400/CN - 254 (mm) */
+    double s = mocha_float_sub(
+        mocha_float_div(25400.0, curve_number), 254.0);
+    double ia = mocha_float_mul(0.2, s);  /* initial abstraction */
+    if (rainfall_mm <= ia) return 0.0;
+    double num = mocha_float_mul(
+        mocha_float_sub(rainfall_mm, ia),
+        mocha_float_sub(rainfall_mm, ia));
+    double den = mocha_float_add(
+        mocha_float_sub(rainfall_mm, ia), s);
+    return mocha_float_div(num, den);
+}
+
+/* Evapotranspiration — Hargreaves simplified */
+double metero_et_hargreaves(double t_max_c, double t_min_c,
+                             double t_mean_c, double ra_mj_m2_day) {
+    double td = mocha_float_sub(t_max_c, t_min_c);
+    return mocha_float_mul(
+        mocha_float_mul(0.0023, ra_mj_m2_day),
+        mocha_float_mul(
+            mocha_float_add(t_mean_c, 17.8),
+            mocha_ext_float_sqrt(td)->real));
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Severe Weather Indices
+ * Full parcel theory CAPE/CIN with sounding arrays
+ * ============================================================ */
+
+/* Parcel temperature after dry adiabatic lift to pressure level */
+double metero_parcel_temp_dry(double t_surface_c, double p_surface_mb,
+                               double p_level_mb) {
+    double t_k = mocha_float_add(t_surface_c, 273.15);
+    double ratio = mocha_float_div(p_level_mb, p_surface_mb);
+    return mocha_float_sub(
+        mocha_float_mul(t_k,
+            exp(mocha_float_mul(0.2854,
+                mocha_ext_float_log(ratio)->real))),
+        273.15);
+}
+
+/* Parcel temperature after moist adiabatic lift above LCL
+   Uses iterative pseudo-adiabatic approximation — Betts 1982 */
+double metero_parcel_temp_moist(double t_lcl_c, double p_lcl_mb,
+                                 double p_level_mb) {
+    double t_k  = mocha_float_add(t_lcl_c, 273.15);
+    double p    = p_lcl_mb;
+    double dp   = -10.0;  /* 10mb steps downward in pressure */
+    double lv   = 2.5e6;  /* latent heat of vaporization J/kg */
+    double rd   = 287.05; /* gas constant dry air */
+    double rv   = 461.5;  /* gas constant water vapour */
+    double cpd  = 1005.7; /* specific heat dry air */
+
+    while (p > p_level_mb) {
+        double svp   = metero_sat_vp(mocha_float_sub(t_k, 273.15));
+        double ws    = mocha_float_div(
+                        mocha_float_mul(0.622, svp),
+                        mocha_float_sub(p, svp));
+        double num   = mocha_float_add(1.0,
+                        mocha_float_div(
+                            mocha_float_mul(lv, ws),
+                            mocha_float_mul(rd, t_k)));
+        double den   = mocha_float_add(1.0,
+                        mocha_float_div(
+                            mocha_float_mul(
+                                mocha_float_mul(lv, lv),
+                                mocha_float_mul(ws,
+                                    mocha_float_add(1.0,
+                                        mocha_float_div(ws, 0.622)))),
+                            mocha_float_mul(cpd,
+                                mocha_float_mul(rv,
+                                    mocha_float_mul(t_k, t_k)))));
+        double gamma_m = mocha_float_mul(
+                            mocha_float_div(rd * t_k, mocha_float_mul(cpd, p)),
+                            mocha_float_div(num, den));
+        t_k = mocha_float_add(t_k, mocha_float_mul(gamma_m, dp));
+        p   = mocha_float_add(p, dp);
+        if (p < p_level_mb) p = p_level_mb;
+    }
+    return mocha_float_sub(t_k, 273.15);
+}
+
+/* Full CAPE/CIN computation from sounding
+   p_mb:    pressure levels (mb), surface first, decreasing
+   t_c:     temperature at each level (C)
+   td_c:    dew point at each level (C)
+   n:       number of levels
+   returns: [CAPE, CIN, LFC_mb, EL_mb] as 4-element array */
+MochaArray* metero_cape_cin(double* p_mb, double* t_c, double* td_c, int32_t n) {
+    double cape = 0.0, cin = 0.0, lfc = -1.0, el = -1.0;
+
+    if (n >= 2) {
+        double t_sfc   = t_c[0];
+        double td_sfc  = td_c[0];
+        double p_sfc   = p_mb[0];
+
+        double p_lcl = metero_lcl_pressure(t_sfc, td_sfc, p_sfc);
+        double t_lcl = metero_lcl_temp(t_sfc, td_sfc);
+
+        int lfc_found = 0;
+        int el_found  = 0;
+
+        for (int32_t i = 1; i < n; i++) {
+            double p_lev = p_mb[i];
+            double t_env = t_c[i];
+            double t_parcel;
+
+            if (p_lev >= p_lcl) {
+                t_parcel = metero_parcel_temp_dry(t_sfc, p_sfc, p_lev);
+            } else {
+                t_parcel = metero_parcel_temp_moist(t_lcl, p_lcl, p_lev);
+            }
+
+            double buoy = mocha_float_sub(t_parcel, t_env);
+            double tv_parcel = mocha_float_add(t_parcel, 273.15);
+            double tv_env    = mocha_float_add(t_env, 273.15);
+
+            double buoy_acc = mocha_float_div(
+                mocha_float_mul(9.80665,
+                    mocha_float_sub(tv_parcel, tv_env)),
+                tv_env);
+
+            double dz = mocha_float_mul(
+                mocha_float_mul(287.05 / 9.80665,
+                    mocha_float_div(mocha_float_add(tv_parcel, tv_env), 2.0)),
+                mocha_ext_float_log(
+                    mocha_float_div(p_mb[i-1], p_lev))->real);
+
+            if (!lfc_found && p_lev < p_lcl && buoy > 0.0) {
+                lfc = p_lev;
+                lfc_found = 1;
+            }
+
+            if (lfc_found && !el_found && buoy < 0.0 && p_lev < lfc) {
+                el = p_lev;
+                el_found = 1;
+            }
+
+            if (lfc_found && !el_found && buoy > 0.0)
+                cape = mocha_float_add(cape, mocha_float_mul(buoy_acc, dz));
+
+            if (!lfc_found && buoy < 0.0 && p_lev < p_sfc)
+                cin = mocha_float_add(cin, mocha_float_mul(buoy_acc, dz));
+        }
+
+        if (cin > 0.0) cin = -cin;
+    }
+
+    /* Build MochaArray with 4 float values */
+    MochaArray* result = mocha_array_new(4, 8, 0);
+    mocha_array_init_set(result, 0, &cape);
+    mocha_array_init_set(result, 1, &cin);
+    mocha_array_init_set(result, 2, &lfc);
+    mocha_array_init_set(result, 3, &el);
+    return result;
+}
+
+/* K-Index — thunderstorm potential from sounding */
+double metero_k_index(double t_850_c, double t_700_c, double t_500_c,
+                       double td_850_c, double td_700_c) {
+    return mocha_float_add(
+        mocha_float_sub(
+            mocha_float_add(
+                mocha_float_sub(t_850_c, t_500_c),
+                td_850_c),
+            mocha_float_sub(t_700_c, td_700_c)),
+        0.0);
+}
+
+/* Showalter Index — lifted index variant */
+double metero_showalter(double t_850_c, double td_850_c, double t_500_c) {
+    double t_parcel = metero_parcel_temp_moist(
+        metero_lcl_temp(t_850_c, td_850_c),
+        metero_lcl_pressure(t_850_c, td_850_c, 850.0),
+        500.0);
+    return mocha_float_sub(t_500_c, t_parcel);
+}
+
+/* Lifted Index — surface parcel lifted to 500mb */
+double metero_lifted_index(double t_sfc_c, double td_sfc_c,
+                            double p_sfc_mb, double t_500_c) {
+    double t_parcel = metero_parcel_temp_moist(
+        metero_lcl_temp(t_sfc_c, td_sfc_c),
+        metero_lcl_pressure(t_sfc_c, td_sfc_c, p_sfc_mb),
+        500.0);
+    return mocha_float_sub(t_500_c, t_parcel);
+}
+
+/* Total-Totals Index */
+double metero_total_totals(double t_850_c, double td_850_c, double t_500_c) {
+    /* VT = T850 - T500, CT = Td850 - T500, TT = VT + CT */
+    double vt = mocha_float_sub(t_850_c, t_500_c);
+    double ct = mocha_float_sub(td_850_c, t_500_c);
+    return mocha_float_add(vt, ct);
+}
+
+/* SWEAT Index — severe weather threat */
+double metero_sweat(double td_850_c, double tt,
+                    double spd_850_kmh, double spd_500_kmh,
+                    double dir_850_deg, double dir_500_deg) {
+    double term1 = mocha_float_mul(12.0, td_850_c);
+    double term2 = mocha_float_mul(20.0, mocha_float_sub(tt, 49.0));
+    double term3 = mocha_float_mul(2.0, mocha_float_div(spd_850_kmh, 1.852));
+    double term4 = mocha_float_div(spd_500_kmh, 1.852);
+    double sin_dd = mocha_ext_float_sin(
+        mocha_float_mul(
+            mocha_float_sub(dir_500_deg, dir_850_deg),
+            0.017453293), 0);
+    double term5 = mocha_float_mul(125.0,
+        mocha_float_add(sin_dd, 0.2));
+    double sum = mocha_float_add(term1,
+                 mocha_float_add(term2,
+                 mocha_float_add(term3,
+                 mocha_float_add(term4, term5))));
+    return sum < 0.0 ? 0.0 : sum;
+}
+
+/* Storm Relative Helicity (SRH) from sounding
+   u/v arrays in m/s, storm motion um/vm in m/s */
+double metero_srh(double* u_ms, double* v_ms,
+                   double* p_mb, int32_t n,
+                   double storm_u, double storm_v) {
+    double srh = 0.0;
+    for (int32_t i = 0; i < n - 1; i++) {
+        double u1 = mocha_float_sub(u_ms[i],   storm_u);
+        double v1 = mocha_float_sub(v_ms[i],   storm_v);
+        double u2 = mocha_float_sub(u_ms[i+1], storm_u);
+        double v2 = mocha_float_sub(v_ms[i+1], storm_v);
+        /* Cross product: (u1*v2 - u2*v1) */
+        srh = mocha_float_add(srh,
+            mocha_float_sub(
+                mocha_float_mul(u1, v2),
+                mocha_float_mul(u2, v1)));
+    }
+    return srh;
+}
+
+/* Energy Helicity Index */
+double metero_ehi(double cape, double srh) {
+    return mocha_float_div(
+        mocha_float_mul(cape, srh),
+        160000.0);
+}
+
+/* Supercell composite parameter */
+double metero_scp(double cape, double srh, double bulk_shear_ms) {
+    double cape_term  = mocha_float_div(cape, 1000.0);
+    double srh_term   = mocha_float_div(srh, 50.0);
+    double shear_term = mocha_float_div(bulk_shear_ms, 20.0);
+    return mocha_float_mul(cape_term,
+           mocha_float_mul(srh_term, shear_term));
+}
+
+/* Bulk Richardson Number — storm type indicator */
+double metero_brn(double cape, double bulk_shear_ms) {
+    if (bulk_shear_ms == 0.0) return 9999.0;
+    double shear_sq = mocha_float_mul(
+        mocha_float_mul(0.5, bulk_shear_ms), bulk_shear_ms);
+    return mocha_float_div(cape, shear_sq);
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Visibility & Fog
+ * ============================================================ */
+
+/* Visibility from extinction coefficient (Koschmieder's law) */
+double metero_visibility_from_extinction(double extinction_coeff_per_km) {
+    if (extinction_coeff_per_km <= 0.0) return 99.0;
+    return mocha_float_div(3.912, extinction_coeff_per_km);
+}
+
+/* Extinction coefficient from visibility */
+double metero_extinction_from_visibility(double visibility_km) {
+    if (visibility_km <= 0.0) return 999.0;
+    return mocha_float_div(3.912, visibility_km);
+}
+
+/* Fog formation probability — RH threshold method */
+double metero_fog_probability(double t_c, double td_c, double wind_kmh) {
+    double spread = mocha_float_sub(t_c, td_c);
+    double rh     = metero_rh_from_dewpoint(t_c, td_c);
+    /* Base probability from RH */
+    double prob = 0.0;
+    if (rh >= 100.0) prob = 1.0;
+    else if (rh >= 95.0) prob = 0.8;
+    else if (rh >= 90.0) prob = 0.5;
+    else if (rh >= 85.0) prob = 0.2;
+    else prob = 0.0;
+    /* Wind reduces fog probability */
+    if (wind_kmh > 15.0)
+        prob = mocha_float_mul(prob, 0.3);
+    else if (wind_kmh > 8.0)
+        prob = mocha_float_mul(prob, 0.6);
+    return prob;
+}
+
+/* Lifted fog ceiling estimate (m) from LCL */
+double metero_fog_ceiling(double t_c, double td_c) {
+    double spread = mocha_float_sub(t_c, td_c);
+    /* Empirical: ceiling (m) = spread * 125 */
+    return mocha_float_mul(spread, 125.0);
+}
+
+/* Fosberg Fire Weather Index */
+double metero_ffwi(double t_c, double rh, double wind_kmh) {
+    double t_f   = mocha_float_add(mocha_float_mul(t_c, 1.8), 32.0);
+    double wind_mph = mocha_float_mul(wind_kmh, 0.621371);
+    /* eta = EMC (equilibrium moisture content) */
+    double eta;
+    if (rh < 10.0)
+        eta = mocha_float_add(0.03229,
+              mocha_float_add(
+                  mocha_float_mul(0.281073, rh),
+                  mocha_float_mul(-0.000578, mocha_float_mul(rh, t_f))));
+    else if (rh < 50.0)
+        eta = mocha_float_add(2.22749,
+              mocha_float_add(
+                  mocha_float_mul(0.160107, rh),
+                  mocha_float_mul(-0.014784, t_f)));
+    else
+        eta = mocha_float_add(21.0606,
+              mocha_float_add(
+                  mocha_float_mul(0.005565, mocha_float_mul(rh, rh)),
+                  mocha_float_add(
+                      mocha_float_mul(-0.00035, mocha_float_mul(rh, t_f)),
+                      mocha_float_mul(-0.483199, rh))));
+
+    double m = mocha_float_mul(eta, 100.0);
+    double nm = mocha_float_div(
+        mocha_float_sub(m, 30.0),
+        mocha_float_sub(250.0, 30.0));
+    if (nm < 0.0) nm = 0.0;
+    if (nm > 1.0) nm = 1.0;
+    double b = mocha_float_add(
+        mocha_float_mul(nm, nm),
+        mocha_float_mul(
+            mocha_float_mul(nm, nm),
+            mocha_float_mul(nm, nm)));
+    return mocha_float_mul(
+        mocha_float_div(
+            mocha_float_mul(1.0,
+                mocha_ext_float_sqrt(1.0 + mocha_float_mul(0.3, b))->real),
+            0.3002),
+        wind_mph);
+}
+
+/* Runway Visual Range from visibility and lighting */
+double metero_rvr(double visibility_m, int32_t has_lights) {
+    /* RVR ≈ visibility * transmissometer factor */
+    double factor = has_lights ? 1.5 : 1.0;
+    return mocha_float_mul(visibility_m, factor);
+}
+
+/* Ceiling height from cloud base temp differential */
+double metero_cloud_base(double t_c, double td_c) {
+    /* Standard: (T - Td) / 2.5 * 1000 feet → convert to meters */
+    double spread = mocha_float_sub(t_c, td_c);
+    double feet   = mocha_float_mul(
+        mocha_float_div(spread, 2.5), 1000.0);
+    return mocha_float_mul(feet, 0.3048);
+}
+
+/* Mixing layer depth (m) — inverse lapse rate relationship */
+/* Mixing layer depth — parcel rise to inversion level */
+double metero_mixing_depth(double t_sfc_c, double t_inversion_c,
+                            double inversion_height_m) {
+    double delta_t = mocha_float_sub(t_sfc_c, t_inversion_c);
+    if (delta_t <= 0.0) return 0.0;  /* No inversion */
+    /* Dry adiabatic lapse rate: 0.0098 K/m = 9.8 K/km */
+    /* Mixing depth where parcel cools to inversion temp:
+       MD = delta_T / 0.0098  (in meters) */
+    double md = mocha_float_div(delta_t, 0.0098);
+    /* Cap at inversion height (can't rise above inversion) */
+    if (md > inversion_height_m) {
+        md = inversion_height_m;
+    }
+    return md;
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Air Quality (Indian AQI)
+ * ============================================================ */
+
+/* Sub-index for PM2.5 (µg/m³) — Indian AQI */
+double metero_aqi_pm25_subindex(double pm25_ugm3) {
+    if (pm25_ugm3 <= 30.0)
+        return mocha_float_mul(pm25_ugm3, 50.0 / 30.0);
+    if (pm25_ugm3 <= 60.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(mocha_float_sub(pm25_ugm3, 30.0), 50.0 / 30.0));
+    if (pm25_ugm3 <= 90.0)
+        return mocha_float_add(100.0,
+            mocha_float_mul(mocha_float_sub(pm25_ugm3, 60.0), 100.0 / 30.0));
+    if (pm25_ugm3 <= 120.0)
+        return mocha_float_add(200.0,
+            mocha_float_mul(mocha_float_sub(pm25_ugm3, 90.0), 100.0 / 30.0));
+    if (pm25_ugm3 <= 250.0)
+        return mocha_float_add(300.0,
+            mocha_float_mul(mocha_float_sub(pm25_ugm3, 120.0), 100.0 / 130.0));
+    return mocha_float_add(400.0,
+        mocha_float_mul(mocha_float_sub(pm25_ugm3, 250.0), 400.0 / 250.0));
+}
+
+/* Sub-index for PM10 (µg/m³) */
+double metero_aqi_pm10_subindex(double pm10_ugm3) {
+    if (pm10_ugm3 <= 50.0)
+        return mocha_float_mul(pm10_ugm3, 50.0 / 50.0);
+    if (pm10_ugm3 <= 100.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(mocha_float_sub(pm10_ugm3, 50.0), 50.0 / 50.0));
+    if (pm10_ugm3 <= 250.0)
+        return mocha_float_add(100.0,
+            mocha_float_mul(mocha_float_sub(pm10_ugm3, 100.0), 100.0 / 150.0));
+    if (pm10_ugm3 <= 350.0)
+        return mocha_float_add(200.0,
+            mocha_float_mul(mocha_float_sub(pm10_ugm3, 250.0), 100.0 / 100.0));
+    if (pm10_ugm3 <= 430.0)
+        return mocha_float_add(300.0,
+            mocha_float_mul(mocha_float_sub(pm10_ugm3, 350.0), 100.0 / 80.0));
+    return mocha_float_add(400.0,
+        mocha_float_mul(mocha_float_sub(pm10_ugm3, 430.0), 400.0 / 570.0));
+}
+
+/* Sub-index for NO2 (µg/m³) */
+double metero_aqi_no2_subindex(double no2_ugm3) {
+    if (no2_ugm3 <= 40.0)
+        return mocha_float_mul(no2_ugm3, 50.0 / 40.0);
+    if (no2_ugm3 <= 80.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(mocha_float_sub(no2_ugm3, 40.0), 50.0 / 40.0));
+    if (no2_ugm3 <= 180.0)
+        return mocha_float_add(100.0,
+            mocha_float_mul(mocha_float_sub(no2_ugm3, 80.0), 100.0 / 100.0));
+    if (no2_ugm3 <= 280.0)
+        return mocha_float_add(200.0,
+            mocha_float_mul(mocha_float_sub(no2_ugm3, 180.0), 100.0 / 100.0));
+    if (no2_ugm3 <= 400.0)
+        return mocha_float_add(300.0,
+            mocha_float_mul(mocha_float_sub(no2_ugm3, 280.0), 100.0 / 120.0));
+    return mocha_float_add(400.0,
+        mocha_float_mul(mocha_float_sub(no2_ugm3, 400.0), 400.0 / 200.0));
+}
+
+/* Sub-index for SO2 (µg/m³) */
+double metero_aqi_so2_subindex(double so2_ugm3) {
+    if (so2_ugm3 <= 40.0)
+        return mocha_float_mul(so2_ugm3, 50.0 / 40.0);
+    if (so2_ugm3 <= 80.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(mocha_float_sub(so2_ugm3, 40.0), 50.0 / 40.0));
+    if (so2_ugm3 <= 380.0)
+        return mocha_float_add(100.0,
+            mocha_float_mul(mocha_float_sub(so2_ugm3, 80.0), 100.0 / 300.0));
+    if (so2_ugm3 <= 800.0)
+        return mocha_float_add(200.0,
+            mocha_float_mul(mocha_float_sub(so2_ugm3, 380.0), 100.0 / 420.0));
+    if (so2_ugm3 <= 1600.0)
+        return mocha_float_add(300.0,
+            mocha_float_mul(mocha_float_sub(so2_ugm3, 800.0), 100.0 / 800.0));
+    return mocha_float_add(400.0,
+        mocha_float_mul(mocha_float_sub(so2_ugm3, 1600.0), 400.0 / 800.0));
+}
+
+/* Sub-index for O3 (µg/m³) */
+double metero_aqi_o3_subindex(double o3_ugm3) {
+    if (o3_ugm3 <= 50.0)
+        return mocha_float_mul(o3_ugm3, 50.0 / 50.0);
+    if (o3_ugm3 <= 100.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(mocha_float_sub(o3_ugm3, 50.0), 50.0 / 50.0));
+    if (o3_ugm3 <= 168.0)
+        return mocha_float_add(100.0,
+            mocha_float_mul(mocha_float_sub(o3_ugm3, 100.0), 100.0 / 68.0));
+    if (o3_ugm3 <= 208.0)
+        return mocha_float_add(200.0,
+            mocha_float_mul(mocha_float_sub(o3_ugm3, 168.0), 100.0 / 40.0));
+    if (o3_ugm3 <= 748.0)
+        return mocha_float_add(300.0,
+            mocha_float_mul(mocha_float_sub(o3_ugm3, 208.0), 100.0 / 540.0));
+    return mocha_float_add(400.0,
+        mocha_float_mul(mocha_float_sub(o3_ugm3, 748.0), 400.0 / 752.0));
+}
+
+/* Sub-index for CO (mg/m³) */
+double metero_aqi_co_subindex(double co_mgm3) {
+    if (co_mgm3 <= 1.0)
+        return mocha_float_mul(co_mgm3, 50.0 / 1.0);
+    if (co_mgm3 <= 2.0)
+        return mocha_float_add(50.0,
+            mocha_float_mul(mocha_float_sub(co_mgm3, 1.0), 50.0 / 1.0));
+    if (co_mgm3 <= 10.0)
+        return mocha_float_add(100.0,
+            mocha_float_mul(mocha_float_sub(co_mgm3, 2.0), 100.0 / 8.0));
+    if (co_mgm3 <= 17.0)
+        return mocha_float_add(200.0,
+            mocha_float_mul(mocha_float_sub(co_mgm3, 10.0), 100.0 / 7.0));
+    if (co_mgm3 <= 34.0)
+        return mocha_float_add(300.0,
+            mocha_float_mul(mocha_float_sub(co_mgm3, 17.0), 100.0 / 17.0));
+    return mocha_float_add(400.0,
+        mocha_float_mul(mocha_float_sub(co_mgm3, 34.0), 400.0 / 66.0));
+}
+
+/* Maximum sub-index becomes AQI */
+double metero_aqi_from_subindices(double pm25, double pm10,
+                                   double no2, double so2,
+                                   double o3, double co) {
+    double max_idx = pm25;
+    if (pm10 > max_idx) max_idx = pm10;
+    if (no2 > max_idx) max_idx = no2;
+    if (so2 > max_idx) max_idx = so2;
+    if (o3 > max_idx) max_idx = o3;
+    if (co > max_idx) max_idx = co;
+    return max_idx;
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Solar & Radiation
+ * ============================================================ */
+
+#define METERO_PI 3.14159265358979323846
+#define METERO_DEG2RAD 0.017453293
+#define METERO_RAD2DEG 57.295779513
+
+/* Solar declination (degrees) from day of year */
+double metero_solar_declination(int32_t day_of_year) {
+    double d = (double)day_of_year;
+    /* Spencer 1971 Fourier series */
+    double b = mocha_float_mul(
+        mocha_float_mul(2.0, METERO_PI),
+        mocha_float_div(mocha_float_sub(d, 1.0), 365.0));
+    return mocha_float_mul(METERO_RAD2DEG,
+        mocha_float_add(0.006918,
+        mocha_float_add(mocha_float_mul(-0.399912, mocha_ext_float_cos(b, 0)),
+        mocha_float_add(mocha_float_mul( 0.070257, mocha_ext_float_sin(b, 0)),
+        mocha_float_add(mocha_float_mul(-0.006758, mocha_ext_float_cos(mocha_float_mul(2.0, b), 0)),
+        mocha_float_add(mocha_float_mul( 0.000907, mocha_ext_float_sin(mocha_float_mul(2.0, b), 0)),
+        mocha_float_add(mocha_float_mul(-0.002697, mocha_ext_float_cos(mocha_float_mul(3.0, b), 0)),
+                        mocha_float_mul( 0.001480, mocha_ext_float_sin(mocha_float_mul(3.0, b), 0)))))))));
+}
+
+/* Equation of time (minutes) from day of year */
+double metero_equation_of_time(int32_t day_of_year) {
+    double b = mocha_float_mul(
+        mocha_float_mul(2.0, METERO_PI),
+        mocha_float_div((double)(day_of_year - 1), 365.0));
+    return mocha_float_mul(229.18,
+        mocha_float_add(0.000075,
+        mocha_float_add(mocha_float_mul( 0.001868, mocha_ext_float_cos(b, 0)),
+        mocha_float_add(mocha_float_mul(-0.032077, mocha_ext_float_sin(b, 0)),
+        mocha_float_add(mocha_float_mul(-0.014615, mocha_ext_float_cos(mocha_float_mul(2.0, b), 0)),
+                        mocha_float_mul(-0.04089,  mocha_ext_float_sin(mocha_float_mul(2.0, b), 0)))))));
+}
+
+/* Hour angle (degrees) from solar time */
+double metero_hour_angle(double solar_time_hr) {
+    return mocha_float_mul(15.0, mocha_float_sub(solar_time_hr, 12.0));
+}
+
+/* Solar elevation angle (degrees) */
+double metero_solar_elevation(double lat_deg, double decl_deg, double hour_angle_deg) {
+    double lat_r  = mocha_float_mul(lat_deg,       METERO_DEG2RAD);
+    double decl_r = mocha_float_mul(decl_deg,      METERO_DEG2RAD);
+    double ha_r   = mocha_float_mul(hour_angle_deg, METERO_DEG2RAD);
+    double sin_elev = mocha_float_add(
+        mocha_float_mul(mocha_ext_float_sin(lat_r,  0),
+                        mocha_ext_float_sin(decl_r, 0)),
+        mocha_float_mul(mocha_ext_float_cos(lat_r,  0),
+            mocha_float_mul(mocha_ext_float_cos(decl_r, 0),
+                            mocha_ext_float_cos(ha_r, 0))));
+    return mocha_float_mul(METERO_RAD2DEG,
+        mocha_ext_float_inv_sin(sin_elev)->real);
+}
+
+/* Solar azimuth angle (degrees from North) */
+double metero_solar_azimuth(double lat_deg, double decl_deg,
+                             double hour_angle_deg, double elev_deg) {
+    double lat_r  = mocha_float_mul(lat_deg,  METERO_DEG2RAD);
+    double decl_r = mocha_float_mul(decl_deg, METERO_DEG2RAD);
+    double elev_r = mocha_float_mul(elev_deg, METERO_DEG2RAD);
+    double cos_az = mocha_float_div(
+        mocha_float_sub(
+            mocha_ext_float_sin(decl_r, 0),
+            mocha_float_mul(mocha_ext_float_sin(elev_r, 0),
+                            mocha_ext_float_sin(lat_r, 0))),
+        mocha_float_mul(mocha_ext_float_cos(elev_r, 0),
+                        mocha_ext_float_cos(lat_r, 0)));
+    double az = mocha_float_mul(METERO_RAD2DEG,
+        mocha_ext_float_inv_cos(cos_az)->real);
+    if (hour_angle_deg > 0.0)
+        az = mocha_float_sub(360.0, az);
+    return az;
+}
+
+/* Sunrise/sunset hour angle (degrees) */
+double metero_sunrise_hour_angle(double lat_deg, double decl_deg) {
+    double lat_r  = mocha_float_mul(lat_deg,  METERO_DEG2RAD);
+    double decl_r = mocha_float_mul(decl_deg, METERO_DEG2RAD);
+    double cos_ha = mocha_float_div(
+        mocha_float_mul(-1.0,
+            mocha_float_mul(mocha_ext_float_tan(lat_r, 0),
+                            mocha_ext_float_tan(decl_r, 0))),
+        1.0);
+    /* Clamp to [-1,1] for polar regions */
+    if (cos_ha < -1.0) return 180.0;
+    if (cos_ha >  1.0) return 0.0;
+    return mocha_float_mul(METERO_RAD2DEG,
+        mocha_ext_float_inv_cos(cos_ha)->real);
+}
+
+/* Sunrise time (decimal hours UTC) */
+double metero_sunrise_utc(double lat_deg, double lon_deg,
+                           int32_t day_of_year) {
+    double decl  = metero_solar_declination(day_of_year);
+    double eot   = metero_equation_of_time(day_of_year);
+    double ha    = metero_sunrise_hour_angle(lat_deg, decl);
+    double noon  = mocha_float_sub(12.0,
+        mocha_float_add(
+            mocha_float_div(lon_deg, 15.0),
+            mocha_float_div(eot, 60.0)));
+    return mocha_float_sub(noon,
+        mocha_float_div(ha, 15.0));
+}
+
+/* Sunset time (decimal hours UTC) */
+double metero_sunset_utc(double lat_deg, double lon_deg,
+                          int32_t day_of_year) {
+    double decl  = metero_solar_declination(day_of_year);
+    double eot   = metero_equation_of_time(day_of_year);
+    double ha    = metero_sunrise_hour_angle(lat_deg, decl);
+    double noon  = mocha_float_sub(12.0,
+        mocha_float_add(
+            mocha_float_div(lon_deg, 15.0),
+            mocha_float_div(eot, 60.0)));
+    return mocha_float_add(noon,
+        mocha_float_div(ha, 15.0));
+}
+
+/* Daylight hours */
+double metero_daylight_hours(double lat_deg, int32_t day_of_year) {
+    double decl = metero_solar_declination(day_of_year);
+    double ha   = metero_sunrise_hour_angle(lat_deg, decl);
+    return mocha_float_div(mocha_float_mul(2.0, ha), 15.0);
+}
+
+/* Extraterrestrial radiation (MJ/m²/day) — top of atmosphere */
+double metero_extraterrestrial_radiation(double lat_deg, int32_t day_of_year) {
+    double lat_r = mocha_float_mul(lat_deg, METERO_DEG2RAD);
+    double decl  = metero_solar_declination(day_of_year);
+    double decl_r = mocha_float_mul(decl, METERO_DEG2RAD);
+    double ha    = metero_sunrise_hour_angle(lat_deg, decl);
+    double ha_r  = mocha_float_mul(ha, METERO_DEG2RAD);
+    /* Dr — relative earth-sun distance */
+    double b     = mocha_float_mul(
+        mocha_float_mul(2.0, METERO_PI),
+        mocha_float_div((double)day_of_year, 365.0));
+    double dr    = mocha_float_add(1.0,
+        mocha_float_mul(0.033,
+            mocha_ext_float_cos(b, 0)));
+    /* Ra = (24*60/pi) * Gsc * dr * (ws*sin(lat)*sin(decl) + cos(lat)*cos(decl)*sin(ws)) */
+    double gsc   = 0.0820; /* MJ/m²/min */
+    double term1 = mocha_float_mul(ha_r,
+        mocha_float_mul(mocha_ext_float_sin(lat_r, 0),
+                        mocha_ext_float_sin(decl_r, 0)));
+    double term2 = mocha_float_mul(mocha_ext_float_cos(lat_r, 0),
+        mocha_float_mul(mocha_ext_float_cos(decl_r, 0),
+                        mocha_ext_float_sin(ha_r, 0)));
+    return mocha_float_mul(
+        mocha_float_mul(
+            mocha_float_div(mocha_float_mul(24.0, 60.0), METERO_PI),
+            mocha_float_mul(gsc, dr)),
+        mocha_float_add(term1, term2));
+}
+
+/* Clear sky solar radiation (MJ/m²/day) — Hargreaves */
+double metero_clear_sky_radiation(double lat_deg, int32_t day_of_year,
+                                   double elevation_m) {
+    double ra  = metero_extraterrestrial_radiation(lat_deg, day_of_year);
+    double krs = mocha_float_add(0.75,
+        mocha_float_mul(2.0E-5, elevation_m));
+    return mocha_float_mul(krs, ra);
+}
+
+/* UV Index from solar elevation and ozone column */
+double metero_uv_index(double solar_elev_deg, double ozone_du) {
+    if (solar_elev_deg <= 0.0) return 0.0;
+    /* Simplified: UVI = 0.4 * (elev/90)^1.5 * (300/ozone) * 11 */
+    double elev_norm = mocha_float_div(solar_elev_deg, 90.0);
+    double ozone_factor = mocha_float_div(300.0, ozone_du);
+    return mocha_float_mul(
+        mocha_float_mul(0.4,
+            exp(mocha_float_mul(1.5,
+                mocha_ext_float_log(elev_norm)->real))),
+        mocha_float_mul(ozone_factor, 11.0));
+}
+
+/* Photosynthetically Active Radiation (PAR) from global radiation */
+double metero_par(double global_radiation_wm2) {
+    /* PAR ≈ 45% of global solar radiation */
+    return mocha_float_mul(global_radiation_wm2, 0.45);
+}
+
+/* Net radiation estimate */
+double metero_net_radiation(double rs_mj_m2_day, double t_max_c,
+                             double t_min_c, double rh_mean,
+                             double ra_mj_m2_day, double elevation_m) {
+    /* Rns — net shortwave */
+    double alpha = 0.23; /* albedo grass reference */
+    double rns   = mocha_float_mul(mocha_float_sub(1.0, alpha), rs_mj_m2_day);
+    /* Rnl — net longwave (FAO-56) */
+    double t_max_k = mocha_float_add(t_max_c, 273.15);
+    double t_min_k = mocha_float_add(t_min_c, 273.15);
+    double sigma   = 4.903E-9; /* Stefan-Boltzmann MJ/m²/day/K⁴ */
+    double ea      = metero_sat_vp(mocha_float_div(
+        mocha_float_add(t_max_c, t_min_c), 2.0));
+    ea = mocha_float_mul(ea, mocha_float_div(rh_mean, 100.0));
+    double rso     = metero_clear_sky_radiation(0.0, 182, elevation_m);
+    double rs_rso  = mocha_float_div(rs_mj_m2_day, rso);
+    if (rs_rso > 1.0) rs_rso = 1.0;
+    double cloud_f = mocha_float_sub(
+        mocha_float_mul(1.35, rs_rso), 0.35);
+    double humid_f = mocha_float_sub(0.34,
+        mocha_float_mul(0.14, mocha_ext_float_sqrt(ea)->real));
+    double t4_mean = mocha_float_div(
+        mocha_float_add(
+            mocha_float_mul(mocha_float_mul(t_max_k, t_max_k),
+                            mocha_float_mul(t_max_k, t_max_k)),
+            mocha_float_mul(mocha_float_mul(t_min_k, t_min_k),
+                            mocha_float_mul(t_min_k, t_min_k))),
+        2.0);
+    double rnl = mocha_float_mul(
+        mocha_float_mul(sigma, t4_mean),
+        mocha_float_mul(humid_f, cloud_f));
+    return mocha_float_sub(rns, rnl);
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Climate Statistics
+ * ============================================================ */
+
+/* Heating Degree Days — base temp default 18C */
+double metero_hdd(double t_mean_c, double base_c) {
+    double diff = mocha_float_sub(base_c, t_mean_c);
+    return diff > 0.0 ? diff : 0.0;
+}
+
+/* Cooling Degree Days */
+double metero_cdd(double t_mean_c, double base_c) {
+    double diff = mocha_float_sub(t_mean_c, base_c);
+    return diff > 0.0 ? diff : 0.0;
+}
+
+/* Growing Degree Days */
+double metero_gdd(double t_max_c, double t_min_c,
+                   double base_c, double cap_c) {
+    double t_max_cap = t_max_c > cap_c ? cap_c : t_max_c;
+    double t_min_cap = t_min_c < base_c ? base_c : t_min_c;
+    double mean = mocha_float_div(
+        mocha_float_add(t_max_cap, t_min_cap), 2.0);
+    double gdd = mocha_float_sub(mean, base_c);
+    return gdd > 0.0 ? gdd : 0.0;
+}
+
+/* Temperature anomaly from climatological mean */
+double metero_temp_anomaly(double observed_c, double climatology_c) {
+    return mocha_float_sub(observed_c, climatology_c);
+}
+
+/* Standardised anomaly (z-score) */
+double metero_standardised_anomaly(double observed,
+                                    double mean, double std_dev) {
+    if (std_dev == 0.0) return 0.0;
+    return mocha_float_div(
+        mocha_float_sub(observed, mean), std_dev);
+}
+
+/* Percentile rank of value in sorted climatology array */
+double metero_percentile_rank(double value, double* clim,
+                               int32_t n) {
+    int32_t below = 0;
+    for (int32_t i = 0; i < n; i++)
+        if (clim[i] < value) below++;
+    return mocha_float_mul(
+        mocha_float_div((double)below, (double)n), 100.0);
+}
+
+/* Running mean — n-day moving average */
+double metero_running_mean(double* values, int32_t n,
+                            int32_t window) {
+    if (n < window) return 0.0;
+    double sum = 0.0;
+    for (int32_t i = n - window; i < n; i++)
+        sum = mocha_float_add(sum, values[i]);
+    return mocha_float_div(sum, (double)window);
+}
+
+/* Frost days count in array */
+int32_t metero_frost_days(double* t_min_arr, int32_t n) {
+    int32_t count = 0;
+    for (int32_t i = 0; i < n; i++)
+        if (t_min_arr[i] < 0.0) count++;
+    return count;
+}
+
+/* Summer days count — t_max > 25C */
+int32_t metero_summer_days(double* t_max_arr, int32_t n) {
+    int32_t count = 0;
+    for (int32_t i = 0; i < n; i++)
+        if (t_max_arr[i] > 25.0) count++;
+    return count;
+}
+
+/* Tropical nights count — t_min > 20C */
+int32_t metero_tropical_nights(double* t_min_arr, int32_t n) {
+    int32_t count = 0;
+    for (int32_t i = 0; i < n; i++)
+        if (t_min_arr[i] > 20.0) count++;
+    return count;
+}
+
+/* Consecutive dry days — longest run without rain */
+int32_t metero_consecutive_dry_days(double* precip_arr,
+                                     int32_t n, double threshold_mm) {
+    int32_t max_run = 0, current = 0;
+    for (int32_t i = 0; i < n; i++) {
+        if (precip_arr[i] < threshold_mm) {
+            current++;
+            if (current > max_run) max_run = current;
+        } else {
+            current = 0;
+        }
+    }
+    return max_run;
+}
+
+/* Consecutive wet days */
+int32_t metero_consecutive_wet_days(double* precip_arr,
+                                     int32_t n, double threshold_mm) {
+    int32_t max_run = 0, current = 0;
+    for (int32_t i = 0; i < n; i++) {
+        if (precip_arr[i] >= threshold_mm) {
+            current++;
+            if (current > max_run) max_run = current;
+        } else {
+            current = 0;
+        }
+    }
+    return max_run;
+}
+
+/* Simple drought index — SPI approximation from z-score */
+double metero_spi(double precip, double mean_precip,
+                   double std_precip) {
+    if (std_precip == 0.0) return 0.0;
+    return mocha_float_div(
+        mocha_float_sub(precip, mean_precip), std_precip);
+}
+
+/* Thornthwaite PET (mm/month) */
+double metero_pet_thornthwaite(double t_mean_c, double heat_index,
+                                double daylight_hr, int32_t days_in_month) {
+    if (t_mean_c <= 0.0) return 0.0;
+    double alpha = mocha_float_add(
+        mocha_float_add(
+            mocha_float_mul(6.75E-7, mocha_float_mul(heat_index,
+                mocha_float_mul(heat_index, heat_index))),
+            mocha_float_mul(-7.71E-5,
+                mocha_float_mul(heat_index, heat_index))),
+        mocha_float_add(
+            mocha_float_mul(1.792E-2, heat_index),
+            0.49239));
+    double et0 = mocha_float_mul(16.0,
+        exp(mocha_float_mul(alpha,
+            mocha_ext_float_log(
+                mocha_float_div(
+                    mocha_float_mul(10.0, t_mean_c),
+                    heat_index))->real)));
+    return mocha_float_mul(et0,
+        mocha_float_mul(
+            mocha_float_div(daylight_hr, 12.0),
+            mocha_float_div((double)days_in_month, 30.0)));
+}
+
+/* ============================================================
+ * mocha-metero C helpers — Large-Scale Climate Indices & Cyclones
+ * ============================================================ */
+
+/* Cyclone category from max sustained wind speed (km/h) */
+int32_t metero_saffir_simpson_category(double wind_kmh) {
+    if (wind_kmh < 63.0)   return 0; /* TD/TS */
+    if (wind_kmh < 119.0)  return 1;
+    if (wind_kmh < 154.0)  return 2;
+    if (wind_kmh < 177.0)  return 3;
+    if (wind_kmh < 209.0)  return 4;
+    return 5;
+}
+
+/* JMA Typhoon scale (Western Pacific) */
+int32_t metero_jma_category(double wind_kmh) {
+    if (wind_kmh < 63.0)   return 0; /* TD */
+    if (wind_kmh < 88.0)   return 1; /* Tropical Storm */
+    if (wind_kmh < 118.0)  return 2; /* Strong TS */
+    if (wind_kmh < 150.0)  return 3; /* Typhoon */
+    if (wind_kmh < 180.0)  return 4; /* Strong Typhoon */
+    return 5; /* Very Strong Typhoon */
+}
+
+/* IMD Scale (Indian Ocean cyclones) */
+int32_t metero_imd_category(double wind_kmh) {
+    if (wind_kmh < 63.0)   return 0; /* Depression */
+    if (wind_kmh < 89.0)   return 1; /* Deep Depression */
+    if (wind_kmh < 119.0)  return 2; /* Cyclonic Storm */
+    if (wind_kmh < 150.0)  return 3; /* Severe Cyclonic Storm */
+    if (wind_kmh < 180.0)  return 4; /* Very Severe Cyclonic Storm */
+    return 5; /* Super Cyclonic Storm */
+}
+
+/* ENSO phase from ONI value */
+int32_t metero_enso_phase(double oni) {
+    if (oni >= 0.5)   return 1;  /* El Niño */
+    if (oni <= -0.5)  return -1; /* La Niña */
+    return 0; /* Neutral */
+}
+
+/* IOD phase from DMI value */
+int32_t metero_iod_phase(double dmi) {
+    if (dmi >= 0.4)   return 1;  /* Positive IOD */
+    if (dmi <= -0.4)  return -1; /* Negative IOD */
+    return 0; /* Neutral */
+}
+
+/* NAO/SAM phase */
+int32_t metero_ao_phase(double ao_index) {
+    if (ao_index >= 0.5)   return 1;  /* Positive */
+    if (ao_index <= -0.5)  return -1; /* Negative */
+    return 0; /* Neutral */
+}
+
+//Stragglers from Section 3. Got left out
+/* ISA pressure at altitude */
+double metero_isa_pressure(double altitude_m) {
+    if (altitude_m <= 11000.0) {
+        double ratio = mocha_float_div(
+            mocha_float_add(288.15, mocha_float_mul(-0.0065, altitude_m)),
+            288.15);
+        return mocha_float_mul(1013.25,
+            exp(mocha_float_mul(5.2561,
+                mocha_ext_float_log(ratio)->real)));
+    }
+    /* Isothermal stratosphere */
+    double p11 = 226.32;
+    double exp_arg = mocha_float_div(
+        mocha_float_mul(-0.0341631, mocha_float_sub(altitude_m, 11000.0)),
+        216.65);
+    return mocha_float_mul(p11, exp(exp_arg));
+}
+
+/* ISA density (kg/m³) at altitude */
+double metero_isa_density(double altitude_m) {
+    double p  = metero_isa_pressure(altitude_m);
+    double t_k = mocha_float_add(metero_isa_temp(altitude_m), 273.15);
+    return mocha_float_div(
+        mocha_float_mul(p, 100.0),
+        mocha_float_mul(287.05, t_k));
+}
+
+/* Altimeter setting (mb) from station pressure and elevation */
+double metero_altimeter_setting(double station_pressure_mb, double elevation_m) {
+    double isa_sl  = 1013.25;
+    double exp_arg = mocha_float_mul(0.190284,
+        mocha_ext_float_log(mocha_float_div(isa_sl, station_pressure_mb))->real);
+    double ratio   = mocha_float_add(1.0,
+        mocha_float_mul(
+            mocha_float_div(0.0065, 288.15),
+            mocha_float_mul(elevation_m, exp(exp_arg))));
+    return mocha_float_mul(station_pressure_mb,
+        exp(mocha_float_mul(5.2561,
+            mocha_ext_float_log(ratio)->real)));
+}
+
+/* Thickness (m) between two pressure levels */
+double metero_thickness(double p_upper_mb, double p_lower_mb, double mean_temp_c) {
+    double t_k = mocha_float_add(mean_temp_c, 273.15);
+    return mocha_float_mul(
+        mocha_float_mul(287.05 / 9.80665, t_k),
+        mocha_ext_float_log(mocha_float_div(p_lower_mb, p_upper_mb))->real);
 }

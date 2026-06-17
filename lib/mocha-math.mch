@@ -153,10 +153,10 @@ function rand_int(min: int, max: int) -> int native mocha_rand_int;
 function rand_float(min: float, max: float) -> float native mocha_rand_float;
 function rand_seed(seed: int) -> null native mocha_rand_seed;
 
-// ── BCrypt RNG — cryptographically secure ──
-function bcrypt_rand_int(min: int, max: int) -> int native mocha_bcrypt_rand_int;
-function bcrypt_rand_float(min: float, max: float) -> float native mocha_bcrypt_rand_float;
-function bcrypt_rand_unit() -> float native mocha_bcrypt_rand_unit;
-function bcrypt_rand_ints(min: int, max: int, count: int) -> str native mocha_bcrypt_rand_ints;
-function bcrypt_rand_bool() -> bool native mocha_bcrypt_rand_bool;
-function bcrypt_rand_seed() -> int native mocha_bcrypt_rand_seed;
+// ── Cryptographic RNG — OS entropy source (BCrypt/getrandom/getentropy) ──
+function crypto_rand_int(min: int, max: int) -> int native mocha_bcrypt_rand_int;
+function crypto_rand_float(min: float, max: float) -> float native mocha_bcrypt_rand_float;
+function crypto_rand_unit() -> float native mocha_bcrypt_rand_unit;
+function crypto_rand_ints(min: int, max: int, count: int) -> str native mocha_bcrypt_rand_ints;
+function crypto_rand_bool() -> bool native mocha_bcrypt_rand_bool;
+function crypto_rand_seed() -> int native mocha_bcrypt_rand_seed;

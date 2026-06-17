@@ -3094,7 +3094,7 @@ function train_test_split(x: float[][], y: int[], test_size: float, seed: int) -
 
     // ── shuffle indices ──
     // in train_test_split and cross_val_split
-    if (seed == -999999) { rand_seed(bcrypt_rand_seed()); };
+    if (seed == -999999) { rand_seed(crypto_rand_seed()); };
     if (seed != -999999) { rand_seed(seed); };
     var indices: int[] = alloc int[n];
     var ii: int = 0;
@@ -3159,7 +3159,7 @@ function cross_val_split(x: float[][], y: int[], k: int, seed: int) -> TrainTest
 
     // ── shuffle indices ──
     // in train_test_split and cross_val_split
-    if (seed == -999999) { rand_seed(bcrypt_rand_seed()); };
+    if (seed == -999999) { rand_seed(crypto_rand_seed()); };
     if (seed != -999999) { rand_seed(seed); };
     var indices: int[] = alloc int[n];
     var ii: int = 0;

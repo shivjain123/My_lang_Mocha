@@ -4,8 +4,6 @@
 mocha-processing — filter, map, reduce for int, float, str
 """
 
-function mocha_map_float_c(arr: float[], f: lambda) -> float[] native mocha_map_float;
-
 function filter(arr: int[], pred: lambda) -> int[] {
     var result: int[] = [];
     for each x in arr {
@@ -45,9 +43,6 @@ function map(arr: int[], transform: lambda) -> int[] {
     return result;
 };
 
-"""function mapFloat(arr: float[], transform: lambda) -> float[] {
-    return mocha_map_float_c(arr, transform);
-};"""
 function mapFloat(arr: float[], transform: lambda) -> float[] {
     var result: float[] = [];
     for each x in arr {

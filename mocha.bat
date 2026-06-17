@@ -1,5 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
+
+set MOCHA_DIR=%~dp0
+set COMPILER=%MOCHA_DIR%mocha_compile.py
+set REPL=%MOCHA_DIR%mocha_repl.py
+set DOC=%MOCHA_DIR%mocha_doc.py
+
 if "%1"=="" (
     echo Usage: mocha ^<file.mch^>
     echo        mocha --lib ^<libfile.mch^>
@@ -8,17 +14,17 @@ if "%1"=="" (
 )
 
 if "%1"=="repl" (
-    python "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\mocha_repl.py"
+    python "%REPL%"
     exit /b
 )
 
 if "%1"=="doc" (
-    python "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\mocha_doc.py" "%~f2"
+    python "%DOC%" "%~f2"
     exit /b
 )
 
 if "%1"=="execute" (
-    python "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\mocha_compile.py" "%~f2" "%CD%\%~n2"
+    python "%COMPILER%" "%~f2" "%CD%\%~n2"
     if !errorlevel!==0 (
         "%CD%\%~n2.exe"
         echo.
@@ -28,7 +34,7 @@ if "%1"=="execute" (
 )
 
 if "%1"=="--lib" (
-    python "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\mocha_compile.py" --lib "%~f2"
+    python "%COMPILER%" --lib "%~f2"
     exit /b
 )
 
@@ -39,4 +45,4 @@ set EXTRA_FLAGS=
 if "%2"=="--debug" set EXTRA_FLAGS=--debug
 if "%3"=="--debug" set EXTRA_FLAGS=--debug
 
-python "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\mocha_compile.py" "%INPUT%" "%OUTPUT%" %EXTRA_FLAGS%
+python "%COMPILER%" "%INPUT%" "%OUTPUT%" %EXTRA_FLAGS%

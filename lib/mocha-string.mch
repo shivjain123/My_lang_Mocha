@@ -705,7 +705,6 @@ class Tokenizer {
                 var word: str = words[w];
                 if (word.length > 0) {
                     if (this.find(word) == -1) {
-                        //print("IN FIT: pushing: ", word, " vocab_size=", this.vocab_size, "\n");
                         this.vocab.push(word);
                         this.vocab_size = this.vocab_size + 1;
                     };
@@ -751,7 +750,6 @@ class Tokenizer {
     function decode(ids: int[]) -> str {
         var words: str[] = [];
         var i: int = 0;
-        //print("2: ", this.vocab[2], " 4: ", this.vocab[4], newLine=true);
         while (i < ids.length) {
             var id: int = ids[i];
             var word: str = this.vocab[id];
