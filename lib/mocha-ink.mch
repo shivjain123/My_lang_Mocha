@@ -22,6 +22,7 @@ class ErrorPlot{};
 class LMPlot {};
 class NetworkChart {};
 class SankeyChart {};
+class SkewTPlot {};
 
 // =============================================
 // CONSTRUCTORS
@@ -41,6 +42,7 @@ function errorplot(x: float[], y: float[], err: float[]) -> ErrorPlot native ink
 function lmplot(x: float[], y: float[]) -> LMPlot native ink_new_lmplot_mocha;
 function network() -> NetworkChart native ink_new_network_mocha;
 function sankey() -> SankeyChart native ink_new_sankey_mocha;
+function skewt(pressure: float[], temp: float[], dewpoint: float[], wind_speed: float[], wind_dir: float[] ) -> SkewTPlot native ink_new_skewt_mocha;
 
 // =============================================
 // LinePlot methods
@@ -296,4 +298,17 @@ extend SankeyChart {
     function title(t: str) -> null native ink_sk_set_title_mocha;
     function save(path: str) -> null native ink_sk_save_mocha;
     function show() -> null native ink_sk_show_mocha;
+};
+
+// =============================================
+// SkewTPlot (Skew-T log-p) methods
+// =============================================
+
+extend SkewTPlot {
+    function title(t: str) -> null native ink_st_set_title;
+    function show_dry_adiabats() -> null native ink_st_show_dry_adiabats;
+    function show_moist_adiabats() -> null native ink_st_show_moist_adiabats;
+    function show_mixing_ratios() -> null native ink_st_show_mixing_ratios;
+    function save(path: str) -> null native ink_st_save;
+    function show() -> null native ink_st_show;
 };

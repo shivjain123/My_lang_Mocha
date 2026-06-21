@@ -247,9 +247,9 @@ class PCAReducer {
         this.n_features = 0;
     };
 
-    // ─────────────────────────────────────────
-    // fit: compute principal components via SVD
-    // ─────────────────────────────────────────
+    // ───────────────────────────────────────────────
+    // fit: compute principal components via SVD_thin
+    // ───────────────────────────────────────────────
     function fit(data: float[][]) -> null {
         var n: int = data.length;
         var p: int = data.cols;
@@ -293,15 +293,14 @@ class PCAReducer {
         // ── Step 3: SVD of centered data ──
         // centered = u * s * Vt
         // principal components = rows of Vt = columns of V
-        var svd_result: (float[][], 3) = centered.svd();
-        var u: float[][] = svd_result#0;
-        var s: float[][] = svd_result#1;
-        var Vt: float[][] = svd_result#2;
+        var svd_result: (float[][], 2) = centered.svd_thin();
+        var s: float[][]= svd_result#0;
+        var Vt: float[][] = svd_result#1;
 
         // ── Step 4: explained variance from singular values ──
         // variance_i = s_i² / (n - 1)
         var n_sv: int = s.length;
-        if (s.cols < n_sv) { n_sv = s.cols; };  // ← ADD THIS
+        if (s.cols < n_sv) { n_sv = s.cols; };
         var total_var: float = 0.0;
         var vi: int = 0;
         while (vi < n_sv) {

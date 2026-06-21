@@ -4,7 +4,7 @@
 
 from mocha_ast import *
 from typing import Optional, cast
-import os
+import os, platform
 
 class MochaCodeGenError(Exception):
     def __init__(self, message, line=0, col=0):
@@ -147,6 +147,7 @@ class CodeGen:
         self.class_mocha_fields = {}  # class_name -> [(field_name, mocha_type_str)]
         self.local_name_counts = {}  # tracks how many times a name has been used
         self.lib_tag_names = set()  # tags imported from libs, don't re-emit
+        self.target_os = platform.system()  # "Windows", "Linux", "Darwin"
 
         # Built-in StringBuilder type
         self.class_fields["StringBuilder"] = [
@@ -567,7 +568,6 @@ class CodeGen:
                 "declare i32 @mocha_str_length(i8*)",
                 "declare i8* @mocha_str_charat(i8*, i32)",
                 "declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i1)",
-                "declare i32 @SetConsoleOutputCP(i32)",
                 "declare void @mocha_missing_arg(i8*, i8*)", 
                 "declare i32 @mocha_str_to_int(i8*)",
                 "declare double @mocha_str_to_float(i8*)",
@@ -690,6 +690,7 @@ class CodeGen:
                 "declare void @mocha_dict_print_value(%MochaDict*, i8*, i8)",
                 "declare i64 @mocha_str_to_vast(i8*)",
                 "declare %MochaDict* @mocha_dict_merge(%MochaDict*, %MochaDict*, i8)",
+                "declare %MochaDict* @mocha_dict_copy(%MochaDict*)",
             ],
 
             "Set Runtime": [
@@ -716,6 +717,9 @@ class CodeGen:
                 "declare double @mocha_set_max_float(%MochaSet*)",
                 "declare i64    @mocha_set_max_vast(%MochaSet*)",
                 "declare i8*    @mocha_set_max_str(%MochaSet*)",
+                "declare double @mocha_set_jaccard(%MochaSet*, %MochaSet*)",
+                "declare double @mocha_set_dice(%MochaSet*, %MochaSet*)",
+                "declare double @mocha_set_overlap(%MochaSet*, %MochaSet*)",
             ],
 
             "StringBuilder Runtime": [
@@ -784,6 +788,9 @@ class CodeGen:
                 "declare void @mocha_stack_print() nounwind",
             ],
         }
+
+        if self.target_os == "Windows":
+            sections["C Standard Library"].append("declare i32 @SetConsoleOutputCP(i32)")
 
         header = [
             "; Mocha compiled output",
@@ -1759,6 +1766,10 @@ class CodeGen:
 
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call %MochaDict* @mocha_dict_merge(%MochaDict* {d_reg}, %MochaDict* {dict2_reg}, i8 {override})")
+            return (tmp, "%MochaDict*")
+        elif member == "copy":
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call %MochaDict* @mocha_dict_copy(%MochaDict* {d_reg})")
             return (tmp, "%MochaDict*")
         return None
 
@@ -4576,9 +4587,11 @@ class CodeGen:
         # Pointer types: just bitcast from i8*
         # Value types: bitcast to ptr then load
         if elem_llvm.endswith("*"):
-            ptr = self.fresh_temp()
-            self.emit(f"  {ptr} = bitcast i8* {raw} to {elem_llvm}")
-            return (ptr, elem_llvm)
+            box_ptr = self.fresh_temp()
+            result  = self.fresh_temp()
+            self.emit(f"  {box_ptr} = bitcast i8* {raw} to {elem_llvm}*")
+            self.emit(f"  {result} = load {elem_llvm}, {elem_llvm}* {box_ptr}")
+            return (result, elem_llvm)
         else:
             ptr = self.fresh_temp()
             result = self.fresh_temp()
@@ -4740,6 +4753,21 @@ class CodeGen:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call {ret_llvm} @{fn}(%MochaSet* {s_reg})")
             return (tmp, ret_llvm)
+        elif member == "jaccard":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call double @mocha_set_jaccard(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "double")
+        elif member == "dice":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call double @mocha_set_dice(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "double")
+        elif member == "overlap":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call double @mocha_set_overlap(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            return (tmp, "double")
         return None
     
     def gen_lib_qualified_call(self, node):
@@ -4780,6 +4808,7 @@ class CodeGen:
             "float": 8,
             "bool":  1,
             "str":   8,
+            "Complex": 16,  # ← ADD THIS
         }
         esize = elem_sizes.get(node.elem_type, 8)
 
@@ -5142,7 +5171,8 @@ class CodeGen:
         if not self.is_lib:
             self.emit("define i32 @main(i32 %argc, i8** %argv) uwtable {")
             self.emit("entry:")
-            self.emit("  call i32 @SetConsoleOutputCP(i32 65001)")
+            if self.target_os == "Windows":
+                self.emit("  call i32 @SetConsoleOutputCP(i32 65001)")
             self.emit("  call void @mocha_gc_init()")
             for lib_init in self.lib_init_calls:
                 self.emit(f"  call void @{lib_init}()")

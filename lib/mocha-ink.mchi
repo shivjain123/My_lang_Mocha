@@ -18,6 +18,7 @@ class ErrorPlot;
 class LMPlot;
 class NetworkChart;
 class SankeyChart;
+class SkewTPlot;
 function line(x: float[], y: float[]) -> LinePlot native ink_new_line_mocha;
 function scatter(x: float[], y: float[]) -> ScatterPlot native ink_new_scatter_mocha;
 function bar(labels: str[], values: float[]) -> BarChart native ink_new_bar_mocha;
@@ -33,6 +34,7 @@ function errorplot(x: float[], y: float[], err: float[]) -> ErrorPlot native ink
 function lmplot(x: float[], y: float[]) -> LMPlot native ink_new_lmplot_mocha;
 function network() -> NetworkChart native ink_new_network_mocha;
 function sankey() -> SankeyChart native ink_new_sankey_mocha;
+function skewt(pressure: float[], temp: float[], dewpoint: float[], wind_speed: float[], wind_dir: float[]) -> SkewTPlot native ink_new_skewt_mocha;
 extend LinePlot function title(t: str) -> null native ink_lp_set_title;
 extend LinePlot function xlabel(l: str) -> null native ink_lp_set_xlabel;
 extend LinePlot function ylabel(l: str) -> null native ink_lp_set_ylabel;
@@ -184,3 +186,9 @@ extend SankeyChart function nodecolor(id: str, color: str) -> null native ink_sk
 extend SankeyChart function title(t: str) -> null native ink_sk_set_title_mocha;
 extend SankeyChart function save(path: str) -> null native ink_sk_save_mocha;
 extend SankeyChart function show() -> null native ink_sk_show_mocha;
+extend SkewTPlot function title(t: str) -> null native ink_st_set_title;
+extend SkewTPlot function show_dry_adiabats() -> null native ink_st_show_dry_adiabats;
+extend SkewTPlot function show_moist_adiabats() -> null native ink_st_show_moist_adiabats;
+extend SkewTPlot function show_mixing_ratios() -> null native ink_st_show_mixing_ratios;
+extend SkewTPlot function save(path: str) -> null native ink_st_save;
+extend SkewTPlot function show() -> null native ink_st_show;

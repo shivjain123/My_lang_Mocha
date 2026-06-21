@@ -53,6 +53,7 @@ function mocha_tensor_download(t: vast) -> int native mocha_tensor_download;
 function mocha_lsm_scale_reservoir(w: vast, target_sr: float) -> null native mocha_lsm_scale_reservoir;
 function mocha_ridge_regression(x: vast, y: vast, lamb_da: float, max_iter: int) -> vast native mocha_ridge_regression;
 function mocha_tensor_get_row(t: vast, row: int) -> vast native mocha_tensor_get_row;
+function c_print_err(msg: str) -> null native mocha_print_stderr;
 function sqlite3_open(path: str) -> null native mocha_sqlite3_open;
 function sqlite3_exec(db: null, sql: str) -> int native mocha_sqlite3_exec;
 function sqlite3_query(db: null, sql: str) -> int native mocha_sqlite3_query;

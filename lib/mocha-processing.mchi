@@ -5,7 +5,6 @@
 
 // mocha-lib-deps: mocha-stats, mocha-matvec
 
-function mocha_map_float_c(arr: float[], f: lambda) -> float[] native mocha_map_float;
 function filter(arr: int[], pred: lambda) -> int[];
 function filterFloat(arr: float[], pred: lambda) -> float[];
 function filterStr(arr: str[], pred: lambda) -> str[];

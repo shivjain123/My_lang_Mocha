@@ -6,6 +6,7 @@
  *
  * PLATFORM SUPPORT
  * ──────────────────────────────────────────────────────────
+ *   Mocha has 14 stdlibs
  *   Windows / macOS / Linux, branched via #ifdef at:
  *     - top-level includes
  *     - Cryptographic RNG          (Windows: BCrypt | else: /dev/urandom or arc4random)
@@ -211,7 +212,7 @@ static void mocha_crash_handler(int sig) {
     fflush(stdout);
     fprintf(stderr, "\n");
     fprintf(stderr, "╔══════════════════════════════════════════════════════╗\n");
-    fprintf(stderr, "║           Mocha Runtime Error                        ║\n");
+    fprintf(stderr, "║        Mocha Runtime Error (SIGSEGV)                 ║\n");
     fprintf(stderr, "╠══════════════════════════════════════════════════════╣\n");
     fprintf(stderr, "║  The program crashed due to invalid memory access.   ║\n");
     fprintf(stderr, "║  Possible causes:                                    ║\n");
@@ -220,7 +221,7 @@ static void mocha_crash_handler(int sig) {
     fprintf(stderr, "║   • Using an object after dispose()                  ║\n");
     fprintf(stderr, "╚══════════════════════════════════════════════════════╝\n");
     fflush(stderr);
-    exit(11);
+    exit(139);
 }
 
 /* ===============================================================
@@ -1111,18 +1112,27 @@ static double decimal_to(mocha_decimal f) {
 }
 
 double mocha_float_add(double a, double b) { 
+    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
+        return a + b;  // raw IEEE 754 fallback for large numbers
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to(a_s + b_s);
 }
 
 double mocha_float_sub(double a, double b) { 
+    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
+        return a - b;  // raw IEEE 754 fallback for large numbers
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to(a_s - b_s);
 }
 
 double mocha_float_mul(double a, double b) {
+    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
+        return a * b;  // raw IEEE 754 fallback for large numbers
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to((a_s * b_s) / (mocha_decimal)MOCHA_DECIMAL_SCALE);
@@ -1130,6 +1140,9 @@ double mocha_float_mul(double a, double b) {
 
 double mocha_float_div(double a, double b) {
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
+    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
+        return a / b;  // raw IEEE 754 fallback for large numbers
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to((a_s * (mocha_decimal)MOCHA_DECIMAL_SCALE) / b_s);
@@ -1137,6 +1150,9 @@ double mocha_float_div(double a, double b) {
 
 double mocha_float_mod(double a, double b) {
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
+    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
+        return fmod(a, b);  // raw IEEE 754 fallback for large numbers
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to(a_s % b_s);
@@ -2307,7 +2323,7 @@ int mocha_bcrypt_rand_seed() {
  * directly to hardware instructions (x86: fsin, fcos, fsqrt)
  * via C's math.h. Calling them through Mocha would add
  * unnecessary indirection over already-optimal CPU ops.
- * Also these are needed when I cannot affor my great Complex Semantices 😂
+ * Also these are needed when I cannot afford my great Complex Semantices 😂
  * ============================================================ */
 
 double mocha_wrap_sin(double x)  { return sin(x);  }
@@ -2327,7 +2343,8 @@ double mocha_wrap_sqrt_f(double x) { return sqrt(x); }
 /* ============================================================
  * DICT RUNTIME
  *
- * Hash map (not so real one LoL) with string keys and typed values.
+ * Hash map (not so real one LoL because HashTable is the actual one if you need) 
+ * with string keys and typed values.
  * Supports int, float, str, bool, nested dict, and opaque objects.
  * Fuzzy key suggestions via Levenshtein distance on key errors.
  * ============================================================ */
@@ -2592,6 +2609,17 @@ void mocha_dict_print_value(MochaDict *d, char *key, int8_t newline) {
     }
 }
 
+MochaDict* mocha_dict_copy(MochaDict *src) {
+    MochaDict *d = mocha_dict_new();
+    for (int32_t i = 0; i < src->size; i++) {
+        dict_set_entry(d,
+            strdup(src->entries[i].key),
+            src->entries[i].value,
+            src->entries[i].value_type);
+    }
+    return d;
+}
+
 /* ============================================================
  * SET RUNTIME
  *
@@ -2789,6 +2817,40 @@ char* mocha_set_max_str(MochaSet *s) {
         if (strcmp(v, m) > 0) m = v;
     }
     return m;
+}
+
+/* ---- Set Similarity Metrics ---- */
+
+double mocha_set_jaccard(MochaSet *a, MochaSet *b) {
+    if (a->size == 0 && b->size == 0) return 1.0;
+    int32_t inter = 0;
+    for (int32_t i = 0; i < a->size; i++) {
+        void *elem = (char *)a->data + i * a->elem_size;
+        if (mocha_set_find(b, elem) >= 0) inter++;
+    }
+    int32_t uni = a->size + b->size - inter;
+    return (double)inter / (double)uni;
+}
+
+double mocha_set_dice(MochaSet *a, MochaSet *b) {
+    if (a->size == 0 && b->size == 0) return 1.0;
+    int32_t inter = 0;
+    for (int32_t i = 0; i < a->size; i++) {
+        void *elem = (char *)a->data + i * a->elem_size;
+        if (mocha_set_find(b, elem) >= 0) inter++;
+    }
+    return (2.0 * inter) / (double)(a->size + b->size);
+}
+
+double mocha_set_overlap(MochaSet *a, MochaSet *b) {
+    if (a->size == 0 || b->size == 0) return 0.0;
+    int32_t inter = 0;
+    for (int32_t i = 0; i < a->size; i++) {
+        void *elem = (char *)a->data + i * a->elem_size;
+        if (mocha_set_find(b, elem) >= 0) inter++;
+    }
+    int32_t smaller = a->size < b->size ? a->size : b->size;
+    return (double)inter / (double)smaller;
 }
 
 /* ============================================================
@@ -9996,6 +10058,734 @@ void ink_sk_set_title_mocha(InkSkChart* p, const char* t)                      {
 void ink_sk_save_mocha(InkSkChart* p, const char* path)                        { ink_sk_save(p, path); }
 void ink_sk_show_mocha(InkSkChart* p)                                          { ink_sk_show(p); }
 
+/* ════════════════════════════════════════════════════════════
+   mocha-ink  —  SkewTPlot
+   Skew-T Log-P diagram for atmospheric sounding visualization
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Physical constants ── */
+#define ST_RD       287.05    /* gas constant dry air J/kg/K       */
+#define ST_CPD      1005.7    /* specific heat dry air J/kg/K      */
+#define ST_LV       2.501e6   /* latent heat vaporization J/kg     */
+#define ST_EPS      0.622     /* Rd/Rv                             */
+#define ST_KAPPA    0.2857    /* Rd/Cpd                            */
+
+/* ── Diagram bounds ── */
+#define ST_P_BOT    1050.0    /* hPa — bottom of diagram           */
+#define ST_P_TOP    100.0     /* hPa — top of diagram              */
+#define ST_T_MIN   -60.0      /* °C  — left edge at 1000 hPa       */
+#define ST_T_MAX    50.0      /* °C  — right edge at 1000 hPa      */
+#define ST_SKEW     0.4       /* skew factor (1.0 = 45°)           */
+
+/* ── Layout ── */
+#define ST_WIDTH    900
+#define ST_HEIGHT   800
+#define ST_ML       80        /* margin left  (y-axis labels)      */
+#define ST_MR       120       /* margin right (wind barbs)         */
+#define ST_MT       50        /* margin top                        */
+#define ST_MB       60        /* margin bottom                     */
+
+#define ST_MAX_LEVELS  512
+
+/* ── Sounding data ── */
+typedef struct {
+    double pressure[ST_MAX_LEVELS];   /* hPa                       */
+    double temp[ST_MAX_LEVELS];       /* °C                        */
+    double dewpoint[ST_MAX_LEVELS];   /* °C                        */
+    double wind_speed[ST_MAX_LEVELS]; /* km/h — converted to knots */
+    double wind_dir[ST_MAX_LEVELS];   /* degrees                   */
+    int    n;
+} InkSTSounding;
+
+/* ── Plot struct ── */
+typedef struct {
+    InkSTSounding sounding;
+    char  title[128];
+    int   show_dry_adiabats;
+    int   show_moist_adiabats;
+    int   show_mixing_ratios;
+    int   width;
+    int   height;
+} InkSTPlot;
+
+/* ════════════════════════════════════════════════════════════
+   Coordinate transforms
+   ════════════════════════════════════════════════════════════ */
+
+/* pressure → normalized y [0=bottom, 1=top] */
+static double st_p_to_ynorm(double p) {
+    return log(ST_P_BOT / p) / log(ST_P_BOT / ST_P_TOP);
+}
+
+/* normalized y → pixel y */
+static double st_ynorm_to_px(double yn, int mt, int ph) {
+    /* yn=0 is bottom (high pressure), yn=1 is top (low pressure) */
+    return mt + ph * (1.0 - yn);
+}
+
+/* temperature + pressure → pixel x (with skew) */
+static double st_t_to_px(double t_c, double p, int ml, int pw) {
+    double t_range = ST_T_MAX - ST_T_MIN;
+    double t_norm  = (t_c - ST_T_MIN) / t_range;
+    double yn      = st_p_to_ynorm(p);
+    /* skew: shift x rightward as pressure decreases (yn increases) */
+    double x_norm  = t_norm + ST_SKEW * yn;
+    return ml + x_norm * pw;
+}
+
+/* convenience: pressure → pixel y directly */
+static double st_p_to_py(double p, int mt, int ph) {
+    return st_ynorm_to_px(st_p_to_ynorm(p), mt, ph);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Constructor
+   ════════════════════════════════════════════════════════════ */
+
+static InkSTPlot* ink_st_new(
+    double* pressure, double* temp, double* dewpoint,
+    double* wind_speed, double* wind_dir, int n)
+{
+    InkSTPlot* p = (InkSTPlot*)malloc(sizeof(InkSTPlot));
+    if (!p) {
+        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
+        exit(2);
+    }
+    memset(p, 0, sizeof(InkSTPlot));
+    p->width              = ST_WIDTH;
+    p->height             = ST_HEIGHT;
+    p->show_dry_adiabats  = 1;
+    p->show_moist_adiabats = 1;
+    p->show_mixing_ratios = 0;
+    p->title[0]           = '\0';
+
+    int count = n < ST_MAX_LEVELS ? n : ST_MAX_LEVELS;
+    for (int i = 0; i < count; i++) {
+        p->sounding.pressure[i]   = pressure[i];
+        p->sounding.temp[i]       = temp[i];
+        p->sounding.dewpoint[i]   = dewpoint[i];
+        p->sounding.wind_speed[i] = wind_speed[i];
+        p->sounding.wind_dir[i]   = wind_dir[i];
+    }
+    p->sounding.n = count;
+    return p;
+}
+
+/* ── Mocha-facing constructor ── */
+InkSTPlot* ink_new_skewt_mocha(
+    MochaArray* pressure, MochaArray* temp, MochaArray* dewpoint,
+    MochaArray* wind_speed, MochaArray* wind_dir)
+{
+    int n = pressure->length;
+    if (temp->length       < n) n = temp->length;
+    if (dewpoint->length   < n) n = dewpoint->length;
+    if (wind_speed->length < n) n = wind_speed->length;
+    if (wind_dir->length   < n) n = wind_dir->length;
+
+    double* pr = (double*)malloc(n * sizeof(double));
+    double* tc = (double*)malloc(n * sizeof(double));
+    double* td = (double*)malloc(n * sizeof(double));
+    double* ws = (double*)malloc(n * sizeof(double));
+    double* wd = (double*)malloc(n * sizeof(double));
+
+    for (int i = 0; i < n; i++) {
+        mocha_array_get(pressure,   i, &pr[i]);
+        mocha_array_get(temp,       i, &tc[i]);
+        mocha_array_get(dewpoint,   i, &td[i]);
+        mocha_array_get(wind_speed, i, &ws[i]);
+        mocha_array_get(wind_dir,   i, &wd[i]);
+    }
+
+    InkSTPlot* p = ink_st_new(pr, tc, td, ws, wd, n);
+    free(pr); free(tc); free(td); free(ws); free(wd);
+    return p;
+}
+
+/* ── Setters ── */
+void ink_st_set_title(InkSTPlot* p, const char* t) {
+    strncpy(p->title, t, 127);
+}
+void ink_st_show_dry_adiabats(InkSTPlot* p)   { p->show_dry_adiabats   = 1; }
+void ink_st_show_moist_adiabats(InkSTPlot* p) { p->show_moist_adiabats = 1; }
+void ink_st_show_mixing_ratios(InkSTPlot* p)  { p->show_mixing_ratios  = 1; }
+
+/* ════════════════════════════════════════════════════════════
+   Thermodynamic helpers
+   ════════════════════════════════════════════════════════════ */
+
+/* saturation vapour pressure (hPa) — Bolton 1980 formula */
+static double st_esat(double t_c) {
+    return 6.112 * exp(17.67 * t_c / (t_c + 243.5));
+}
+
+/* saturation mixing ratio (kg/kg) */
+static double st_rs(double t_c, double p_hpa) {
+    double es = st_esat(t_c);
+    return ST_EPS * es / (p_hpa - es);
+}
+
+/* dry adiabat: T at pressure p given potential temp theta (K) */
+static double st_dry_adiabat_t(double theta_k, double p_hpa) {
+    return theta_k * pow(p_hpa / 1000.0, ST_KAPPA) - 273.15;
+}
+
+/* moist adiabat: integrate dT/dP downward from (t0_c, p0_hpa)
+   returns T in °C at pressure p_hpa
+   uses MetPy-verified formula: dT/dP = (1/P)*(Rd*T + Lv*rs) / (Cpd + Lv²*rs*ε/(Rd*T²)) */
+static double st_moist_adiabat_t(double t0_c, double p0_hpa, double p_hpa) {
+    double t_k = t0_c + 273.15;
+    double p   = p0_hpa;
+    /* step size: negative when going up (decreasing p) */
+    double dp  = (p_hpa > p0_hpa) ? 5.0 : -5.0;
+    int    steps = (int)(fabs(p_hpa - p0_hpa) / fabs(dp)) + 1;
+
+    for (int i = 0; i < steps; i++) {
+        double p_next = p + dp;
+        if (dp < 0 && p_next < p_hpa) p_next = p_hpa;
+        if (dp > 0 && p_next > p_hpa) p_next = p_hpa;
+
+        double rs     = st_rs(t_k - 273.15, p);
+        double numer  = ST_RD * t_k + ST_LV * rs;
+        double denom  = ST_CPD + (ST_LV * ST_LV * rs * ST_EPS) / (ST_RD * t_k * t_k);
+        double dtdp   = (1.0 / p) * (numer / denom);
+        t_k += dtdp * (p_next - p);
+        p    = p_next;
+        if (p == p_hpa) break;
+    }
+    return t_k - 273.15;
+}
+
+/* ════════════════════════════════════════════════════════════
+   Background drawing
+   ════════════════════════════════════════════════════════════ */
+
+static void ink_st_draw_background(FILE* f, InkSTPlot* p,
+                                   int ml, int mr, int mt, int mb)
+{
+    int W  = p->width;
+    int H  = p->height;
+    int pw = W - ml - mr;
+    int ph = H - mt - mb;
+
+    /* ── SVG header ── */
+    fprintf(f,
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<svg width=\"%d\" height=\"%d\" xmlns=\"http://www.w3.org/2000/svg\">\n"
+        "<style>\n"
+        "  .ink-title { font-family: Consolas, Verdana, sans-serif; "
+        "font-size: 16px; font-weight: bold; }\n"
+        "  .ink-tick  { font-family: Consolas, 'Courier New', monospace; "
+        "font-size: 10px; fill: #555; }\n"
+        "  .ink-plabel { font-family: Consolas, 'Courier New', monospace; "
+        "font-size: 10px; fill: #333; }\n"
+        "</style>\n", W, H);
+
+    /* background rect */
+    fprintf(f,
+        "<rect width=\"%d\" height=\"%d\" fill=\"#F8F8F8\" rx=\"8\"/>\n", W, H);
+
+    /* plot area */
+    fprintf(f,
+        "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
+        "fill=\"white\" stroke=\"#CCCCCC\" stroke-width=\"1\"/>\n",
+        ml, mt, pw, ph);
+
+    /* clip path */
+    fprintf(f,
+        "<clipPath id=\"st-clip\">"
+        "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>"
+        "</clipPath>\n", ml, mt, pw, ph);
+
+    /* ── Isobars ── */
+    double isobars[] = {1000.0, 925.0, 850.0, 700.0, 500.0,
+                        400.0,  300.0, 200.0, 150.0, 100.0};
+    int n_isobars = 10;
+    for (int i = 0; i < n_isobars; i++) {
+        double py = st_p_to_py(isobars[i], mt, ph);
+        fprintf(f,
+            "<line x1=\"%d\" y1=\"%.2f\" x2=\"%d\" y2=\"%.2f\" "
+            "stroke=\"#BBBBBB\" stroke-width=\"0.8\" "
+            "clip-path=\"url(#st-clip)\"/>\n",
+            ml, py, ml + pw, py);
+        /* pressure label on left */
+        fprintf(f,
+            "<text x=\"%d\" y=\"%.2f\" text-anchor=\"end\" "
+            "dominant-baseline=\"middle\" class=\"ink-plabel\">%.0f</text>\n",
+            ml - 5, py, isobars[i]);
+    }
+
+    /* ── Isotherms (skewed, every 10°C) ── */
+    for (double t = -120.0; t <= 60.0; t += 10.0) {
+        /* isotherm: same temperature at all pressures, skewed */
+        double x_bot = st_t_to_px(t, ST_P_BOT, ml, pw);
+        double y_bot = st_p_to_py(ST_P_BOT, mt, ph);
+        double x_top = st_t_to_px(t, ST_P_TOP, ml, pw);
+        double y_top = st_p_to_py(ST_P_TOP, mt, ph);
+
+        /* highlight 0°C isotherm */
+        const char* stroke = (t == 0.0) ? "#4444CC" : "#DDDDDD";
+        double      width  = (t == 0.0) ? 1.2 : 0.7;
+
+        fprintf(f,
+            "<line x1=\"%.2f\" y1=\"%.2f\" x2=\"%.2f\" y2=\"%.2f\" "
+            "stroke=\"%s\" stroke-width=\"%.1f\" "
+            "clip-path=\"url(#st-clip)\"/>\n",
+            x_bot, y_bot, x_top, y_top, stroke, width);
+
+        /* temperature label at bottom */
+        if (x_bot >= ml && x_bot <= ml + pw) {
+            fprintf(f,
+                "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
+                "class=\"ink-tick\">%.0f</text>\n",
+                x_bot, mt + ph + 14, t);
+        }
+    }
+
+    /* ── Dry adiabats ── */
+    if (p->show_dry_adiabats) {
+        /* theta values in °C (= theta_K - 273.15), every 10°C */
+        double thetas[] = {
+            -30,-20,-10, 0, 10, 20, 30, 40, 50,
+             60, 70, 80, 90,100,120,140,160,180
+        };
+        int n_theta = 18;
+        int steps   = 80;
+        double dp   = (ST_P_BOT - ST_P_TOP) / steps;
+
+        for (int ti = 0; ti < n_theta; ti++) {
+            double theta_k = thetas[ti] + 273.15;
+            fprintf(f, "<polyline points=\"");
+            for (int si = 0; si <= steps; si++) {
+                double pr  = ST_P_BOT - si * dp;
+                double t_c = st_dry_adiabat_t(theta_k, pr);
+                double px  = st_t_to_px(t_c, pr, ml, pw);
+                double py  = st_p_to_py(pr, mt, ph);
+                fprintf(f, "%.2f,%.2f ", px, py);
+            }
+            fprintf(f,
+                "\" fill=\"none\" stroke=\"#CC7722\" stroke-width=\"0.6\" "
+                "opacity=\"0.5\" clip-path=\"url(#st-clip)\"/>\n");
+        }
+    }
+
+    /* ── Moist adiabats ── */
+    if (p->show_moist_adiabats) {
+        /* starting temperatures at 1000 hPa, every 4°C */
+        double t_starts[] = {
+            -20,-16,-12,-8,-4, 0, 4, 8,
+             12, 16, 20, 24, 28, 32, 36
+        };
+        int n_moist = 15;
+        int steps   = 80;
+        double dp   = (ST_P_BOT - ST_P_TOP) / steps;
+
+        for (int mi = 0; mi < n_moist; mi++) {
+            double t0 = t_starts[mi];
+            fprintf(f, "<polyline points=\"");
+            for (int si = 0; si <= steps; si++) {
+                double pr  = ST_P_BOT - si * dp;
+                double t_c = st_moist_adiabat_t(t0, ST_P_BOT, pr);
+                double px  = st_t_to_px(t_c, pr, ml, pw);
+                double py  = st_p_to_py(pr, mt, ph);
+                fprintf(f, "%.2f,%.2f ", px, py);
+            }
+            fprintf(f,
+                "\" fill=\"none\" stroke=\"#228844\" stroke-width=\"0.6\" "
+                "opacity=\"0.5\" stroke-dasharray=\"4,3\" "
+                "clip-path=\"url(#st-clip)\"/>\n");
+        }
+    }
+
+    /* ── Mixing ratio lines ── */
+    if (p->show_mixing_ratios) {
+        /* g/kg values */
+        double ws_lines[] = {0.4, 1.0, 2.0, 4.0, 7.0, 10.0, 16.0, 20.0};
+        int    n_ws       = 8;
+        int    steps      = 60;
+        double dp         = (ST_P_BOT - 400.0) / steps; /* only below 400 hPa */
+
+        for (int wi = 0; wi < n_ws; wi++) {
+            double ws_kgkg = ws_lines[wi] / 1000.0;
+            fprintf(f, "<polyline points=\"");
+            for (int si = 0; si <= steps; si++) {
+                double pr  = ST_P_BOT - si * dp;
+                /* invert rs formula: es = ws*p/(eps+ws), then Bolton */
+                double es  = ws_kgkg * pr / (ST_EPS + ws_kgkg);
+                double t_c = 243.5 * log(es / 6.112) /
+                             (17.67 - log(es / 6.112));
+                double px  = st_t_to_px(t_c, pr, ml, pw);
+                double py  = st_p_to_py(pr, mt, ph);
+                fprintf(f, "%.2f,%.2f ", px, py);
+            }
+            fprintf(f,
+                "\" fill=\"none\" stroke=\"#008888\" stroke-width=\"0.6\" "
+                "opacity=\"0.6\" stroke-dasharray=\"2,4\" "
+                "clip-path=\"url(#st-clip)\"/>\n");
+
+            /* label at bottom */
+            double pr_label = ST_P_BOT;
+            double ws_kgkg_ = ws_lines[wi] / 1000.0;
+            double es_l     = ws_kgkg_ * pr_label / (ST_EPS + ws_kgkg_);
+            double t_label  = 243.5 * log(es_l / 6.112) /
+                              (17.67 - log(es_l / 6.112));
+            double px_label = st_t_to_px(t_label, pr_label, ml, pw);
+            double py_label = st_p_to_py(pr_label, mt, ph);
+            if (px_label >= ml && px_label <= ml + pw) {
+                fprintf(f,
+                    "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
+                    "font-size=\"9\" fill=\"#008888\">%.1f</text>\n",
+                    px_label, py_label - 4, ws_lines[wi]);
+            }
+        }
+    }
+
+    /* ── Axis border ── */
+    fprintf(f,
+        "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
+        "fill=\"none\" stroke=\"#999\" stroke-width=\"1\"/>\n",
+        ml, mt, pw, ph);
+
+    /* ── Title ── */
+    if (p->title[0]) {
+        fprintf(f,
+            "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
+            "class=\"ink-title\">%s</text>\n",
+            ml + pw / 2, mt - 20, p->title);
+    }
+
+    /* ── Axis labels ── */
+    fprintf(f,
+        "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
+        "font-family=\"Consolas,sans-serif\" font-size=\"11\" fill=\"#444\">"
+        "Temperature (°C)</text>\n",
+        ml + pw / 2, mt + ph + 35);
+
+    fprintf(f,
+        "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
+        "transform=\"rotate(-90,%d,%d)\" "
+        "font-family=\"Consolas,sans-serif\" font-size=\"11\" fill=\"#444\">"
+        "Pressure (hPa)</text>\n",
+        ml - 55, mt + ph / 2,
+        ml - 55, mt + ph / 2);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Sounding drawing
+   ════════════════════════════════════════════════════════════ */
+
+static void ink_st_draw_sounding(FILE* f, InkSTPlot* p,
+                                  int ml, int mr, int mt, int mb)
+{
+    int W  = p->width;
+    int H  = p->height;
+    int pw = W - ml - mr;
+    int ph = H - mt - mb;
+    InkSTSounding* s = &p->sounding;
+
+    /* ── Temperature profile (red) ── */
+    fprintf(f, "<polyline points=\"");
+    for (int i = 0; i < s->n; i++) {
+        if (s->pressure[i] < ST_P_TOP || s->pressure[i] > ST_P_BOT) continue;
+        double px = st_t_to_px(s->temp[i], s->pressure[i], ml, pw);
+        double py = st_p_to_py(s->pressure[i], mt, ph);
+        fprintf(f, "%.2f,%.2f ", px, py);
+    }
+    fprintf(f,
+        "\" fill=\"none\" stroke=\"#CC2222\" stroke-width=\"2.5\" "
+        "stroke-linejoin=\"round\" clip-path=\"url(#st-clip)\"/>\n");
+
+    /* ── Dewpoint profile (green) ── */
+    fprintf(f, "<polyline points=\"");
+    for (int i = 0; i < s->n; i++) {
+        if (s->pressure[i] < ST_P_TOP || s->pressure[i] > ST_P_BOT) continue;
+        double px = st_t_to_px(s->dewpoint[i], s->pressure[i], ml, pw);
+        double py = st_p_to_py(s->pressure[i], mt, ph);
+        fprintf(f, "%.2f,%.2f ", px, py);
+    }
+    fprintf(f,
+        "\" fill=\"none\" stroke=\"#228822\" stroke-width=\"2.5\" "
+        "stroke-linejoin=\"round\" clip-path=\"url(#st-clip)\"/>\n");
+
+    /* ── LCL marker ── */
+    /* find approximate LCL: where temp ~ dewpoint along dry adiabat
+       use simple approximation: LCL pressure from surface values */
+    double t_sfc  = s->temp[0];
+    double td_sfc = s->dewpoint[0];
+    double p_sfc  = s->pressure[0];
+
+    /* Bolton 1980 LCL approximation:
+       T_lcl = 1 / (1/(Td - 56) + ln(T/Td)/800) + 56  (K)
+       where T, Td in Kelvin */
+    double T_k  = t_sfc  + 273.15;
+    double Td_k = td_sfc + 273.15;
+    double T_lcl_k = 1.0 / (1.0 / (Td_k - 56.0) +
+                     log(T_k / Td_k) / 800.0) + 56.0;
+    /* LCL pressure: p_lcl = p_sfc * (T_lcl/T)^(Cp/Rd) */
+    double p_lcl = p_sfc * pow(T_lcl_k / T_k, ST_CPD / ST_RD);
+    double t_lcl = T_lcl_k - 273.15;
+
+    if (p_lcl >= ST_P_TOP && p_lcl <= ST_P_BOT) {
+        double lcl_px = st_t_to_px(t_lcl, p_lcl, ml, pw);
+        double lcl_py = st_p_to_py(p_lcl, mt, ph);
+        /* diamond marker */
+        fprintf(f,
+            "<polygon points=\"%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f\" "
+            "fill=\"#8800CC\" opacity=\"0.85\" "
+            "clip-path=\"url(#st-clip)\"/>\n",
+            lcl_px,     lcl_py - 6,
+            lcl_px + 5, lcl_py,
+            lcl_px,     lcl_py + 6,
+            lcl_px - 5, lcl_py);
+        fprintf(f,
+            "<text x=\"%.2f\" y=\"%.2f\" font-size=\"9\" "
+            "fill=\"#8800CC\" clip-path=\"url(#st-clip)\">LCL</text>\n",
+            lcl_px + 8, lcl_py + 3);
+    }
+
+    /* ── Legend ── */
+    int lx = ml + pw - 110;
+    int ly = mt + 12;
+    fprintf(f,
+        "<rect x=\"%d\" y=\"%d\" width=\"105\" height=\"52\" "
+        "fill=\"white\" stroke=\"#DDD\" stroke-width=\"1\" "
+        "rx=\"3\" opacity=\"0.9\"/>\n", lx, ly);
+    /* temp swatch */
+    fprintf(f,
+        "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
+        "stroke=\"#CC2222\" stroke-width=\"2.5\"/>\n",
+        lx + 6, ly + 14, lx + 22, ly + 14);
+    fprintf(f,
+        "<text x=\"%d\" y=\"%d\" font-size=\"11\" "
+        "font-family=\"Consolas,sans-serif\" fill=\"#333\">Temp</text>\n",
+        lx + 28, ly + 18);
+    /* dewpoint swatch */
+    fprintf(f,
+        "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
+        "stroke=\"#228822\" stroke-width=\"2.5\"/>\n",
+        lx + 6, ly + 32, lx + 22, ly + 32);
+    fprintf(f,
+        "<text x=\"%d\" y=\"%d\" font-size=\"11\" "
+        "font-family=\"Consolas,sans-serif\" fill=\"#333\">Dewpoint</text>\n",
+        lx + 28, ly + 36);
+    /* LCL swatch */
+    fprintf(f,
+        "<polygon points=\"%d,%d %d,%d %d,%d %d,%d\" fill=\"#8800CC\"/>\n",
+        lx + 14, ly + 44,
+        lx + 19, ly + 49,
+        lx + 14, ly + 54,
+        lx + 9,  ly + 49);
+    fprintf(f,
+        "<text x=\"%d\" y=\"%d\" font-size=\"11\" "
+        "font-family=\"Consolas,sans-serif\" fill=\"#333\">LCL</text>\n",
+        lx + 28, ly + 53);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Wind barb drawing
+   ════════════════════════════════════════════════════════════ */
+
+/* draw one wind barb at pixel position (cx, cy)
+   speed_knots: wind speed in knots
+   dir_deg: meteorological direction (from, clockwise from north) */
+static void ink_st_draw_barb(FILE* f, double cx, double cy,
+                              double speed_knots, double dir_deg)
+{
+    /* calm: draw circle only */
+    if (speed_knots < 2.5) {
+        fprintf(f,
+            "<circle cx=\"%.2f\" cy=\"%.2f\" r=\"4\" "
+            "fill=\"none\" stroke=\"#333\" stroke-width=\"1\"/>\n",
+            cx, cy);
+        return;
+    }
+
+    /* meteorological convention: dir is where wind comes FROM
+       stem points INTO the wind (toward origin)
+       in SVG: north=up, angle 0=north, clockwise
+       convert to SVG angle: SVG 0=right, so subtract 90 */
+    double angle_rad = (dir_deg - 180.0) * M_PI_NET / 180.0;
+    double stem_len  = 22.0;
+    double barb_len  = 10.0;
+    double barb_gap  = 4.0;
+
+    /* stem end point (tip of barbs) */
+    double sx = cx + stem_len * sin(angle_rad);
+    double sy = cy - stem_len * cos(angle_rad);
+
+    /* draw stem */
+    fprintf(f,
+        "<line x1=\"%.2f\" y1=\"%.2f\" x2=\"%.2f\" y2=\"%.2f\" "
+        "stroke=\"#333\" stroke-width=\"1.2\"/>\n",
+        cx, cy, sx, sy);
+
+    /* perpendicular direction for barbs (to the left of stem) */
+    double perp_rad = angle_rad - M_PI_NET / 2.0;
+    double pbx = barb_len * sin(perp_rad);
+    double pby = -barb_len * cos(perp_rad);
+
+    /* round to nearest 5 knots */
+    int spd = (int)(speed_knots + 2.5);
+
+    int pennants  = spd / 50;  spd %= 50;
+    int full_barbs = spd / 10; spd %= 10;
+    int half_barbs = spd / 5;
+
+    /* position along stem from tip outward */
+    double pos = 0.0;
+
+    /* ── Pennants (filled triangles, 50 kt each) ── */
+    for (int i = 0; i < pennants; i++) {
+        double b1x = sx - pos       * sin(angle_rad);
+        double b1y = sy + pos       * cos(angle_rad);
+        double b2x = sx - (pos + barb_gap * 1.5) * sin(angle_rad);
+        double b2y = sy + (pos + barb_gap * 1.5) * cos(angle_rad);
+        fprintf(f,
+            "<polygon points=\"%.2f,%.2f %.2f,%.2f %.2f,%.2f\" "
+            "fill=\"#333\" stroke=\"#333\" stroke-width=\"0.5\"/>\n",
+            b1x, b1y,
+            b2x, b2y,
+            b1x + pbx, b1y + pby);
+        pos += barb_gap * 1.5 + 1.0;
+    }
+
+    /* ── Full barbs (10 kt each) ── */
+    for (int i = 0; i < full_barbs; i++) {
+        double bx = sx - pos * sin(angle_rad);
+        double by = sy + pos * cos(angle_rad);
+        fprintf(f,
+            "<line x1=\"%.2f\" y1=\"%.2f\" x2=\"%.2f\" y2=\"%.2f\" "
+            "stroke=\"#333\" stroke-width=\"1.2\"/>\n",
+            bx, by, bx + pbx, by + pby);
+        pos += barb_gap;
+    }
+
+    /* ── Half barbs (5 kt each) ── */
+    for (int i = 0; i < half_barbs; i++) {
+        double bx = sx - pos * sin(angle_rad);
+        double by = sy + pos * cos(angle_rad);
+        fprintf(f,
+            "<line x1=\"%.2f\" y1=\"%.2f\" x2=\"%.2f\" y2=\"%.2f\" "
+            "stroke=\"#333\" stroke-width=\"1.2\"/>\n",
+            bx, by, bx + pbx * 0.5, by + pby * 0.5);
+        pos += barb_gap;
+    }
+}
+
+static void ink_st_draw_barbs(FILE* f, InkSTPlot* p,
+                               int ml, int mr, int mt, int mb)
+{
+    int W  = p->width;
+    int H  = p->height;
+    int ph = H - mt - mb;
+
+    /* barbs drawn in right margin, centered */
+    double barb_x = W - mr + mr / 2.0;
+
+    /* km/h to knots */
+    double kmh_to_kt = 0.539957;
+
+    /* draw at standard pressure levels only to avoid crowding */
+    double levels[] = {1000,925,850,700,500,400,300,250,200,150,100};
+    int    n_levels = 11;
+
+    InkSTSounding* s = &p->sounding;
+
+    for (int li = 0; li < n_levels; li++) {
+        double target_p = levels[li];
+        if (target_p < ST_P_TOP || target_p > ST_P_BOT) continue;
+
+        /* find closest sounding level */
+        int    best_idx  = -1;
+        double best_dist = 999.0;
+        for (int i = 0; i < s->n; i++) {
+            double dist = fabs(s->pressure[i] - target_p);
+            if (dist < best_dist) {
+                best_dist = dist;
+                best_idx  = i;
+            }
+        }
+
+        /* only draw if close enough to the standard level */
+        if (best_idx < 0 || best_dist > 30.0) continue;
+
+        double barb_y     = st_p_to_py(s->pressure[best_idx], mt, ph);
+        double spd_knots  = s->wind_speed[best_idx] * kmh_to_kt;
+        double dir        = s->wind_dir[best_idx];
+
+        ink_st_draw_barb(f, barb_x, barb_y, spd_knots, dir);
+
+        /* pressure label next to barb */
+        fprintf(f,
+            "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
+            "font-size=\"8\" font-family=\"Consolas,sans-serif\" "
+            "fill=\"#888\">%.0f</text>\n",
+            barb_x, barb_y + 14, target_p);
+    }
+
+    /* column header */
+    fprintf(f,
+        "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
+        "font-size=\"9\" font-family=\"Consolas,sans-serif\" "
+        "fill=\"#555\">Wind</text>\n",
+        barb_x, mt - 8);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Save — assembles background + sounding + barbs
+   ════════════════════════════════════════════════════════════ */
+
+void ink_st_save(InkSTPlot* p, const char* path) {
+    FILE* f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr,
+            "MochaRuntimeError (mocha-ink): cannot open '%s' for writing\n",
+            path);
+        exit(2);
+    }
+
+    int ml = ST_ML;
+    int mr = ST_MR;
+    int mt = ST_MT;
+    int mb = ST_MB;
+
+    ink_st_draw_background(f, p, ml, mr, mt, mb);
+    ink_st_draw_sounding(f, p, ml, mr, mt, mb);
+    ink_st_draw_barbs(f, p, ml, mr, mt, mb);
+
+    fprintf(f, "</svg>\n");
+    fclose(f);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Show — save to temp file and open
+   ════════════════════════════════════════════════════════════ */
+
+void ink_st_show(InkSTPlot* p) {
+    const char* tmp = "mocha_ink_preview.svg";
+    ink_st_save(p, tmp);
+#ifdef _WIN32
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "start %s", tmp);
+    system(cmd);
+#elif defined(__APPLE__)
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "open %s", tmp);
+    system(cmd);
+#else
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
+    system(cmd);
+#endif
+}
+
+/* ════════════════════════════════════════════════════════════
+   Mocha wrappers
+   ════════════════════════════════════════════════════════════ */
+
+void ink_st_save_mocha(InkSTPlot* p, const char* path) { ink_st_save(p, path); }
+void ink_st_show_mocha(InkSTPlot* p)                   { ink_st_show(p); }
+
+
 /*!!MOCHA - INK END!!*/
 //Default Params
 void mocha_missing_arg(const char* name, const char* type) {
@@ -11530,3 +12320,16 @@ double metero_thickness(double p_upper_mb, double p_lower_mb, double mean_temp_c
         mocha_float_mul(287.05 / 9.80665, t_k),
         mocha_ext_float_log(mocha_float_div(p_lower_mb, p_upper_mb))->real);
 }
+
+/* For Mocha-space */
+//Bypasses fixed-point decimal scaling entirely. Use ONLY for values outside
+//safe fixed-point range (~1e13+). No drift protection — raw IEEE 754.
+
+double mocha_unsafe_mul(double a, double b) { return a * b; }
+double mocha_unsafe_div(double a, double b) {
+    if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
+    return a / b;
+}
+double mocha_unsafe_add(double a, double b) { return a + b; }
+double mocha_unsafe_sub(double a, double b) { return a - b; }
+double mocha_unsafe_mod(double a, double b) { return fmod(a, b); }

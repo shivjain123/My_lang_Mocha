@@ -656,9 +656,11 @@ class TypeChecker:
                 return "str[]"
             if node.member == "merge":
                 return "dict"
+            if node.member == "copy":      # <-- add
+                return "dict"
             self.error(
                 f"'.{node.member}' is not a method on dict. "
-                f"Available: .length, .has, .allKeys, .allValues, .remove, .clean, .merge",
+                f"Available: .length, .has, .allKeys, .allValues, .remove, .clean, .merge, .copy",
                 node
             )
             return "unknown"
@@ -710,9 +712,11 @@ class TypeChecker:
                 return inner  # min/max returns the element type
             self.error(
                 f"'.{node.member}' is not a method on set. "
-                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff, .min, and .max",
+                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff, .min, .max, .jaccard, .dice, and .overlap",
                 node
             )
+            if node.member in ("jaccard", "dice", "overlap"):
+                return "float"
             return "unknown"
         
         # String built-ins
@@ -1029,6 +1033,8 @@ class TypeChecker:
                         else:
                             name = a.target.name if isinstance(a.target, Identifier) else "?"
                             self.error(f"merge() unknown keyword argument '{name}'", node)
+                if func_name == "copy":
+                    return "dict"
                 return "dict"
             
         # HashTable method return types
@@ -1098,6 +1104,15 @@ class TypeChecker:
                 if inner not in ("int", "float", "vast", "str"):
                     self.error(f"min()/max() not supported for set<{inner}>", node)
                 return inner
+            if func_name in ("jaccard", "dice", "overlap"):
+                if node.args:
+                    arg_type = self.check_expr(node.args[0])
+                    if arg_type != obj_type:
+                        self.error(
+                            f"Cannot call '{func_name}' on '{obj_type}' with '{arg_type}'. "
+                            f"Both sets must be the same type.", node
+                        )
+                return "float"
         
         #String methods
         if obj_type == "str":
@@ -1280,7 +1295,7 @@ class TypeChecker:
         obj_type   = self.check_expr(node.obj)
         index_type = self.check_expr(node.index)
 
-        # Dict access — str key allowed!
+        # Dict access — only str key allowed!
         if obj_type == "dict":
             if index_type != "str":
                 self.error(f"Dict key must be str, got '{index_type}'", node)

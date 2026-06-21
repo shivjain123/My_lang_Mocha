@@ -1625,8 +1625,95 @@ extend float[][] {
         return (u, sigma, v);
     };
 
+    function svd_thin() -> (float[][], 2) {
+        var rows: int = this.rows;
+        var cols: int = this.cols;
+
+        var at: float[][] = this.transpose();
+        var ata: float[][] = at.vector(this);
+
+        var ata_evals_c: Complex[] = ata.eigenvalues();
+        var ata_evals: float[] = alloc float[cols];
+        var ei: int = 0;
+        while (ei < cols) {
+            ata_evals[ei] = ata_evals_c[ei].real;
+            ei++;
+        };
+
+        var v_c: Complex[][] = ata.eigenvectors_relaxed();
+        var v: float[][] = alloc float[cols][cols];
+        var vi: int = 0;
+        while (vi < cols) {
+            var vj: int = 0;
+            while (vj < cols) {
+                v[vi][vj] = v_c[vi][vj].real;
+                vj++;
+            };
+            vi++;
+        };
+
+        var svd_k: int = rows;
+        if (cols < rows) { svd_k = cols; };
+
+        var sigma: float[][] = alloc float[svd_k][svd_k];
+        var i: int = 0;
+        while (i < svd_k) {
+            var j: int = 0;
+            while (j < svd_k) {
+                sigma[i][j] = 0.0;
+                j++;
+            };
+            i++;
+        };
+
+        i = 0;
+        while (i < svd_k) {
+            var ev: float = ata_evals[i];
+            if (ev > 0.0) {
+                sigma[i][i] = newton_sqrt(ev);
+            } else {
+                sigma[i][i] = 0.0;
+            };
+            i++;
+        };
+
+        // Sort singular values descending, reorder V columns accordingly
+        var si: int = 0;
+        while (si < svd_k) {
+            var max_idx: int = si;
+            var max_val: float = sigma[si][si];
+            var sj: int = si + 1;
+            while (sj < svd_k) {
+                if (sigma[sj][sj] > max_val) {
+                    max_val = sigma[sj][sj];
+                    max_idx = sj;
+                };
+                sj++;
+            };
+            if (max_idx != si) {
+                // Swap sigma diagonal
+                var tmp_s: float = sigma[si][si];
+                sigma[si][si] = sigma[max_idx][max_idx];
+                sigma[max_idx][max_idx] = tmp_s;
+                // Swap columns of v (rows of Vt)
+                var vk: int = 0;
+                while (vk < cols) {
+                    var tmp_v: float = v[vk][si];
+                    v[vk][si] = v[vk][max_idx];
+                    v[vk][max_idx] = tmp_v;
+                    vk++;
+                };
+            };
+            si++;
+        };
+
+        // Vt = V transposed
+        var vt: float[][] = v.transpose();
+        return (sigma, vt);
+    };
+
     function singular_values() -> float[] {
-        var result: (float[][]) = this.svd();
+        var result: (float[][], 3) = this.svd();
         var sigma: float[][] = result#1;
         var rows: int = sigma.length;
         var cols: int = sigma[0].length;

@@ -288,6 +288,47 @@ extend float[] {
         var correction: float = c_sqrt(nf * (nf - 1.0)) / (nf - 2.0);
         return correction * g1;
     };
+
+    // ===========================================================
+    // KURTOSIS — population and sample (excess kurtosis)
+    // ===========================================================
+
+    // Population kurtosis — fourth standardized moment, excess (normal = 0.0)
+    function kurtosis() -> float {
+        var n: int = this.length;
+        var mu: float = this.mean();
+        var sigma: float = this.std_popu();
+
+        var sum_fourth: float = 0.0;
+        var i: int = 0;
+        while (i < n) {
+            var diff: float = this[i] - mu;
+            sum_fourth = sum_fourth + (diff * diff * diff * diff);
+            i = i + 1;
+        };
+
+        var m4: float = sum_fourth / float(n);
+        var raw_kurt: float = m4 / (sigma * sigma * sigma * sigma);
+        return raw_kurt - 3.0;
+    };
+
+    // Sample kurtosis — bias-corrected excess kurtosis (G2)
+    // G2 = [(n-1) / ((n-2)(n-3))] * [(n+1)*g2 + 6]
+    // where g2 is the population excess kurtosis
+    function kurtosis_sample() -> float {
+        var n: int = this.length;
+        if (n < 4) {
+            c_print_err("MochaStatsError (mocha-stats): kurtosis_sample requires at least 4 values.");
+            c_exit(2);
+            return 0.0;
+        };
+
+        var g2: float = this.kurtosis();
+        var nf: float = float(n);
+        var term1: float = (nf - 1.0) / ((nf - 2.0) * (nf - 3.0));
+        var term2: float = (nf + 1.0) * g2 + 6.0;
+        return term1 * term2;
+    };
 };
 
 function covar(x: float[], y: float[]) -> float {
@@ -354,7 +395,7 @@ function chi(observed: float[], expected: float[]) -> float {
     return result;
 };
 
-// ===========================================================
+    // ===========================================================
     // SPEARMAN RANK CORRELATION
     // ===========================================================
 

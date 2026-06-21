@@ -6,11 +6,11 @@ function c_isdigit(c: str) -> int native mocha_wrap_isdigit_str;
 extend str {
 
     function toInt() -> int {
-        return 0;
+        return 0; //This is a stub. LLVM during linking emits atoi
     };
 
     function toFloat() -> float {
-        return 0.0;
+        return 0.0; //This is a stub. LLVM during linking emits atof
     };
 
     function startsWith(prefix: str) -> bool {

@@ -39,5 +39,5 @@ function main(didLoad) -> null {
     p.save("euler_spiral.svg");
     
     print("euler_spiral.svg saved", newLine=true);
-    print("The ends never meet — just like my feature list.", newLine=true);
+    print("The ends never meet...", newLine=true);
 };

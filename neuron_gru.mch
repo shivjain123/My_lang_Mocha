@@ -1,6 +1,7 @@
 from "mocha-neuron" import *;
 
 function main(didLoad) -> null {
+    c_print_err("Entered main\n");
     rand_seed(42);
 
     // simple GRU test: process a sequence of 3 timesteps
@@ -24,6 +25,7 @@ function main(didLoad) -> null {
         // forward pass through sequence
         var h: Tensor = Tensor(1, 4);
         h.zeros();
+        c_print_err("Before forward x0\n");
 
         var h0: Tensor = gru.forward(x0, h);
         var h1: Tensor = gru.forward(x1, h0);
