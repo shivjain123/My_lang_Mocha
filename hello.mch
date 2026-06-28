@@ -1,0 +1,1 @@
+from "mocha-space" import alias from "library" as name;

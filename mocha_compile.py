@@ -925,7 +925,9 @@ def resolve_lib_build_order(source_file: str, lib_dir: str,
 
     deps = get_lib_deps(source_file)
     for dep in deps:
-        dep_mch = os.path.join(lib_dir, dep, f"{dep}.mch")
+        dep_mch = os.path.join(lib_dir, f"{dep}.mch")  # flat structure
+        if not os.path.exists(dep_mch):
+            dep_mch = os.path.join(lib_dir, dep, f"{dep}.mch")  # fallback to subdirectory
         if os.path.exists(dep_mch):
             resolve_lib_build_order(dep_mch, lib_dir, visited, stack)
 
@@ -956,7 +958,6 @@ def compile_lib_with_deps(source_file: str) -> bool:
         # Recompile if: source newer than obj, OR any dep was recompiled this run
         deps = get_lib_deps(lib_path)
         dep_was_recompiled = any(d in recompiled for d in deps)
-
         if needs_recompile(lib_path, obj_file) or dep_was_recompiled:
             if dep_was_recompiled and not needs_recompile(lib_path, obj_file):
                 print(f"  ↻ Recompiling {lib_name} (dependency changed)")
@@ -1132,9 +1133,20 @@ def needs_recompile(src: str, obj: str) -> bool:
         raise FileNotFoundError(f"Source file not found: {src}")
     if not os.path.exists(obj):
         return True
-    return os.path.getmtime(src) > os.path.getmtime(obj)
+    obj_mtime = os.path.getmtime(obj)
+    if os.path.getmtime(src) > obj_mtime:
+        return True
+    # Also check if compiler itself changed
+    compiler_files = [
+        os.path.join(SCRIPT_DIR, "mocha_codegen.py"),
+        os.path.join(SCRIPT_DIR, "mocha_typeChecker.py"),
+        os.path.join(SCRIPT_DIR, "mocha_compile.py"),
+        os.path.join(SCRIPT_DIR, "mocha_parser.py"),
+        os.path.join(SCRIPT_DIR, "mocha_lexer.py"),
+    ]
+    return any(os.path.getmtime(cf) > obj_mtime for cf in compiler_files)
 
-def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =False) -> bool:
+def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = False, check_only: bool = False) -> bool:
     import time
     start = time.time()
 
@@ -1216,6 +1228,10 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
             print(f"     {e}")
         return False
     print(f"  ✅ Type check passed\n")
+
+    # LSP check-only mode: stop here, no codegen or clang needed
+    if check_only:
+        return True
 
     print("Step 4: Code Generation...")
     codegen = CodeGen(source_file=source_file)
@@ -1590,9 +1606,10 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool =Fal
 # ============================================================
 
 if __name__ == "__main__":
-    # Remove --debug from argv for cleaner processing
-    debug_mode = "--debug" in sys.argv
-    args = [a for a in sys.argv if a != "--debug"]
+    # Remove --debug and --check-only from argv for cleaner processing
+    debug_mode  = "--debug"      in sys.argv
+    check_only  = "--check-only" in sys.argv
+    args = [a for a in sys.argv if a not in ("--debug", "--check-only")]
     
     if len(args) < 2:
         print("Usage: mocha <file.mch>")
@@ -1608,5 +1625,5 @@ if __name__ == "__main__":
 
     source_file = args[1]
     output_name = args[2] if len(args) > 2 else os.path.splitext(source_file)[0]
-    success = compile_mocha(source_file, output_name, debug=debug_mode)
+    success = compile_mocha(source_file, output_name, debug=debug_mode, check_only=check_only)
     sys.exit(0 if success else 1)

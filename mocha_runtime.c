@@ -6,7 +6,8 @@
  *
  * PLATFORM SUPPORT
  * ──────────────────────────────────────────────────────────
- *   Mocha has 14 stdlibs
+ *   Mocha has 15 stdlibs
+ * 
  *   Windows / macOS / Linux, branched via #ifdef at:
  *     - top-level includes
  *     - Cryptographic RNG          (Windows: BCrypt | else: /dev/urandom or arc4random)
@@ -1490,6 +1491,30 @@ int32_t mocha_array2d_occs_colrange(MochaArray2D *arr, void *value,
     return count;
 }
 
+/* ---- Push row / col ---- */
+
+void mocha_array2d_push_row(MochaArray2D *arr, MochaArray *row) {
+    arr->data = (MochaArray **)realloc(arr->data, (arr->rows + 1) * sizeof(MochaArray *));
+    MOCHA_OOM_CHECK(arr->data);
+    arr->data[arr->rows] = row;
+    arr->rows++;
+    if (arr->cols == 0)
+        arr->cols = row->length;
+}
+
+void mocha_array2d_push_col(MochaArray2D *arr, MochaArray *col) {
+    if (col->length != arr->rows) {
+        fprintf(stderr, "MochaRuntimeError: push_col column length %d does not match row count %d.\n",
+                col->length, arr->rows);
+        exit(2);
+    }
+    for (int32_t r = 0; r < arr->rows; r++) {
+        void *elem = (char *)col->data + r * col->elem_size;
+        mocha_array_push(arr->data[r], elem);
+    }
+    arr->cols++;
+}
+
 /* ---- Resize — grow only, never shrink ---- */
 void mocha_array2d_resize(MochaArray2D *arr, int32_t new_rows,
                            int32_t new_cols, int32_t elem_size) {
@@ -2703,9 +2728,24 @@ void mocha_set_delete(MochaSet *s, void *value) {
     s->size--;
 }
 
+static const char* set_type_name(int32_t type) {
+    switch(type) {
+        case 0: return "int";
+        case 1: return "float";
+        case 2: return "str";
+        case 3: return "bool";
+        case 4: return "vast";
+        default: return "unknown";
+    }
+}
+
 void mocha_set_retype(MochaSet *s, int32_t new_type) {
-    if (s->elem_type != new_type)
-        fprintf(stderr, "### WARNING: Set type changed — previous data cleared.\n");
+    if (s->size > 0) {
+        fprintf(stderr, "MochaRuntimeWarning: retype() called on a non-empty set. "
+                        "Call .clean() first to avoid data loss.\n");
+    }
+    fprintf(stderr, "MochaWarning: retype() — all existing data will be lost. "
+                    "New type: %s\n", set_type_name(new_type));
     s->size      = 0;
     s->elem_type = new_type;
     s->elem_size = set_elem_size(new_type);
@@ -3901,6 +3941,8 @@ char* mocha_file_readline(MochaFile *f) {
         return buf;
     }
 
+    if (len > 0 && buf[len - 1] == '\r')
+        buf[--len] = '\0';
     buf[len] = '\0';
     return buf;
 }
@@ -4396,7 +4438,6 @@ void mocha_stack_print(void) {
 
 /* ============================================================
  * mocha-ink — SVG Visualization Runtime
- * Charts: Line, Scatter (Bar and Heatmap coming soon)
  * Output: SVG files, optionally opened in browser
  * ============================================================ */
 

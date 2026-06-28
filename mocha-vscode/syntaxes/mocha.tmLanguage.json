@@ -2,20 +2,33 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Mocha",
   "scopeName": "source.mch",
-  "fileTypes": ["mch"],
+  "fileTypes": ["mch", "mchi"],
   "patterns": [
+    { "include": "#docstrings" },
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#tags" },
     { "include": "#keywords" },
     { "include": "#types" },
     { "include": "#constants" },
     { "include": "#classes" },
     { "include": "#functions" },
+    { "include": "#native_symbols" },
     { "include": "#numbers" },
     { "include": "#operators" },
     { "include": "#punctuation" }
   ],
   "repository": {
+
+    "docstrings": {
+      "patterns": [
+        {
+          "comment": "Mocha docstring: ~~ rest of line (single line, no closing)",
+          "name": "comment.block.documentation.mocha",
+          "match": "~~.*$"
+        }
+      ]
+    },
 
     "comments": {
       "patterns": [
@@ -24,10 +37,10 @@
           "match": "//.*$"
         },
         {
-          "begin": "\"\"\"",
-          "end": "\"\"\"",
+          "comment": "Multi-line block comment",
           "name": "comment.block.mocha",
-          "contentName": "comment.block.mocha"
+          "begin": "\"\"\"",
+          "end": "\"\"\""
         }
       ]
     },
@@ -42,13 +55,38 @@
             {
               "name": "constant.character.escape.mocha",
               "match": "\\\\."
+            },
+            {
+              "comment": "format string: $name, $0, $0|2f",
+              "name": "variable.other.interpolated.mocha",
+              "match": "\\$[a-zA-Z0-9_]+(\\|[^\"]*)?"
             }
           ]
+        }
+      ]
+    },
+
+    "tags": {
+      "patterns": [
+        {
+          "comment": "tag keyword — light blue via tokenColorCustomizations",
+          "name": "keyword.declaration.tag.mocha",
+          "match": "\\btag\\b"
         },
         {
-          "name": "string.quoted.single.mocha",
-          "match": "'[^']*'",
-          "comment": "char literals"
+          "comment": "tag name after tag keyword — gold",
+          "name": "entity.name.tag.mocha",
+          "match": "(?<=\\btag\\s)([A-Z][a-zA-Z0-9_]*)"
+        },
+        {
+          "comment": "tag variant access: Color.RED — gold",
+          "name": "entity.name.tag.variant.mocha",
+          "match": "\\b([A-Z][a-zA-Z0-9_]*)\\.([A-Z][A-Z0-9_]+)\\b"
+        },
+        {
+          "comment": "tag variant declaration inside tag body — gold (SCREAMING_CASE)",
+          "name": "entity.name.tag.variant.mocha",
+          "match": "\\b[A-Z][A-Z0-9_]{1,}\\b"
         }
       ]
     },
@@ -61,33 +99,19 @@
         },
         {
           "name": "keyword.declaration.mocha",
-          "match": "\\b(function|class|interface|extends|implements|var|const|lambda|native|alloc|import|from|as|extend|tag)\\b"
+          "match": "\\b(function|class|interface|extends|implements|var|const|lambda|native|alloc|import|from|as|extend)\\b"
         },
         {
           "name": "keyword.modifier.mocha",
           "match": "\\b(private|protected|shared|this|new)\\b"
         },
         {
-          "name": "keyword.operator.logical.mocha",
-          "match": "\\b(and|or|not|true|false)\\b"
+          "name": "keyword.operator.word.mocha",
+          "match": "\\b(and|or|not)\\b"
         },
         {
           "name": "keyword.other.mocha",
-          "match": "\\b(didLoad|print|str|int|float|bool|char|vast)\\b"
-        }
-      ]
-    },
-
-    "constants": {
-      "patterns": [
-        {
-          "name": "constant.language.mocha",
-          "match": "\\b(true|false)\\b"
-        },
-        {
-          "comment": "SCREAMING_CASE constants — blue",
-          "name": "constant.other.mocha",
-          "match": "\\b[A-Z][A-Z0-9_]{2,}\\b"
+          "match": "\\b(didLoad|print|constructor)\\b"
         }
       ]
     },
@@ -96,7 +120,36 @@
       "patterns": [
         {
           "name": "storage.type.primitive.mocha",
-          "match": "\\b(int|float|bool|char|str|vast|null|dict|set|tuple)\\b"
+          "match": "\\b(int|float|bool|str|vast|null|dict|set|void)\\b"
+        }
+      ]
+    },
+
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.mocha",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+
+    "classes": {
+      "patterns": [
+        {
+          "comment": "class/interface name after keyword",
+          "name": "entity.name.type.class.mocha",
+          "match": "(?<=\\b(?:class|interface|extends|implements)\\s)([A-Z][a-zA-Z0-9_]*)"
+        },
+        {
+          "comment": "type annotation after colon: var x: MyType",
+          "name": "entity.name.type.mocha",
+          "match": "(?<=:\\s*)([A-Z][a-zA-Z0-9_]*)"
+        },
+        {
+          "comment": "constructor call: new MyClass(...)",
+          "name": "entity.name.type.mocha",
+          "match": "(?<=\\bnew\\s)([A-Z][a-zA-Z0-9_]*)"
         }
       ]
     },
@@ -106,37 +159,22 @@
         {
           "comment": "function declaration name — yellow",
           "name": "entity.name.function.mocha",
-          "match": "(?<=function\\s)([a-zA-Z_][a-zA-Z0-9_]*)"
+          "match": "(?<=\\bfunction\\s)([a-zA-Z_][a-zA-Z0-9_]*)"
         },
         {
-          "comment": "function call — yellow",
+          "comment": "function/method call — yellow",
           "name": "entity.name.function.call.mocha",
           "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()"
         }
       ]
     },
 
-    "classes": {
+    "native_symbols": {
       "patterns": [
         {
-          "comment": "class name after class/interface/extends/implements keyword — green",
-          "name": "entity.name.type.class.mocha",
-          "match": "(?<=\\b(?:class|interface|extends|implements)\\s)([A-Z][a-zA-Z0-9_]*)"
-        },
-        {
-          "comment": "type annotations after colon — green",
-          "name": "entity.name.type.mocha",
-          "match": "(?<=:\\s*)([A-Z][a-zA-Z0-9_]*)"
-        }
-      ]
-    },
-
-    "tags": {
-      "patterns": [
-        {
-          "comment": "Tag access: Color.RED",
-          "name": "constant.language.tag.mocha",
-          "match": "\\b[A-Z][a-zA-Z0-9_]*\\.[A-Z][A-Z0-9_]+\\b"
+          "comment": "RHS symbol after native keyword — same yellow as function names",
+          "name": "entity.name.function.mocha",
+          "match": "(?<=\\bnative\\s)([a-zA-Z_][a-zA-Z0-9_]*)"
         }
       ]
     },
@@ -167,6 +205,10 @@
         {
           "name": "keyword.operator.arithmetic.mocha",
           "match": "(\\+|-|\\*|/|%|\\+\\+|--)"
+        },
+        {
+          "name": "keyword.operator.bitwise.mocha",
+          "match": "(&|\\||\\^|~|<<|>>)"
         },
         {
           "name": "keyword.operator.range.mocha",

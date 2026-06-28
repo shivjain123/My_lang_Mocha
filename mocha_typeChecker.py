@@ -955,7 +955,7 @@ class TypeChecker:
             MUTATING_METHODS = {
                 "push", "pop", "insert", "delete", "remove",
                 "clean", "retype", "reverse", "sort", "occs",
-                "push", "drop", "resize", 
+                "drop", "resize", 
             }
             if func_name in MUTATING_METHODS:
                 if isinstance(node.name.obj, Identifier):
@@ -993,6 +993,9 @@ class TypeChecker:
 
         for arg in node.args:
             if isinstance(arg, Assignment):
+                continue
+            # retype arg is a type name identifier, not a variable — skip typecheck
+            if func_name == "retype":
                 continue
             self.check_expr(arg)
 
@@ -1068,6 +1071,26 @@ class TypeChecker:
                     )
             return "int"
         
+        # push on 2D array — row by default, col=true for column push
+        if func_name == "push":
+            if obj_type and ("[][]" in obj_type or obj_type.endswith("[][]")):
+                has_col_kwarg = any(
+                    isinstance(arg, Assignment) and
+                    isinstance(arg.target, Identifier) and
+                    arg.target.name == "col"
+                    for arg in node.args
+                )
+                positional_args = [
+                    arg for arg in node.args
+                    if not (isinstance(arg, Assignment) and isinstance(arg.target, Identifier))
+                ]
+                if len(positional_args) != 1:
+                    self.error(
+                        "push() on a 2D array requires exactly one data argument. "
+                        "Example: matrix.push(row) or matrix.push(col, col=true)", node
+                    )
+                return "null"
+        
         # Set method return types
         if obj_type and obj_type.startswith("set<"):
             if func_name == "has":
@@ -1084,6 +1107,7 @@ class TypeChecker:
                                 f"Invalid type '{arg.name}' for retype(). "
                                 f"Valid types are: int, float, str, bool, vast", node
                             )
+                    # return early — don't typecheck the arg as a normal expression
                 return "null"
             if func_name in ("union", "intersect", "xor", "rel_diff"):
                 if node.args:
@@ -1893,7 +1917,6 @@ class TypeChecker:
                         ):
                             if at != it:
                                 self.error(
-                                    f""
                                     f"'{node.name}.{method_name}' "
                                     f"parameter '{an}: {at}' doesn't "
                                     f"match interface type '{it}'", node

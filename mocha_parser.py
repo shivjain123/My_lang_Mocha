@@ -767,10 +767,24 @@ class Parser:
         self.expect(TokenType.LPAREN, "Expected '(' to start function call")
         args = []
 
+        # Special case: retype(type_name) — type name would be misread as cast
+        is_retype = (
+            isinstance(callee, MemberAccess) and
+            callee.member == "retype"
+        )
+
         if not self.check(TokenType.RPAREN):
-            args.append(self.parse_call_arg())
-            while self.match(TokenType.COMMA):
+            if is_retype:
+                # consume type name as plain identifier, not cast expression
+                type_tok = self.advance()
+                ident = Identifier(name=type_tok.value)
+                ident.line = type_tok.line
+                ident.col = type_tok.column
+                args.append(ident)
+            else:
                 args.append(self.parse_call_arg())
+                while self.match(TokenType.COMMA):
+                    args.append(self.parse_call_arg())
 
         self.expect(TokenType.RPAREN, "Expected ')' to close function call")
         node = FunctionCall(name=callee, args=args)

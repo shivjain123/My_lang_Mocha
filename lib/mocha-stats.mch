@@ -223,33 +223,6 @@ extend float[] {
         };
         return (val - m) / (s / c_sqrt(n));
     };
-    function normalize() -> float[] {
-        if (this.length == 0) {
-            c_print_err("MochaLibError (mocha-stats): normalize() called on empty array.");
-            c_exit(2);
-            return [];
-        };
-        var min_val: float = this[0];
-        var max_val: float = this[0];
-        var i: int = 1;
-        while (i < this.length) {
-            if (this[i] < min_val) { min_val = this[i]; };
-            if (this[i] > max_val) { max_val = this[i]; };
-            i++;
-        };
-        if (max_val - min_val == 0.0) {
-            c_print_err("MochaLibError (mocha-stats): normalize() called on array with all identical values.");
-            c_exit(2);
-            return [];
-        };
-        var result: float[] = [];
-        i = 0;
-        while (i < this.length) {
-            result.push((this[i] - min_val) / (max_val - min_val));
-            i++;
-        };
-        return result;
-    };
 
     // ===========================================================
     // SKEWNESS — population and sample (Fisher-Pearson)
@@ -1430,4 +1403,96 @@ function one_way_anova_unequal(groups: float[][], sizes: int[]) -> (float, 4) {
     var p_value: float = fdist.survival(f);
 
     return (f, p_value, df_between, df_within);
+};
+
+extend float[][] {
+    function normalize_col(col: int) -> float[][] {
+        if (this.length == 0) {
+            c_print_err("MochaLibError (mocha-stats): normalize_col() called on empty array.");
+            c_exit(2);
+            return [[]];
+        };
+        var min_val: float = this[0][col];
+        var max_val: float = this[0][col];
+        var i: int = 1;
+        while (i < this.length) {
+            if (this[i][col] < min_val) { min_val = this[i][col]; };
+            if (this[i][col] > max_val) { max_val = this[i][col]; };
+            i++;
+        };
+        if (max_val - min_val == 0.0) {
+            c_print_err("MochaLibError (mocha-stats): normalize_col() called on column with all identical values.");
+            c_exit(2);
+            return [[]];
+        };
+        var result: float[][] = [[]];
+        i = 0;
+        while (i < this.length) {
+            var row: float[] = [];
+            var j: int = 0;
+            while (j < this[i].length) {
+                if (j == col) {
+                    row.push((this[i][j] - min_val) / (max_val - min_val));
+                };
+                if (j != col) {
+                    row.push(this[i][j]);
+                };
+                j++;
+            };
+            result.push(row);
+            i++;
+        };
+        return result;
+    };
+    function col_min(col: int) -> float {
+        if (this.length == 0) {
+            c_print_err("MochaLibError (mocha-stats): col_min() called on empty array.");
+            c_exit(2);
+            return 0.0;
+        };
+        var min_val: float = this[0][col];
+        var i: int = 1;
+        while (i < this.length) {
+            if (this[i][col] < min_val) { min_val = this[i][col]; };
+            i++;
+        };
+        return min_val;
+    };
+
+    function col_max(col: int) -> float {
+        if (this.length == 0) {
+            c_print_err("MochaLibError (mocha-stats): col_max() called on empty array.");
+            c_exit(2);
+            return 0.0;
+        };
+        var max_val: float = this[0][col];
+        var i: int = 1;
+        while (i < this.length) {
+            if (this[i][col] > max_val) { max_val = this[i][col]; };
+            i++;
+        };
+        return max_val;
+    }; 
+
+    function normalize_val(col: int, val: float) -> float {
+        if (this.length == 0) {
+            c_print_err("MochaLibError (mocha-stats): normalize_val() called on empty array.");
+            c_exit(2);
+            return 0.0;
+        };
+        var min_val: float = this[0][col];
+        var max_val: float = this[0][col];
+        var i: int = 1;
+        while (i < this.length) {
+            if (this[i][col] < min_val) { min_val = this[i][col]; };
+            if (this[i][col] > max_val) { max_val = this[i][col]; };
+            i++;
+        };
+        if (max_val - min_val == 0.0) {
+            c_print_err("MochaLibError (mocha-stats): normalize_val() called on column with all identical values.");
+            c_exit(2);
+            return 0.0;
+        };
+        return (val - min_val) / (max_val - min_val);
+    };
 };

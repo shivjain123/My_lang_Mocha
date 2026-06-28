@@ -752,35 +752,44 @@ class LinearRegression {
         var r2_val: float = this.r2(x, y);
         var n: int = y.length;
         var n_features: int = x.cols;
-        var adj_r2: float = 1.0 - (1.0 - r2_val) * float(n - 1) / float(n - n_features - 1);
         var mse_val: float = this.mse(x, y);
         var rmse_val: float = this.rmse(x, y);
+        var denom: int = n - n_features - 1;
+        var adj_r2: float = 0.0;
+        if (denom != 0) {
+            adj_r2 = 1.0 - (1.0 - r2_val) * float(n - 1) / float(denom);
+        };
 
-        print("==============================================");
-        print("        OLS Regression Results");
-        print("==============================================");
-        print("R²:          " + str(r2_val));
-        print("Adj. R²:     " + str(adj_r2));
-        print("MSE:         " + str(mse_val));
-        print("RMSE:        " + str(rmse_val));
-        print("n:           " + str(n));
-        print("Features:    " + str(n_features));
-        print("----------------------------------------------");
-        print("Coef         Value");
-        print("----------------------------------------------");
-        print("bias         " + str(this.bias));
+        print("==============================================", newLine=true);
+        print("        OLS Regression Results", newLine=true);
+        print("==============================================", newLine=true);
+        print("R²:          " + str(r2_val), newLine=true);
+        if (denom == 0) {
+            print("Adj. R²:     N/A (too few samples)", newLine=true);
+        };
+        if (denom != 0) {
+            print("Adj. R²:     " + str(adj_r2), newLine=true);
+        };
+        print("MSE:         " + str(mse_val), newLine=true);
+        print("RMSE:        " + str(rmse_val), newLine=true);
+        print("n:           " + str(n), newLine=true);
+        print("Features:    " + str(n_features), newLine=true);
+        print("----------------------------------------------", newLine=true);
+        print("Coef         Value", newLine=true);
+        print("----------------------------------------------", newLine=true);
+        print("bias         " + str(this.bias), newLine=true);
         var wi: int = 0;
         while (wi < n_features) {
-            print("w[" + str(wi) + "]          " + str(this.weights[wi]));
+            print("w[" + str(wi) + "]          " + str(this.weights[wi]), newLine=true);
             wi++;
         };
         if (this.reg_type != "none") {
-            print("----------------------------------------------");
-            print("Regularization: " + this.reg_type + "  λ=" + str(this.reg_lambda));
+            print("----------------------------------------------", newLine=true);
+            print("Regularization: " + this.reg_type + "  λ=" + str(this.reg_lambda), newLine=true);
         };
-        print("==============================================");
+        print("==============================================", newLine=true);
     };
-
+    
     function save(path: str) -> null {
         var db: null = sqlite3_open(path);
         forge_db_setup(db);
@@ -1056,30 +1065,30 @@ class LogisticClassification {
         var rec: float = this.recall(x, y);
         var f1_val: float = this.f1(x, y);
 
-        print("==============================================");
-        print("     Classification Report");
-        print("==============================================");
-        print("Accuracy:    " + str(acc));
-        print("Precision:   " + str(prec));
-        print("Recall:      " + str(rec));
-        print("F1 Score:    " + str(f1_val));
-        print("n:           " + str(n));
-        print("Features:    " + str(n_features));
-        print("----------------------------------------------");
-        print("Confusion Matrix:");
-        print("                 Predicted 0   Predicted 1");
-        print("Actual 0         " + str(tn) + "             " + str(fp));
-        print("Actual 1         " + str(fn_count) + "             " + str(tp));
-        print("----------------------------------------------");
-        print("Coef         Value");
-        print("----------------------------------------------");
-        print("bias         " + str(this.bias));
+        print("==============================================", newLine=true);
+        print("     Classification Report", newLine=true);
+        print("==============================================", newLine=true);
+        print("Accuracy:    " + str(acc), newLine=true);
+        print("Precision:   " + str(prec), newLine=true);
+        print("Recall:      " + str(rec), newLine=true);
+        print("F1 Score:    " + str(f1_val), newLine=true);
+        print("n:           " + str(n), newLine=true);
+        print("Features:    " + str(n_features), newLine=true);
+        print("----------------------------------------------", newLine=true);
+        print("Confusion Matrix:", newLine=true);
+        print("                 Predicted 0   Predicted 1", newLine=true);
+        print("Actual 0         " + str(tn) + "             " + str(fp), newLine=true);
+        print("Actual 1         " + str(fn_count) + "             " + str(tp), newLine=true);
+        print("----------------------------------------------", newLine=true);
+        print("Coef         Value", newLine=true);
+        print("----------------------------------------------", newLine=true);
+        print("bias         " + str(this.bias), newLine=true);
         var wi: int = 0;
         while (wi < n_features) {
-            print("w[" + str(wi) + "]          " + str(this.weights[wi]));
+            print("w[" + str(wi) + "]          " + str(this.weights[wi]), newLine=true);
             wi++;
         };
-        print("==============================================");
+        print("==============================================", newLine=true);
     };
 
     function save(path: str) -> null {

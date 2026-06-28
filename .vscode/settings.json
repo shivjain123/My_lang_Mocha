@@ -125,7 +125,39 @@
         "comment": "Semicolons — subtle, not distracting",
         "scope": "punctuation.terminator.statement.mocha",
         "settings": {
-          "foreground": "#808080"
+          "foreground": "#808080db"
+        }
+      },
+      {
+        "comment": "tag keyword — light blue",
+        "scope": "keyword.declaration.tag.mocha",
+        "settings": {
+          "foreground": "#56B6C2"
+        }
+      },
+      {
+        "comment": "tag name and variants — gold",
+        "scope": [
+          "entity.name.tag.mocha",
+          "entity.name.tag.variant.mocha"
+        ],
+        "settings": {
+          "foreground": "#E5C07B"
+        }
+      },
+      {
+        "comment": "docstrings ~~ — distinct from comments, lighter",
+        "scope": "comment.block.documentation.mocha",
+        "settings": {
+          "foreground": "#9CDCFE",
+          "fontStyle": "italic"
+        }
+      },
+      {
+        "comment": "true/false booleans",
+        "scope": "constant.language.boolean.mocha",
+        "settings": {
+          "foreground": "#569CD6"
         }
       }
     ]
@@ -136,6 +168,7 @@
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
     "editor.formatOnSave": false,
-    "editor.wordWrap": "off"
+    "editor.wordWrap": "off",
+    "editor.snippetSuggestions": "top"
   }
 }

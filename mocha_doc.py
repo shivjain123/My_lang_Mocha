@@ -165,7 +165,7 @@ def render_doc_body(item):
     parts = []
 
     if item["doc_desc"]:
-        desc_html = ". ".join(e(l) for l in item["doc_desc"] if l) + "."
+        desc_html = ". ".join(e(l).rstrip(".") for l in item["doc_desc"] if l) + "."
         if desc_html:
             parts.append(f'<p class="doc-desc">{desc_html}</p>')
 

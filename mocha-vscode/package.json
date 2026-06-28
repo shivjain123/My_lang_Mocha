@@ -2,8 +2,12 @@
   "name": "mocha-language",
   "displayName": "Mocha Language",
   "description": "Syntax highlighting and language support for the Mocha programming language (.mch)",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "shiv-jain",
+  "activationEvents": [
+    "onLanguage:mocha"
+  ],
+  "main": "./extension.js",
   "icon": "icons/mocha-dark.png",
   "repository": {
     "type": "git",
@@ -19,8 +23,14 @@
     "languages": [
       {
         "id": "mocha",
-        "aliases": ["Mocha", "mch"],
-        "extensions": [".mch", ".mchi"],
+        "aliases": [
+          "Mocha",
+          "mch"
+        ],
+        "extensions": [
+          ".mch",
+          ".mchi"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/mocha-light.png",
@@ -42,5 +52,8 @@
         "path": "./snippets/mocha.json"
       }
     ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.0.1"
   }
 }

@@ -315,7 +315,7 @@ class CodeGen:
         length = len("".encode('utf-8')) + 1  # = 1
         tptr   = self.fresh_temp()
         tstr   = self.fresh_temp()
-        self.emit(f"  {tptr} = getelementptr [{length} x i8], [{length} x i8]* {g}, i32 0, i32 0")
+        self.emit(f"  {tptr} = getelementptr [{length} x i8], ptr {g}, i32 0, i32 0")
         self.emit(f"  {tstr} = call i8* @mocha_str_literal(i8* {tptr})")
         return tstr
 
@@ -331,7 +331,7 @@ class CodeGen:
             length = len(default_node.value.encode('utf-8')) + 1
             tptr   = self.fresh_temp()
             tstr   = self.fresh_temp()
-            self.emit(f"  {tptr} = getelementptr [{length} x i8], [{length} x i8]* {g}, i32 0, i32 0")
+            self.emit(f"  {tptr} = getelementptr [{length} x i8], ptr {g}, i32 0, i32 0")
             self.emit(f"  {tstr} = call i8* @mocha_str_literal(i8* {tptr})")
             return tstr
         if isinstance(default_node, NullLiteral):
@@ -640,7 +640,9 @@ class CodeGen:
                 "declare i32 @mocha_array2d_rows(%MochaArray2D*)",
                 "declare i32 @mocha_array2d_cols(%MochaArray2D*)",
                 "declare %MochaArray* @mocha_array2d_get_row(%MochaArray2D*, i32)",
-                    "declare %MochaArray* @mocha_array2d_get_col(%MochaArray2D*, i32)",
+                "declare %MochaArray* @mocha_array2d_get_col(%MochaArray2D*, i32)",
+                "declare void @mocha_array2d_push_row(%MochaArray2D*, %MochaArray*)",
+                "declare void @mocha_array2d_push_col(%MochaArray2D*, %MochaArray*)",
             ],
 
             "Tuple Runtime": [
@@ -941,10 +943,10 @@ class CodeGen:
 
     def gen_str_literal(self, node):
         gname  = self.fresh_str_global(node.value)
-        length = len(node.value.encode('utf-8')) + 1  # byte length, not char length
+        length = len(node.value.encode('utf-8')) + 1
         tptr   = self.fresh_temp()
         tstr   = self.fresh_temp()
-        self.emit(f"  {tptr} = getelementptr [{length} x i8], [{length} x i8]* {gname}, i32 0, i32 0")
+        self.emit(f"  {tptr} = getelementptr [{length} x i8], ptr {gname}, i32 0, i32 0")
         self.emit(f"  {tstr} = call i8* @mocha_str_literal(i8* {tptr})")
         return (tstr, "i8*")
 
@@ -1694,6 +1696,35 @@ class CodeGen:
 
             return (tmp, "i32")
 
+        elif member == "push":
+            col_kwarg = None
+            data_arg = None
+
+            for arg in node.args:
+                if isinstance(arg, Assignment) and isinstance(arg.target, Identifier):
+                    if arg.target.name == "col":
+                        col_kwarg = arg.value
+                else:
+                    data_arg = arg
+
+            if data_arg is None:
+                raise MochaCodeGenError(f"'push' on 2D array requires a data argument", node.line, node.col)
+
+            data_reg, _ = self.gen_expr(data_arg)
+
+            is_col_push = (
+                col_kwarg is not None and
+                isinstance(col_kwarg, BoolLiteral) and
+                col_kwarg.value == True
+            )
+
+            if is_col_push:
+                self.emit(f"  call void @mocha_array2d_push_col(%MochaArray2D* {arr_reg}, %MochaArray* {data_reg})")
+            else:
+                self.emit(f"  call void @mocha_array2d_push_row(%MochaArray2D* {arr_reg}, %MochaArray* {data_reg})")
+
+            return ("void", "void")
+
         # ---------------- EXTENSIONS ---------------- #
 
         obj_type = self.local_mocha_types.get(obj_name, "int[][]") if obj_name else "int[][]"
@@ -1818,7 +1849,7 @@ class CodeGen:
                     key_global = self.fresh_str_global(key_str)
                     key_len = len(key_str.encode('utf-8')) + 1
                     key_reg = self.fresh_temp()
-                    self.emit(f"  {key_reg} = getelementptr [{key_len} x i8], [{key_len} x i8]* {key_global}, i32 0, i32 0")
+                    self.emit(f"  {key_reg} = getelementptr [{key_len} x i8], ptr {key_global}, i32 0, i32 0")
                     # no mocha_str_literal call needed — just raw i8* pointer is fine for key comparison in C
                     key_regs.append(key_reg)
 
@@ -2557,31 +2588,32 @@ class CodeGen:
             is_last = (i == len(args) - 1)
             nl = new_line if is_last else 0
 
-            # dict access special cases only for first arg
-            if i == 0:
-                print_arg = positional_nodes[0]
-                if isinstance(print_arg, Index2DAccess):
-                    if isinstance(print_arg.obj, Identifier):
-                        mocha_type = self.local_mocha_types.get(print_arg.obj.name, "")
-                        if mocha_type == "dict":
-                            dict_reg, _ = self.gen_expr(print_arg.obj)
-                            key1_reg, _ = self.gen_expr(print_arg.row)
-                            inner = self.fresh_temp()
-                            self.emit(f"  {inner} = call i8* @mocha_dict_get(%MochaDict* {dict_reg}, i8* {key1_reg})")
-                            cast = self.fresh_temp()
-                            self.emit(f"  {cast} = bitcast i8* {inner} to %MochaDict*")
-                            key2_reg, _ = self.gen_expr(print_arg.col)
-                            self.emit(f"  call void @mocha_dict_print_value(%MochaDict* {cast}, i8* {key2_reg}, i8 {nl})")
-                            continue
+            # dict access special case for ALL args, not just first
+            print_arg = positional_nodes[i]
+            if isinstance(print_arg, Index2DAccess):
+                if isinstance(print_arg.obj, Identifier):
+                    mocha_type = self.local_mocha_types.get(print_arg.obj.name, "")
+                    if mocha_type == "dict":
+                        dict_reg, _ = self.gen_expr(print_arg.obj)
+                        key1_reg, _ = self.gen_expr(print_arg.row)
+                        inner = self.fresh_temp()
+                        self.emit(f"  {inner} = call i8* @mocha_dict_get(%MochaDict* {dict_reg}, i8* {key1_reg})")
+                        cast = self.fresh_temp()
+                        self.emit(f"  {cast} = bitcast i8* {inner} to %MochaDict*")
+                        key2_reg, _ = self.gen_expr(print_arg.col)
+                        self.emit(f"  call void @mocha_dict_print_value(%MochaDict* {cast}, i8* {key2_reg}, i8 {nl})")
+                        continue
 
-                if isinstance(print_arg, IndexAccess):
-                    if isinstance(print_arg.obj, Identifier):
-                        mocha_type = self.local_mocha_types.get(print_arg.obj.name, "")
-                        if mocha_type == "dict":
-                            dict_reg, _ = self.gen_expr(print_arg.obj)
-                            key_reg, _ = self.gen_expr(print_arg.index)
-                            self.emit(f"  call void @mocha_dict_print_value(%MochaDict* {dict_reg}, i8* {key_reg}, i8 {nl})")
-                            continue
+            if isinstance(print_arg, IndexAccess):
+                if isinstance(print_arg.obj, Identifier):
+                    mocha_type = self.local_mocha_types.get(print_arg.obj.name, "")
+                    if mocha_type == "dict":
+                        dict_reg, _ = self.gen_expr(print_arg.obj)
+                        key_reg, _ = self.gen_expr(print_arg.index)
+                        self.emit(f"  call void @mocha_dict_print_value(%MochaDict* {dict_reg}, i8* {key_reg}, i8 {nl})")
+                        continue
+
+            # normal print dispatch...
 
             # normal print dispatch
             print_fns = {
@@ -4209,6 +4241,13 @@ class CodeGen:
         if count > 0 and isinstance(node.elements[0], ArrayLiteral):
             rows = count
             cols = len(node.elements[0].elements)
+            # Empty 2D literal [[]] — no elements to infer type from
+            if rows == 1 and cols == 0:
+                expected = self.expected_assign_type or ""
+                elem_size = 4 if "int" in expected else 8
+                arr = self.fresh_temp()
+                self.emit(f"  {arr} = call %MochaArray2D* @mocha_array2d_new(i32 0, i32 0, i32 {elem_size}, i32 0, i32 0)")
+                return (arr, "%MochaArray2D*")
             # Get element type from first element of first row
             first_elem_reg, elem_llvm = self.gen_expr(node.elements[0].elements[0])
             elem_size = {"i32": 4, "double": 8, "i8*": 8, "i8": 1}.get(elem_llvm, 4)
@@ -4808,7 +4847,7 @@ class CodeGen:
             "float": 8,
             "bool":  1,
             "str":   8,
-            "Complex": 16,  # ← ADD THIS
+            "Complex": 16,
         }
         esize = elem_sizes.get(node.elem_type, 8)
 
@@ -4845,11 +4884,11 @@ class CodeGen:
             length   = len(member.encode('utf-8')) + 1
             self.emit(f"tag_case{i}:")
             self.emit(f"  ret i8* getelementptr inbounds "
-                    f"([{length} x i8], [{length} x i8]* {str_name}, i32 0, i32 0)")
+                f"([{length} x i8], ptr {str_name}, i32 0, i32 0)")
         unk_name = self.fresh_str_global("unknown")
         self.emit(f"tag_default:")
         self.emit(f"  ret i8* getelementptr inbounds "
-                f"([8 x i8], [8 x i8]* {unk_name}, i32 0, i32 0)")
+            f"([8 x i8], ptr {unk_name}, i32 0, i32 0)")
         self.emit(f"}}")
         self.emit_blank()
 
@@ -4932,12 +4971,12 @@ class CodeGen:
             self._source_file_global = self.fresh_str_global(self.source_file)
         name   = self._source_file_global
         length = len(self.source_file) + 1
-        return f"getelementptr ([{length} x i8], [{length} x i8]* {name}, i32 0, i32 0)"
+        return f"getelementptr ([{length} x i8], ptr {name}, i32 0, i32 0)"
 
     def get_func_name_ptr(self, func_name: str) -> str:
         name   = self.fresh_str_global(func_name)
         length = len(func_name) + 1
-        return f"getelementptr ([{length} x i8], [{length} x i8]* {name}, i32 0, i32 0)"
+        return f"getelementptr ([{length} x i8], ptr {name}, i32 0, i32 0)"
 
     # -------------------------------------------------------
     # Top-level entry point
@@ -5238,7 +5277,7 @@ class CodeGen:
                         err_g   = self.fresh_str_global(err_msg)
                         err_ptr = self.fresh_temp()
                         length  = len(err_msg.encode()) + 1
-                        self.emit(f"  {err_ptr} = getelementptr [{length} x i8], [{length} x i8]* {err_g}, i32 0, i32 0")
+                        self.emit(f"  {err_ptr} = getelementptr [{length} x i8], ptr {err_g}, i32 0, i32 0")
                         self.emit(f"  call void @mocha_print_stderr(i8* {err_ptr})")
                         self.emit(f"  store i8 1, i8* {missing_flag}")
                     self.emit(f"  br label %{merge}")

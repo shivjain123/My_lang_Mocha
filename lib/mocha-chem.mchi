@@ -1,0 +1,67 @@
+// Auto-generated manifest for mocha-chem.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-math
+
+function c_exp(x: float) -> float native mocha_wrap_exp;
+const R_GAS: float = 0.082057;
+function moles_from_mass(mass_g: float, molar_mass: float) -> float;
+function mass_from_moles(moles: float, molar_mass: float) -> float;
+function stoich_moles(moles_given: float, coeff_given: float, coeff_wanted: float) -> float;
+function percent_yield(actual_g: float, theoretical_g: float) -> float;
+function percent_composition(mass_element_g: float, molar_mass_compound: float) -> float;
+function molarity(moles_solute: float, volume_l: float) -> float;
+function molality(moles_solute: float, mass_solvent_kg: float) -> float;
+function mole_fraction(moles_component: float, total_moles: float) -> float;
+function ppm_by_mass(mass_solute_g: float, mass_solution_g: float) -> float;
+function ppb_by_mass(mass_solute_g: float, mass_solution_g: float) -> float;
+function dilution_final_volume(c1: float, v1: float, c2: float) -> float;
+function van_der_waals_pressure(n: float, t_k: float, v_l: float, a: float, b: float) -> float;
+function van_der_waals_molar_volume(p: float, t_k: float, a: float, b: float) -> float;
+function dalton_partial_pressure(mole_frac: float, p_total: float) -> float;
+function graham_effusion_ratio(m1: float, m2: float) -> float;
+const R_THERMO: float = 8.314;
+function heat_q(mass_g: float, specific_heat: float, delta_t: float) -> float;
+function heat_constant_pressure(n_moles: float, molar_cp: float, delta_t: float) -> float;
+function enthalpy_rxn(sum_hf_products: float, sum_hf_reactants: float) -> float;
+function entropy_rxn(sum_s_products: float, sum_s_reactants: float) -> float;
+function gibbs_free_energy(delta_h: float, t_k: float, delta_s: float) -> float;
+function gibbs_from_keq(t_k: float, keq: float) -> float;
+function keq_from_gibbs(delta_g_std: float, t_k: float) -> float;
+function clausius_clapeyron_p2(p1: float, t1_k: float, t2_k: float, delta_h_vap: float) -> float;
+function clausius_clapeyron_t2(p1: float, p2: float, t1_k: float, delta_h_vap: float) -> float;
+function bond_enthalpy_rxn(bonds_broken: float, bonds_formed: float) -> float;
+function kirchhoff_enthalpy(delta_h_t1: float, delta_cp: float, t1_k: float, t2_k: float) -> float;
+function entropy_surroundings(delta_h_sys: float, t_k: float) -> float;
+function entropy_universe(delta_s_sys: float, delta_s_surr: float) -> float;
+function gibbs_equilibrium_temp(delta_h: float, delta_s: float) -> float;
+function conc_zero_order(conc_init: float, k: float, t: float) -> float;
+function conc_first_order(conc_init: float, k: float, t: float) -> float;
+function conc_second_order(conc_init: float, k: float, t: float) -> float;
+function half_life_zero_order(conc_init: float, k: float) -> float;
+function half_life_first_order(k: float) -> float;
+function half_life_second_order(conc_init: float, k: float) -> float;
+function arrhenius_k(a_factor: float, ea: float, t_k: float) -> float;
+function activation_energy_two_point(k1: float, k2: float, t1_k: float, t2_k: float) -> float;
+function rate_law(k: float, conc_a: float, order_a: float, conc_b: float, order_b: float) -> float;
+function time_to_conc_first_order(conc_init: float, conc_final: float, k: float) -> float;
+function time_to_conc_second_order(conc_init: float, conc_final: float, k: float) -> float;
+function arrhenius_ratio(ea: float, t1_k: float, t2_k: float) -> float;
+function kc_from_kp(kp: float, t_k: float, delta_n: float) -> float;
+function kp_from_kc(kc: float, t_k: float, delta_n: float) -> float;
+function reaction_quotient(conc_products: float, conc_reactants: float) -> float;
+function ksp_from_concentrations(ion_a: float, ion_b: float) -> float;
+function solubility_from_ksp_1_1(ksp: float) -> float;
+function common_ion_solubility(ksp: float, c_ion: float) -> float;
+function ph_from_h_conc(h_conc: float) -> float;
+function h_conc_from_ph(ph: float) -> float;
+function poh_from_oh_conc(oh_conc: float) -> float;
+function ph_from_poh(poh: float) -> float;
+function henderson_hasselbalch(pka: float, conc_base: float, conc_acid: float) -> float;
+function ph_weak_acid(ka: float, conc_acid: float) -> float;
+function ph_weak_base(kb: float, conc_base: float) -> float;
+function buffer_capacity(total_conc: float, ka: float, ph: float) -> float;
+function degree_of_dissociation(ka: float, conc_acid: float) -> float;
+function pka_from_ka(ka: float) -> float;
