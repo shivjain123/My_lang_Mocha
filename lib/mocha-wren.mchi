@@ -1,0 +1,21 @@
+// Auto-generated manifest for mocha-wren.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+function wren_open() -> null native mocha_wren_new;
+function wren_close(vm: null) -> null native mocha_wren_free;
+function wren_run(vm: null, module: str, code: str) -> int native mocha_wren_dostring;
+function wren_run_file(vm: null, filename: str) -> int native mocha_wren_dofile;
+function wren_try(vm: null, module: str, code: str) -> str native mocha_wren_safe_dostring;
+function wren_eval_number(vm: null, expr: str) -> float native mocha_wren_eval_number;
+function wren_eval_string(vm: null, expr: str) -> str native mocha_wren_eval_string;
+function wren_eval_int(vm: null, expr: str) -> int native mocha_wren_eval_int;
+function wren_eval_bool(vm: null, expr: str) -> bool native mocha_wren_eval_bool;
+function wren_call_number(vm: null, module: str, classname: str, sig: str) -> float native mocha_wren_call_number;
+function wren_call_string(vm: null, module: str, classname: str, sig: str) -> str native mocha_wren_call_string;
+function wren_call_int(vm: null, module: str, classname: str, sig: str) -> int native mocha_wren_call_int;
+function wren_call_number_1n(vm: null, module: str, classname: str, sig: str, arg: float) -> float native mocha_wren_call1n_number;
+function wren_call_string_1s(vm: null, module: str, classname: str, sig: str, arg: str) -> str native mocha_wren_call1s_string;
+function wren_call_number_2n(vm: null, module: str, classname: str, sig: str, a: float, b: float) -> float native mocha_wren_call2n_number;
+function wren_call_string_2s(vm: null, module: str, classname: str, sig: str, a: str, b: str) -> str native mocha_wren_call2s_string;

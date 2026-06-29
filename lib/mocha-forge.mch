@@ -7,19 +7,7 @@ const RAND: int = -999999;
 // NATIVE WRAPPERS FOR SQLite3
 // =============================================
 
-function sqlite3_open(path: str) -> null native mocha_sqlite3_open;
-function sqlite3_exec(db: null, sql: str) -> int native mocha_sqlite3_exec;
-function sqlite3_query(db: null, sql: str) -> int native mocha_sqlite3_query;
-function sqlite3_close(db: null) -> null native mocha_sqlite3_close;
-function sqlite3_query_run(db: null, sql: str) -> int native mocha_sqlite3_query_run;
-function sqlite3_query_rows(db: null) -> int native mocha_sqlite3_query_rows;
-function sqlite3_query_cols(db: null) -> int native mocha_sqlite3_query_cols;
-function sqlite3_query_cell(db: null, row: int, col: int) -> str native mocha_sqlite3_query_cell;
-function sqlite3_query_colname(db: null, col: int) -> str native mocha_sqlite3_query_colname;
-function sqlite3_errmsg(db: null) -> str native mocha_sqlite3_errmsg;
-function sqlite3_last_rowid(db: null) -> int native mocha_sqlite3_last_rowid;
-function sqlite3_changes(db: null) -> int native mocha_sqlite3_changes;
-function sqlite3_table_exists(db: null, table: str) -> int native mocha_sqlite3_table_exists;
+from "mocha-sqlite" import *;
 
 // =============================================
 // Helpers for .save()/.load()

@@ -84,6 +84,8 @@ def collect_items(ast):
                 "is_shared":   False,
                 "visibility":  "public",
                 "has_doc":     node.doc is not None,
+                "line":        getattr(node, 'line', 0),
+                "col":         getattr(node, 'col',  0),
             })
 
         elif isinstance(node, ClassDecl):
@@ -97,6 +99,8 @@ def collect_items(ast):
                 "doc_desc":    cdesc,
                 "has_doc":     node.doc is not None,
                 "methods":     [],
+                "line":        getattr(node, 'line', 0),
+                "col":         getattr(node, 'col',  0),
             }
 
             for member in node.body:
@@ -114,6 +118,8 @@ def collect_items(ast):
                         "is_shared":   member.is_shared,
                         "visibility":  member.visibility,
                         "has_doc":     member.doc is not None,
+                        "line":        getattr(node, 'line', 0),
+                        "col":         getattr(node, 'col',  0),
                     })
 
             items.append(cls_item)

@@ -3028,7 +3028,7 @@ double mocha_wrap_exp(double x)    { return exp(x);    }
 /* ---- system wrappers ---- */
 int mocha_wrap_system(const char *cmd) { return system(cmd); }
 
-/* ---- RUNTIME CONTROL ---- */
+/* ---- RUNTIME Exception ---- */
 
 //Flush stdout before writing — prevents interleaved output on error
 void* mocha_print_stderr(const char *msg) { //this is called mocha_error in Mocha-side

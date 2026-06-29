@@ -317,9 +317,11 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
         "HashTable": "%struct.MochaHashTable*",
     }
 
-    def parse_llvm_type(ptype, is_param=False):
-        if is_param and ptype == "null":
+    def parse_llvm_type(ptype, is_param=False, is_native=False):
+        if ptype == "null" and (is_param or is_native):
             return "i8*"
+        if ptype == "null":
+            return "void"
         if ptype.startswith("("):
             return "%MochaTuple*"
         if "[][]" in ptype:
@@ -353,6 +355,8 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
             after_func = line[len("function "):]
             func_name  = after_func[:after_func.index("(")].strip()
 
+            is_native_func = " native " in line  # ← detect here
+
             if " native " in line:
                 c_name      = line.split(" native ")[1].strip().rstrip(";")
                 actual_name = c_name
@@ -365,7 +369,8 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
             else:
                 ret_type = ret_part
 
-            llvm_ret    = parse_llvm_type(ret_type)
+            llvm_ret = parse_llvm_type(ret_type, is_native=is_native_func)
+
             params_str  = after_func[after_func.index("(")+1:after_func.index(")")].strip()
             llvm_params = []
             param_names = []
@@ -1165,9 +1170,9 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     with open(source_file, 'r', encoding='utf-8') as f:
         source = f.read()
     
-    # ── FFI detection (source-level, for compile-time flags) ──
-    needs_lua  = 'mocha_lua_'  in source
-    needs_wren = 'mocha_wren_' in source
+    # ── FFI detection (source or lib level, for compile-time flags) ──
+    needs_lua  = 'mocha_lua_'  in source or '"mocha-lua"'  in source
+    needs_wren = 'mocha_wren_' in source or '"mocha-wren"' in source
 
     print("Step 1: Lexing...")
     try:
@@ -1302,6 +1307,13 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
         return flags
 
     # Compile C runtime
+    flag_file = RUNTIME_OBJ + ".flags"
+    expected_sig = ("lua" if needs_lua else "") + ("_wren" if needs_wren else "") or "base"
+    if os.path.exists(flag_file):
+        with open(flag_file) as f:
+            if f.read().strip() != expected_sig and os.path.exists(RUNTIME_OBJ):
+                os.remove(RUNTIME_OBJ)  # flags changed — force recompile
+
     if needs_recompile(RUNTIME_C, RUNTIME_OBJ):
         runtime_compile_cmd = [CLANG_PATH] + base_clang_flags() + ["-c", RUNTIME_C, "-o", RUNTIME_OBJ]
         if needs_lua:
@@ -1312,6 +1324,8 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
         if result.returncode != 0:
             print(f"  ❌ runtime compile failed:\n{result.stderr}")
             return False
+        with open(flag_file, 'w') as f:
+            f.write(expected_sig)
     else:
         print("  ⚡ runtime cached", flush=True)
 
@@ -1394,8 +1408,8 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     needs_cpp  = 'mocha_cpp_'  in ir_content
     needs_zig  = 'mocha_zig_'  in ir_content
     needs_cuda = 'mocha_tensor_' in ir_content or 'mocha_cuda_' in ir_content
-    needs_lua  = 'mocha_lua_'  in ir_content   # ← confirm at IR level too
-    needs_wren = 'mocha_wren_' in ir_content   # ← confirm at IR level too
+    needs_lua  = 'mocha_lua_'  in ir_content or '"mocha-lua"'  in source
+    needs_wren = 'mocha_wren_' in ir_content or '"mocha-wren"' in source
 
     exe_file = f"{output_name}{EXE_EXT}"
 
@@ -1572,6 +1586,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
 
         if IS_WINDOWS:
             link_cmd += ["-lgcc_eh", "-lgcc"]
+        
 
         result = subprocess.run(link_cmd, capture_output=True, text=True, encoding='utf-8')
         if result.returncode != 0:

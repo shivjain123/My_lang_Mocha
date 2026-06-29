@@ -1,4 +1,5 @@
 // mocha-lib-deps: mocha-math, mocha-string
+from "mocha-sqlite" import *;
 // =============================================
 // CUDA NATIVE BINDINGS (internal)
 // =============================================
@@ -53,24 +54,6 @@ function mocha_ridge_regression(x: vast, y: vast, lamb_da: float, max_iter: int)
 function mocha_tensor_get_row(t: vast, row: int) -> vast native mocha_tensor_get_row;
 
 function c_print_err(msg: str) -> null native mocha_print_stderr;
-// =============================================
-// NATIVE WRAPPERS FOR SQLite3
-// =============================================
-
-function sqlite3_open(path: str) -> null native mocha_sqlite3_open;
-function sqlite3_exec(db: null, sql: str) -> int native mocha_sqlite3_exec;
-function sqlite3_query(db: null, sql: str) -> int native mocha_sqlite3_query;
-function sqlite3_close(db: null) -> null native mocha_sqlite3_close;
-function sqlite3_query_run(db: null, sql: str) -> int native mocha_sqlite3_query_run;
-function sqlite3_query_rows(db: null) -> int native mocha_sqlite3_query_rows;
-function sqlite3_query_cols(db: null) -> int native mocha_sqlite3_query_cols;
-function sqlite3_query_cell(db: null, row: int, col: int) -> str native mocha_sqlite3_query_cell;
-function sqlite3_query_colname(db: null, col: int) -> str native mocha_sqlite3_query_colname;
-function sqlite3_errmsg(db: null) -> str native mocha_sqlite3_errmsg;
-function sqlite3_last_rowid(db: null) -> int native mocha_sqlite3_last_rowid;
-function sqlite3_changes(db: null) -> int native mocha_sqlite3_changes;
-function sqlite3_table_exists(db: null, table: str) -> int native mocha_sqlite3_table_exists;
-
 // =============================================
 // TENSOR CLASS
 // =============================================

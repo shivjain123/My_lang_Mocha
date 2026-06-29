@@ -3,7 +3,7 @@
 mocha_lsp.py — Mocha Language Server Protocol server
 Speaks JSON-RPC over stdin/stdout.
 Start: python mocha_lsp.py
-VS Code connects via the extension (later); for now test with direct stdin.
+VS Code connects via the extension.
 """
 
 import sys
@@ -12,8 +12,9 @@ import threading
 import subprocess
 import tempfile
 import os
-import time
 from pathlib import Path
+
+from mocha_doc import collect_items, parse_doc_lines
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,48 @@ SERVER_VERSION = "0.1.0"
 
 # Path to your Mocha compiler entry point
 MOCHA_COMPILER = Path(__file__).parent / "mocha_compile.py"
+LIB_DIR = Path(__file__).parent / "lib"
+
+def build_hover_markdown(item: dict) -> str:
+    """Build a markdown string for VS Code hover popup."""
+    lines = []
+
+    # Signature line
+    kind = item.get("kind", "function")
+    if kind == "class":
+        lines.append(f"```mocha\nclass {item['name']}\n```")
+    else:
+        params = ", ".join(f"{n}: {t}" for n, t in item.get("params", []))
+        ret    = item.get("return_type", "null")
+        parent = item.get("parent")
+        name   = f"{parent}.{item['name']}" if parent else item["name"]
+        lines.append(f"```mocha\nfunction {name}({params}) -> {ret}\n```")
+
+    # Docstring description
+    desc, doc_params, doc_return = parse_doc_lines(item.get("doc_desc") or [])
+    
+    # doc_desc is already parsed by collect_items so use it directly
+    if item.get("doc_desc"):
+        for desc_line in item["doc_desc"]:
+            desc_line = desc_line.strip()
+            if desc_line:
+                lines.append(f"\n{desc_line}  ")
+
+    # @param entries
+    if item.get("doc_params"):
+        lines.append("\n**Parameters**")
+        for pname, pdesc in item["doc_params"]:
+            lines.append(f"- `{pname}` — {pdesc}")
+
+    # @return
+    if item.get("doc_return"):
+        lines.append(f"\n**Returns** — {item['doc_return']}")
+
+    # No doc at all
+    if not item.get("has_doc"):
+        lines.append("\n*No documentation.*")
+
+    return "\n".join(lines)
 
 # ── Transport: read/write JSON-RPC over stdin/stdout ──────────────────────────
 # Protocol: "Content-Length: N\r\n\r\n" followed by N bytes of UTF-8 JSON.
@@ -117,7 +160,10 @@ def run_mocha_compiler(source_text: str, uri: str) -> list[dict]:
             "message": f"mocha-lsp internal error: {e}"
         }]
     finally:
-        os.unlink(tmp_path)
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
     return diagnostics
 
@@ -200,6 +246,9 @@ class MochaLSP:
         # Debounce: map uri -> (timer, version) so we don't recompile on every keystroke
         self._debounce_timers: dict[str, threading.Timer] = {}
         self._debounce_delay = 0.4  # seconds
+        self._symbol_table: dict[str, dict] = {}  # uri -> {name: item}
+        self._global_symbols: dict[str, dict] = {}
+        self._write_lock = threading.Lock()
 
     # ── Message dispatch ───────────────────────────────────────────────────────
 
@@ -216,6 +265,8 @@ class MochaLSP:
             "textDocument/didChange":        self.on_did_change,
             "textDocument/didClose":         self.on_did_close,
             "textDocument/didSave":          self.on_did_save,
+            "textDocument/hover":            self.on_hover,
+            "textDocument/definition":       self.on_definition,
         }.get(method)
 
         if handler:
@@ -233,10 +284,10 @@ class MochaLSP:
                 # Full document sync — send entire file on every change
                 # (incremental sync is an optimization for later)
                 "textDocumentSync": 1,
+                "hoverProvider": True,
                 # We'll add more capabilities here as we build them:
-                # "hoverProvider": True,
                 # "completionProvider": {"triggerCharacters": [".", " "]},
-                # "definitionProvider": True,
+                "definitionProvider": True,
             },
             "serverInfo": {
                 "name":    SERVER_NAME,
@@ -264,6 +315,94 @@ class MochaLSP:
         self.documents[uri] = text
         self._schedule_diagnostics(uri)
 
+    def on_hover(self, msg: dict):
+        params  = msg["params"]
+        uri     = params["textDocument"]["uri"]
+        line    = params["position"]["line"]
+        char    = params["position"]["character"]
+        msg_id  = msg["id"]
+
+        table = self._symbol_table.get(uri, {})
+
+        # Extract word under cursor from source text
+        text  = self.documents.get(uri, "")
+        lines = text.replace('\r\n', '\n').split('\n')
+        if line >= len(lines):
+            self.send_response(msg_id, result=None)
+            return
+
+        source_line = lines[line]
+        # Walk left and right from cursor to find word boundaries
+        start = char
+        while start > 0 and (source_line[start - 1].isalnum() or source_line[start - 1] == '_'):
+            start -= 1
+        end = char
+        while end < len(source_line) and (source_line[end].isalnum() or source_line[end] == '_'):
+            end += 1
+
+        word = source_line[start:end]
+        if not word:
+            self.send_response(msg_id, result=None)
+            return
+
+        item = table.get(word)
+        if not item:
+            item = self._global_symbols.get(word)
+        if not item:
+            self.send_response(msg_id, result=None)
+            return
+
+        # Build markdown hover content
+        hover_md = build_hover_markdown(item)
+        self.send_response(msg_id, result={
+            "contents": {
+                "kind":  "markdown",
+                "value": hover_md
+            }
+        })
+    
+    def on_definition(self, msg: dict):
+        params = msg["params"]
+        uri    = params["textDocument"]["uri"]
+        line   = params["position"]["line"]
+        char   = params["position"]["character"]
+        msg_id = msg["id"]
+
+        text  = self.documents.get(uri, "")
+        lines = text.replace('\r\n', '\n').split('\n')
+        if line >= len(lines):
+            self.send_response(msg_id, result=None)
+            return
+
+        source_line = lines[line]
+        start = char
+        while start > 0 and (source_line[start-1].isalnum() or source_line[start-1] == '_'):
+            start -= 1
+        end = char
+        while end < len(source_line) and (source_line[end].isalnum() or source_line[end] == '_'):
+            end += 1
+        word = source_line[start:end]
+
+        if not word:
+            self.send_response(msg_id, result=None)
+            return
+
+        item = (self._symbol_table.get(uri) or {}).get(word)
+        if not item:
+            item = self._global_symbols.get(word)
+        if not item or not item.get("_uri"):
+            self.send_response(msg_id, result=None)
+            return
+
+        target_uri  = item["_uri"]
+        target_line = max(0, item["_line"] - 1)
+        target_col  = max(0, item["_col"]  - 1)
+
+        self.send_response(msg_id, result={
+            "uri":   target_uri,
+            "range": make_range(target_line, target_col, target_line, target_col)
+        })
+
     def on_did_change(self, msg: dict):
         td  = msg["params"]["textDocument"]
         uri = td["uri"]
@@ -290,6 +429,58 @@ class MochaLSP:
 
     # ── Diagnostics ───────────────────────────────────────────────────────────
 
+    def _extract_symbols(self, source_text: str, uri: str) -> dict:
+        try:
+            from mocha_lexer  import Lexer
+            from mocha_parser import Parser
+            tokens = Lexer(source_text.replace('\r\n', '\n')).tokenise()
+            ast    = Parser(tokens).parse()
+            items  = collect_items(ast)
+            table  = {}
+            for item in items:
+                item["_uri"]  = uri
+                item["_line"] = item.get("line", 0)
+                item["_col"]  = item.get("col",  0)
+                table[item["name"]] = item
+                if item.get("kind") == "class":
+                    for method in item.get("methods", []):
+                        method["_uri"]  = uri
+                        method["_line"] = method.get("line", 0)
+                        method["_col"]  = method.get("col",  0)
+                        table[f"{item['name']}.{method['name']}"] = method
+                        table[method["name"]] = method
+            return table
+        except Exception:
+            return {}
+    
+    def _index_imports(self, source_text: str):
+        try:
+            from mocha_lexer  import Lexer
+            from mocha_parser import Parser
+            from mocha_ast    import ImportStmt
+            tokens = Lexer(source_text.replace('\r\n', '\n')).tokenise()
+            ast    = Parser(tokens).parse()
+            for node in ast.statements:
+                if not isinstance(node, ImportStmt):
+                    continue
+                lib_name = node.source
+                lib_path = LIB_DIR / f"{lib_name}.mch"
+                if not lib_path.exists():
+                    continue
+                lib_uri = lib_path.as_uri()
+                if lib_uri in self._symbol_table:
+                    continue
+                try:
+                    lib_text = lib_path.read_text(encoding='utf-8')
+                    table = self._extract_symbols(lib_text, lib_uri)
+                    self._symbol_table[lib_uri] = table
+                    self._global_symbols.update(table)
+                    log(f"Indexed lib: {lib_name} ({len(table)} symbols)")
+                except Exception as e:
+                    log(f"Failed to index {lib_name}: {e}")
+        except Exception:
+            pass
+    
     def _schedule_diagnostics(self, uri: str):
         """Debounce: wait 400ms after last change before compiling."""
         self._cancel_debounce(uri)
@@ -307,17 +498,20 @@ class MochaLSP:
         if text is None:
             return
 
-        # Skip .mchi interface files entirely
-        if uri.endswith('.mchi'):
-            self.send_notification("textDocument/publishDiagnostics",
-                                {"uri": uri, "diagnostics": []})
-            return
-
-        # Skip library files: live in lib/ folder and start with mocha-
-        from pathlib import PurePosixPath
         path_parts = uri.replace('\\', '/').lower()
-        filename = uri.replace('\\', '/').split('/')[-1]
-        if '/lib/' in path_parts and filename.startswith('mocha-'):
+        filename   = uri.replace('\\', '/').split('/')[-1]
+        is_mchi    = uri.endswith('.mchi')
+        is_lib     = '/lib/' in path_parts and filename.startswith('mocha-')
+
+        # Build symbol table and index imports
+        table = self._extract_symbols(text, uri)
+        if table:
+            self._symbol_table[uri] = table
+            self._global_symbols.update(table)
+        self._index_imports(text)
+
+        # Skip diagnostics for lib and interface files
+        if is_mchi or is_lib:
             self.send_notification("textDocument/publishDiagnostics",
                                 {"uri": uri, "diagnostics": []})
             return
@@ -330,18 +524,15 @@ class MochaLSP:
 
     def send_response(self, msg_id, result=None, error=None):
         msg = {"jsonrpc": "2.0", "id": msg_id}
-        if error is not None:
-            msg["error"] = error
-        else:
-            msg["result"] = result
-        write_message(sys.stdout.buffer, msg)
+        msg["error" if error is not None else "result"] = error if error is not None else result
+        with self._write_lock:
+            write_message(sys.stdout.buffer, msg)
 
     def send_notification(self, method: str, params: dict):
-        write_message(sys.stdout.buffer, {
-            "jsonrpc": "2.0",
-            "method":  method,
-            "params":  params
-        })
+        with self._write_lock:
+            write_message(sys.stdout.buffer, {
+                "jsonrpc": "2.0", "method": method, "params": params
+            })
 
 
 # ── Main loop ──────────────────────────────────────────────────────────────────

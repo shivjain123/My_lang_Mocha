@@ -1,0 +1,28 @@
+// Auto-generated manifest for mocha-lua.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+function lua_open() -> null native mocha_lua_new;
+function lua_close(lua: null) -> null native mocha_lua_close;
+function lua_run(lua: null, code: str) -> int native mocha_lua_dostring;
+function lua_run_file(lua: null, filename: str) -> int native mocha_lua_dofile;
+function lua_try(lua: null, code: str) -> str native mocha_lua_safe_dostring;
+function lua_get_number(lua: null, name: str) -> float native mocha_lua_getnumber;
+function lua_get_string(lua: null, name: str) -> str native mocha_lua_getstring;
+function lua_get_bool(lua: null, name: str) -> bool native mocha_lua_getbool;
+function lua_get_int(lua: null, name: str) -> int native mocha_lua_getint;
+function lua_set_number(lua: null, name: str, val: float) -> null native mocha_lua_setnumber;
+function lua_set_string(lua: null, name: str, val: str) -> null native mocha_lua_setstring;
+function lua_set_bool(lua: null, name: str, val: bool) -> null native mocha_lua_setbool;
+function lua_set_int(lua: null, name: str, val: int) -> null native mocha_lua_setint;
+function lua_stack_size(lua: null) -> int native mocha_lua_stack_size;
+function lua_clear_stack(lua: null) -> null native mocha_lua_clear_stack;
+function lua_call_number(lua: null, func: str) -> float native mocha_lua_call_number;
+function lua_call_string(lua: null, func: str) -> str native mocha_lua_call_string;
+function lua_call_int(lua: null, func: str) -> int native mocha_lua_call_int;
+function lua_call_number_1n(lua: null, func: str, arg: float) -> float native mocha_lua_call1n_number;
+function lua_call_string_1s(lua: null, func: str, arg: str) -> str native mocha_lua_call1s_string;
+function lua_call_number_2n(lua: null, func: str, a: float, b: float) -> float native mocha_lua_call2n_number;
+function lua_call_string_2s(lua: null, func: str, a: str, b: str) -> str native mocha_lua_call2s_string;
+function lua_call_string_1n(lua: null, func: str, arg: float) -> str native mocha_lua_call1n_string;
