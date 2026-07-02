@@ -133,12 +133,12 @@ function main(didLoad) -> null {
     print(s6_1, newLine=true);
 
     // nuclei_remaining: one half-life → N0/2
-    var s6_2: float = nuclei_remaining(100000000000000000000.0, s6_1, 5730.0);
-    var diff_s6_2: float = s6_2 - 50000000000000000000.0;
+    var s6_2: float = nuclei_remaining(100.0, s6_1, 5730.0);
+    var diff_s6_2: float = s6_2 - 50.0;
     var abs_s6_2: float = 0.0;
     if (diff_s6_2 < 0.0) { abs_s6_2 = -diff_s6_2; } else { abs_s6_2 = diff_s6_2; };
-    if (abs_s6_2 < 100000000000000.0) {
-        print("PASS: nuclei_remaining ~ 5e19", newLine=true);
+    if (abs_s6_2 < 0.0001) {
+        print("PASS: nuclei_remaining ~ 50.0", newLine=true);
     } else {
         print("FAIL: nuclei_remaining", newLine=true);
     };
@@ -156,8 +156,8 @@ function main(didLoad) -> null {
     };
     print(s6_3, newLine=true);
 
-    // radiometric_age: two half-lives → 11460 years
-    var s6_4: float = radiometric_age(100000000000000000000.0, 25000000000000000000.0, s6_1);
+    // radiometric_age: N0=100, N=25 → two half-lives → 11460 years
+    var s6_4: float = radiometric_age(100.0, 25.0, s6_1);
     var diff_s6_4: float = s6_4 - 11460.0;
     var abs_s6_4: float = 0.0;
     if (diff_s6_4 < 0.0) { abs_s6_4 = -diff_s6_4; } else { abs_s6_4 = diff_s6_4; };

@@ -1,0 +1,80 @@
+// Auto-generated manifest for mocha-geo.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-math
+
+function c_exp(x: float) -> float native mocha_wrap_exp;
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
+function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
+function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
+function unsafe_add(a: float, b: float) -> float native mocha_unsafe_add;
+function unsafe_sub(a: float, b: float) -> float native mocha_unsafe_sub;
+const DEG_TO_RAD: float = 0.01745329251994;
+const RAD_TO_DEG: float = 57.29577951308232;
+const DENSITY_FACTOR: float = 1.6605;
+function richter_magnitude(amplitude_mm: float, distance_km: float) -> float;
+function moment_magnitude(m0: float) -> float;
+function seismic_moment(rigidity: float, area: float, slip: float) -> float;
+function energy_release(mw: float) -> float;
+function p_wave_travel_time(distance_km: float, vp: float) -> float;
+function s_wave_travel_time(distance_km: float, vs: float) -> float;
+function sp_time_interval_distance(sp_interval: float, vp: float, vs: float) -> float;
+function epicenter_triangulation(d1: float, d2: float, d3: float, lat1: float, lon1: float, lat2: float, lon2: float, lat3: float, lon3: float) -> (float, 2);
+function peak_ground_acceleration(mw: float, distance_km: float) -> float;
+function mercalli_intensity_estimate(pga_g: float) -> float;
+tag CrystalStructure { FCC, BCC, HCP, SC };
+function specific_gravity(density_kg_m3: float) -> float;
+function unit_cell_volume(a: float, b: float, c: float, alpha: float, beta: float, gamma: float) -> float;
+function theoretical_density(formula_mass: float, z: float, cell_volume: float) -> float;
+function bragg_angle(wavelength: float, d_spacing: float, n: int) -> float;
+function d_spacing_cubic(a: float, h: int, k: int, l: int) -> float;
+function d_spacing_hexagonal(a: float, c: float, h: int, k: int, l: int) -> float;
+function mohs_to_vickers_estimate(mohs: float) -> float;
+function packing_efficiency(structure: CrystalStructure) -> float;
+function coordination_number_estimate(radius_cation: float, radius_anion: float) -> int;
+function madelung_constant_estimate(coordination_number: int) -> float;
+function plate_velocity(displacement_km: float, time_myr: float) -> float;
+function euler_pole_velocity(angular_velocity_deg_myr: float, angular_distance_deg: float) -> float;
+function relative_plate_motion(vx1: float, vy1: float, vx2: float, vy2: float) -> (float, 2);
+function normal_stress(sigma1: float, sigma3: float, theta_deg: float) -> float;
+function shear_stress(sigma1: float, sigma3: float, theta_deg: float) -> float;
+function true_dip(apparent_dip_deg: float, alpha_deg: float) -> float;
+function strike_from_dip_direction(dip_direction_deg: float) -> float;
+function airy_isostasy_root(elevation_km: float, crust_density: float, mantle_density: float) -> float;
+function fault_heave_throw(slip: float, dip_deg: float) -> (float, 2);
+function strain_ellipse_ratio(e1: float, e3: float) -> float;
+function hydraulic_gradient(h1: float, h2: float, distance: float) -> float;
+function darcy_flux(k: float, i: float) -> float;
+function darcy_discharge(k: float, area: float, i: float) -> float;
+function transmissivity(k: float, thickness: float) -> float;
+function seepage_velocity(darcy_flux_val: float, porosity: float) -> float;
+function porosity(void_volume: float, total_volume: float) -> float;
+function manning_velocity(manning_n: float, hydraulic_radius: float, slope: float) -> float;
+function stream_discharge(area: float, velocity: float) -> float;
+function reynolds_number_pipe(velocity: float, diameter: float, kinematic_viscosity: float) -> float;
+function cooper_jacob_drawdown(q: float, t_aquifer: float, time_s: float, r: float, storativity: float) -> float;
+function time_of_travel(path_length: float, seepage_velocity_val: float) -> float;
+tag RockType { BASALT, ANDESITE, DACITE, RHYOLITE };
+function volcanic_explosivity_index_estimate(volume_km3: float) -> int;
+function eruption_column_height(mass_rate_kgs: float) -> float;
+function mass_eruption_rate(height_km: float) -> float;
+function magma_ascent_velocity(pressure_gradient: float, radius: float, viscosity: float, conduit_length: float) -> float;
+function effusion_rate(volume_km3: float, duration_days: float) -> float;
+function lava_volume_from_effusion(effusion_rate_m3s: float, duration_s: float) -> float;
+function magma_viscosity_suspension(melt_viscosity: float, crystal_fraction: float, max_packing_fraction: float) -> float;
+function magma_chamber_overpressure(tensile_strength: float, rock_density: float, magma_density: float, depth: float) -> float;
+function tephra_fallout_thickness(t0: float, decay_constant: float, distance_km: float) -> float;
+function silica_classification_index(sio2_wt_pct: float) -> RockType;
+function decay_constant_myr(half_life_myr: float) -> float;
+function parent_daughter_age(lambda_myr: float, daughter_excess: float, parent_remaining: float) -> float;
+function u238_pb206_age(pb206_excess: float, u238_remaining: float) -> float;
+function u235_pb207_age(pb207_excess: float, u235_remaining: float) -> float;
+function rb87_sr87_age(sr87_excess: float, rb87_remaining: float) -> float;
+function sm147_nd143_age(nd143_excess: float, sm147_remaining: float) -> float;
+function k40_ar40_age(ar40_excess: float, k40_remaining: float) -> float;
+function deposition_rate(thickness_m: float, time_kyr: float) -> float;
+function sediment_age_from_depth(depth_m: float, rate: float) -> float;
+function luminescence_age(paleodose_gy: float, dose_rate: float) -> float;

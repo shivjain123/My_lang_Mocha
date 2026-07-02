@@ -1154,7 +1154,7 @@ class CodeGen:
                 "complex_mul": "mocha_complex_mul",
                 "complex_div": "mocha_complex_div",
             }
-            # Promote int/float operand to Complex if needed
+            # Promote intvast//float operand to Complex if needed
             def to_complex(reg, typ):
                 if typ == "%struct.MochaComplex*":
                     return reg
@@ -1162,6 +1162,10 @@ class CodeGen:
                 if typ == "i32":
                     p = self.fresh_temp()
                     self.emit(f"  {p} = sitofp i32 {reg} to double")
+                    reg = p
+                elif typ == "i64":
+                    p = self.fresh_temp()
+                    self.emit(f"  {p} = sitofp i64 {reg} to double")
                     reg = p
                 c = self.fresh_temp()
                 self.emit(f"  {c} = call %struct.MochaComplex* @mocha_complex_new(double {reg}, double 0.0)")
@@ -1176,16 +1180,18 @@ class CodeGen:
         
         # FLOAT OPS
         if op_kind in ("float_add", "float_sub", "float_mul", "float_div", "float_mod"):
-            # --- PROMOTION: int → double if needed ---
+            # --- PROMOTION: int and vast → double if needed ---
             if left_type != right_type:
-                if left_type == "i32":
+                if left_type in ("i32", "i64"):
                     p = self.fresh_temp()
-                    self.emit(f"  {p} = sitofp i32 {left_reg} to double")
+                    instr = "sitofp i32" if left_type == "i32" else "sitofp i64"
+                    self.emit(f"  {p} = {instr} {left_reg} to double")
                     left_reg = p
                     left_type = "double"
-                if right_type == "i32":
+                if right_type in ("i32", "i64"):
                     p = self.fresh_temp()
-                    self.emit(f"  {p} = sitofp i32 {right_reg} to double")
+                    instr = "sitofp i32" if right_type == "i32" else "sitofp i64"
+                    self.emit(f"  {p} = {instr} {right_reg} to double")
                     right_reg = p
                     right_type = "double"
 
@@ -1227,7 +1233,6 @@ class CodeGen:
             instr = ops[op_kind]
             self.emit(f"  {tmp} = {instr} i64 {left_reg}, {right_reg}")
             return (tmp, "i64")
-
 
         # INT (i32) or mixed with vast
         if op_kind in ("int_add", "int_sub", "int_mul", "int_div", "int_mod"):
@@ -3211,51 +3216,23 @@ class CodeGen:
         val_reg, val_type = self.gen_expr(node.value)
 
         if val_type == "void" or val_reg == "void":
-            if self.current_return_type == "void":
-                self.emit("  call void @mocha_stack_pop()")
-                self.emit("  ret void")
+            self.emit("  call void @mocha_stack_pop()")
+            if self.current_return_type == "i8*":
+                self.emit("  ret i8* null")
+            elif self.current_return_type.endswith("*"):
+                self.emit(f"  ret {self.current_return_type} null")
+            elif self.current_return_type == "double":
+                self.emit("  ret double 0.0")
             else:
-                self.emit("  call void @mocha_stack_pop()")
-                if self.current_return_type == "i8*":
-                    self.emit("  ret i8* null")
-                elif self.current_return_type.endswith("*"):
-                    self.emit(f"  ret {self.current_return_type} null")
-                elif self.current_return_type == "double":
-                    self.emit("  ret double 0.0")
-                else:
-                    self.emit(f"  ret {self.current_return_type} 0")
+                self.emit(f"  ret {self.current_return_type} 0")
             return
 
-        # Promote i32 → double
-        if self.current_return_type == "double" and val_type == "i32":
-            p = self.fresh_temp()
-            self.emit(f"  {p} = sitofp i32 {val_reg} to double")
-            val_reg = p
-        
-        # Promote i32 → i64
-        if self.current_return_type == "i64" and val_type == "i32":
-            p = self.fresh_temp()
-            self.emit(f"  {p} = sext i32 {val_reg} to i64")
-            val_reg = p
-
-        # Demote double → i32
-        if self.current_return_type == "i32" and val_type == "double":
-            p = self.fresh_temp()
-            self.emit(f"  {p} = fptosi double {val_reg} to i32")
-            val_reg = p
-
-        # i32 → pointer
-        if self.current_return_type.endswith("*") and val_type == "i32":
-            p = self.fresh_temp()
-            self.emit(f"  {p} = inttoptr i32 {val_reg} to {self.current_return_type}")
-            val_reg = p
-        
-        # i1 → i8
+        # i1 → i8 only — this is internal bool representation, not user-visible coercion
         if self.current_return_type == "i8" and val_type == "i1":
             p = self.fresh_temp()
             self.emit(f"  {p} = zext i1 {val_reg} to i8")
             val_reg = p
-            
+
         self.emit("  call void @mocha_stack_pop()")
         if self.current_return_type.endswith("*") and val_reg == "null":
             self.emit(f"  ret {self.current_return_type} null")

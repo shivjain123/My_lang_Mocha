@@ -2934,6 +2934,243 @@ class Graph {
 
         return out;
     };
+
+    // ─────────────────────────────────────────
+    // degree_centrality: node's degree normalized by max possible (n-1)
+    // ─────────────────────────────────────────
+    function degree_centrality(label: str) -> float {
+        if (this.contains(label) == false) {
+            return -1.0;
+        };
+        var n: int = this.nodes.length;
+        if (n <= 1) {
+            return 0.0;
+        };
+        var idx: int = this.index_of(label);
+        var deg: int = this.nodes[idx].edges.length;
+        return float(deg) / float(n - 1);
+    };
+
+    // ─────────────────────────────────────────
+    // network_density: fraction of possible edges that exist
+    // ─────────────────────────────────────────
+    function network_density() -> float {
+        var n: int = this.nodes.length;
+        if (n <= 1) {
+            return 0.0;
+        };
+        var edge_count: int = 0;
+        var i: int = 0;
+        while (i < n) {
+            edge_count = edge_count + this.nodes[i].edges.length;
+            i = i + 1;
+        };
+        var actual_edges: float = float(edge_count);
+        var max_edges: float = float(n * (n - 1));
+        if (this.is_directed == false) {
+            actual_edges = actual_edges / 2.0;
+            max_edges    = max_edges / 2.0;
+        };
+        return actual_edges / max_edges;
+    };
+
+    // ─────────────────────────────────────────
+    // average_degree: mean degree across all nodes
+    // ─────────────────────────────────────────
+    function average_degree() -> float {
+        var n: int = this.nodes.length;
+        if (n == 0) {
+            return 0.0;
+        };
+        var total_degree: int = 0;
+        var i: int = 0;
+        while (i < n) {
+            total_degree = total_degree + this.nodes[i].edges.length;
+            i = i + 1;
+        };
+        return float(total_degree) / float(n);
+    };
+
+    // ─────────────────────────────────────────
+    // clustering_coefficient: how interconnected a node's neighbors are
+    // ─────────────────────────────────────────
+    function clustering_coefficient(label: str) -> float {
+        if (this.contains(label) == false) {
+            return -1.0;
+        };
+        var idx: int = this.index_of(label);
+        var neighbors: int[] = [];
+        var j: int = 0;
+        while (j < this.nodes[idx].edges.length) {
+            var nbr_idx: int = this.index_of(this.nodes[idx].edges[j].to);
+            neighbors.push(nbr_idx);
+            j = j + 1;
+        };
+        var k: int = neighbors.length;
+        if (k < 2) {
+            return 0.0;
+        };
+        var edge_count: int = 0;
+        var a: int = 0;
+        while (a < k) {
+            var b: int = a + 1;
+            while (b < k) {
+                var na: int = neighbors[a];
+                var nb: int = neighbors[b];
+                var found: bool = false;
+                var e: int = 0;
+                while (e < this.nodes[na].edges.length) {
+                    if (this.index_of(this.nodes[na].edges[e].to) == nb) {
+                        found = true;
+                        break;
+                    };
+                    e = e + 1;
+                };
+                if (found) {
+                    edge_count = edge_count + 1;
+                };
+                b = b + 1;
+            };
+            a = a + 1;
+        };
+        var possible: float = float(k * (k - 1)) / 2.0;
+        return float(edge_count) / possible;
+    };
+
+    // ─────────────────────────────────────────
+    // closeness_centrality (FIXED)
+    // ─────────────────────────────────────────
+    function closeness_centrality(label: str) -> float {
+        if (this.contains(label) == false) {
+            return -1.0;
+        };
+        var n: int = this.nodes.length;
+        var dist: int[] = [];
+        var i: int = 0;
+        while (i < n) {
+            dist.push(-1);
+            i = i + 1;
+        };
+        var si: int = this.index_of(label);
+        dist[si] = 0;
+        var queue: int[] = [];
+        queue.push(si);
+        var qh: int = 0;
+        while (qh < queue.length) {
+            var u: int = queue[qh];
+            qh = qh + 1;
+            var j: int = 0;
+            while (j < this.nodes[u].edges.length) {
+                var v: int = this.index_of(this.nodes[u].edges[j].to);
+                if (dist[v] == -1) {
+                    dist[v] = dist[u] + 1;
+                    queue.push(v);
+                };
+                j = j + 1;
+            };
+        };
+        var total_dist: int = 0;
+        var reachable: int = 0;
+        var k: int = 0;
+        while (k < n) {
+            if (k != si && dist[k] != -1) {
+                total_dist = total_dist + dist[k];
+                reachable  = reachable + 1;
+            };
+            k = k + 1;
+        };
+        if (total_dist == 0) {
+            return 0.0;
+        };
+        return float(reachable) / float(total_dist);
+    };
+
+    // ─────────────────────────────────────────
+    // betweenness_centrality (FIXED — uses alloc for 2D matrices,
+    // matching the proven pattern from the ML lib's DecisionTree class)
+    // ─────────────────────────────────────────
+    function betweenness_centrality(label: str) -> float {
+        if (this.contains(label) == false) {
+            return -1.0;
+        };
+        var n: int = this.nodes.length;
+        var v: int = this.index_of(label);
+
+        var dist_all: int[][]    = alloc int[n][n];
+        var sigma_all: float[][] = alloc float[n][n];
+
+        var src: int = 0;
+        while (src < n) {
+            var dist: int[]    = alloc int[n];
+            var sigma: float[] = alloc float[n];
+            var i: int = 0;
+            while (i < n) {
+                dist[i]  = -1;
+                sigma[i] = 0.0;
+                i = i + 1;
+            };
+            dist[src]  = 0;
+            sigma[src] = 1.0;
+
+            var queue: int[] = [];
+            queue.push(src);
+            var qh: int = 0;
+            while (qh < queue.length) {
+                var u: int = queue[qh];
+                qh = qh + 1;
+                var j: int = 0;
+                while (j < this.nodes[u].edges.length) {
+                    var w: int = this.index_of(this.nodes[u].edges[j].to);
+                    if (dist[w] == -1) {
+                        dist[w]  = dist[u] + 1;
+                        sigma[w] = sigma[u];
+                        queue.push(w);
+                    } else {
+                        if (dist[w] == dist[u] + 1) {
+                            sigma[w] = sigma[w] + sigma[u];
+                        };
+                    };
+                    j = j + 1;
+                };
+            };
+
+            var k: int = 0;
+            while (k < n) {
+                dist_all[src][k]  = dist[k];
+                sigma_all[src][k] = sigma[k];
+                k = k + 1;
+            };
+            src = src + 1;
+        };
+
+        var result: float = 0.0;
+        var s: int = 0;
+        while (s < n) {
+            if (s != v) {
+                var t: int = s + 1;
+                while (t < n) {
+                    if (t != v) {
+                        var dist_sv: int = dist_all[s][v];
+                        var dist_vt: int = dist_all[v][t];
+                        var dist_st: int = dist_all[s][t];
+                        if (dist_sv != -1 && dist_vt != -1 && dist_st != -1) {
+                            if (dist_sv + dist_vt == dist_st) {
+                                var sigma_sv: float = sigma_all[s][v];
+                                var sigma_vt: float = sigma_all[v][t];
+                                var sigma_st: float = sigma_all[s][t];
+                                if (sigma_st > 0.0) {
+                                    result = result + (sigma_sv * sigma_vt) / sigma_st;
+                                };
+                            };
+                        };
+                    };
+                    t = t + 1;
+                };
+            };
+            s = s + 1;
+        };
+        return result;
+    };
 };
 
 """  ========================

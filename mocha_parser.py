@@ -2051,7 +2051,7 @@ class Parser:
 
             self.advance()
 
-    def parse(self) -> Program:
+    def parse(self, silent: bool = False) -> Program:
         statements = []
         errors = []
 
@@ -2084,6 +2084,8 @@ class Parser:
                 self.synchronize()
 
         if errors:
+            if silent:
+                raise errors[0]
             for e in errors:
                 print(e)
             sys.exit(1)

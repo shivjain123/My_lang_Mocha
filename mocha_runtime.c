@@ -3031,7 +3031,7 @@ int mocha_wrap_system(const char *cmd) { return system(cmd); }
 /* ---- RUNTIME Exception ---- */
 
 //Flush stdout before writing — prevents interleaved output on error
-void* mocha_print_stderr(const char *msg) { //this is called mocha_error in Mocha-side
+void* mocha_print_stderr(const char *msg) { //this is called c_print_error in Mocha-side
     fflush(stdout);
     fprintf(stderr, "\n%s\n", msg);  // \n before AND after
     fflush(stderr);

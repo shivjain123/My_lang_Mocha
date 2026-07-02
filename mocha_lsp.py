@@ -66,6 +66,46 @@ def build_hover_markdown(item: dict) -> str:
 
     return "\n".join(lines)
 
+def get_signature_context(source_text: str, line: int, char: int):
+    """
+    Walk backwards from cursor to find:
+    - the function name being called
+    - which parameter index the cursor is on (0-based)
+    Returns (function_name, param_index) or (None, 0) if not in a call.
+    """
+    lines = source_text.replace('\r\n', '\n').split('\n')
+    if line >= len(lines):
+        return None, 0
+
+    # Build a single string of everything up to the cursor
+    before = '\n'.join(lines[:line]) + '\n' + lines[line][:char]
+
+    # Walk backwards to find the opening '(' at depth 0
+    depth       = 0
+    param_index = 0
+    i = len(before) - 1
+
+    while i >= 0:
+        ch = before[i]
+        if ch == ')':
+            depth += 1
+        elif ch == '(':
+            if depth == 0:
+                # This is our opening paren — function name is just before it
+                name_end = i
+                name_start = name_end - 1
+                while name_start >= 0 and (before[name_start].isalnum() or before[name_start] == '_'):
+                    name_start -= 1
+                func_name = before[name_start + 1:name_end]
+                return func_name if func_name else None, param_index
+            else:
+                depth -= 1
+        elif ch == ',' and depth == 0:
+            param_index += 1
+        i -= 1
+
+    return None, 0
+
 # ── Transport: read/write JSON-RPC over stdin/stdout ──────────────────────────
 # Protocol: "Content-Length: N\r\n\r\n" followed by N bytes of UTF-8 JSON.
 # This is the raw LSP wire format — same as what VS Code sends.
@@ -229,7 +269,6 @@ def parse_compiler_output(output: str) -> list[dict]:
 
     return diagnostics
 
-
 def make_range(start_line, start_char, end_line, end_char) -> dict:
     return {
         "start": {"line": start_line, "character": start_char},
@@ -267,6 +306,7 @@ class MochaLSP:
             "textDocument/didSave":          self.on_did_save,
             "textDocument/hover":            self.on_hover,
             "textDocument/definition":       self.on_definition,
+            "textDocument/signatureHelp":    self.on_signature_help,
         }.get(method)
 
         if handler:
@@ -288,6 +328,10 @@ class MochaLSP:
                 # We'll add more capabilities here as we build them:
                 # "completionProvider": {"triggerCharacters": [".", " "]},
                 "definitionProvider": True,
+                "signatureHelpProvider": {
+                    "triggerCharacters":   ["(", ","],
+                    "retriggerCharacters": [","]
+                },
             },
             "serverInfo": {
                 "name":    SERVER_NAME,
@@ -402,6 +446,64 @@ class MochaLSP:
             "uri":   target_uri,
             "range": make_range(target_line, target_col, target_line, target_col)
         })
+    
+    def on_signature_help(self, msg: dict):
+        params = msg["params"]
+        uri    = params["textDocument"]["uri"]
+        line   = params["position"]["line"]
+        char   = params["position"]["character"]
+        msg_id = msg["id"]
+
+        text = self.documents.get(uri, "")
+        if not text:
+            self.send_response(msg_id, result=None)
+            return
+
+        func_name, param_index = get_signature_context(text, line, char)
+        if not func_name:
+            self.send_response(msg_id, result=None)
+            return
+
+        # Look up the function in current file then global symbols
+        item = (self._symbol_table.get(uri) or {}).get(func_name)
+        if not item:
+            item = self._global_symbols.get(func_name)
+        if not item:
+            self.send_response(msg_id, result=None)
+            return
+
+        # Build the full signature label
+        params_list = item.get("params", [])
+        param_strs  = [f"{n}: {t}" for n, t in params_list]
+        full_sig    = f"function {item['name']}({', '.join(param_strs)}) -> {item.get('return_type', 'null')}"
+
+        # Build parameter info for VS Code to highlight active param
+        param_infos = []
+        for pname, ptype in params_list:
+            # Find matching @param doc if exists
+            doc_desc = ""
+            for dp_name, dp_desc in (item.get("doc_params") or []):
+                if dp_name == pname:
+                    doc_desc = dp_desc
+                    break
+            label = f"{pname}: {ptype}"
+            param_infos.append({
+                "label":         label,
+                "documentation": doc_desc if doc_desc else None
+            })
+
+        self.send_response(msg_id, result={
+            "signatures": [{
+                "label":           full_sig,
+                "documentation":   {
+                    "kind":  "markdown",
+                    "value": " ".join(item.get("doc_desc") or [])
+                },
+                "parameters": param_infos
+            }],
+            "activeSignature": 0,
+            "activeParameter": min(param_index, max(0, len(params_list) - 1))
+        })
 
     def on_did_change(self, msg: dict):
         td  = msg["params"]["textDocument"]
@@ -434,7 +536,7 @@ class MochaLSP:
             from mocha_lexer  import Lexer
             from mocha_parser import Parser
             tokens = Lexer(source_text.replace('\r\n', '\n')).tokenise()
-            ast    = Parser(tokens).parse()
+            ast    = Parser(tokens).parse(silent=True)
             items  = collect_items(ast)
             table  = {}
             for item in items:
@@ -450,7 +552,11 @@ class MochaLSP:
                         table[f"{item['name']}.{method['name']}"] = method
                         table[method["name"]] = method
             return table
-        except Exception:
+        except SystemExit as e:
+            log(f"SYSTEM EXIT in _extract_symbols: {e} uri={uri}")
+            return {}
+        except Exception as e:
+            log(f"ERROR in _extract_symbols: {e} uri={uri}")
             return {}
     
     def _index_imports(self, source_text: str):
@@ -459,7 +565,7 @@ class MochaLSP:
             from mocha_parser import Parser
             from mocha_ast    import ImportStmt
             tokens = Lexer(source_text.replace('\r\n', '\n')).tokenise()
-            ast    = Parser(tokens).parse()
+            ast    = Parser(tokens).parse(silent=True)
             for node in ast.statements:
                 if not isinstance(node, ImportStmt):
                     continue
@@ -476,6 +582,8 @@ class MochaLSP:
                     self._symbol_table[lib_uri] = table
                     self._global_symbols.update(table)
                     log(f"Indexed lib: {lib_name} ({len(table)} symbols)")
+                except SystemExit as e:
+                    log(f"SYSTEM EXIT indexing {lib_name}: {e}")
                 except Exception as e:
                     log(f"Failed to index {lib_name}: {e}")
         except Exception:
@@ -537,24 +645,28 @@ class MochaLSP:
 
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
+# Disable Python's own stdout buffering — LSP must flush immediately
 def main():
-    # Disable Python's own stdout buffering — LSP must flush immediately
     server = MochaLSP()
-
     log(f"{SERVER_NAME} {SERVER_VERSION} started, waiting for VS Code...")
 
     while not server.shutdown_flag:
         try:
             msg = read_message(sys.stdin.buffer)
             if msg is None:
-                break  # stdin closed
+                break
             server.handle(msg)
         except KeyboardInterrupt:
             break
+        except SystemExit as e:
+            log(f"SYSTEM EXIT in main loop: {e}")
+            break
         except Exception as e:
-            log(f"Error handling message: {e}")
+            import traceback
+            log(f"UNHANDLED ERROR in main loop: {e}")
+            log(traceback.format_exc())
 
-    log("Server exiting.")
+    log("Exiting.")
 
 
 def log(msg: str):

@@ -30,3 +30,6 @@ lua-5.5.0_Win64_dllw6_lib/
 sqlite-amalgamation-3510300/
 zig-lib/
 wren/
+
+# ─── Node/VSCode Extension Build Artifacts ───────────────────────────────────
+node_modules/

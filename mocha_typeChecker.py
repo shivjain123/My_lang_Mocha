@@ -192,7 +192,7 @@ class SymbolTable:
 class TypeChecker:
 
     # Types that can be used in arithmetic
-    NUMERIC_TYPES = {"int", "float", "vast", "Complex"} #new addition after much time
+    NUMERIC_TYPES = {"int", "float", "vast", "Complex"}
 
     # Types that support comparison
     COMPARABLE_TYPES = {"int", "float", "str", "vast"}
@@ -262,6 +262,14 @@ class TypeChecker:
         # Allow unknown comes from lambda calls and any type of dict access
         if actual in ("unknown", "any") or expected in ("unknown", "any"):
             return True
+        
+        # float cannot be assigned to vast or int (would silently truncate)
+        if expected in ("vast", "int") and actual == "float":
+            return False
+
+        # vast cannot be assigned to int (would silently truncate)  
+        if expected == "int" and actual == "vast":
+            return False
         
         # int and float are compatible with each other
         if expected in self.NUMERIC_TYPES and actual in self.NUMERIC_TYPES:

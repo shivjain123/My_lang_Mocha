@@ -1,0 +1,76 @@
+// Auto-generated manifest for mocha-society.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-math
+
+function c_exp(x: float) -> float native mocha_wrap_exp;
+const DEG_TO_RAD: float = 0.01745329251994;
+const RAD_TO_DEG: float = 57.29577951308232;
+function population_growth_rate(p0: float, p1: float, years: float) -> float;
+function population_doubling_time(growth_rate: float) -> float;
+function crude_birth_rate(births: float, population: float) -> float;
+function crude_death_rate(deaths: float, population: float) -> float;
+function natural_increase_rate(cbr: float, cdr: float) -> float;
+function net_migration_rate(immigrants: float, emigrants: float, population: float) -> float;
+function dependency_ratio(pop_under15: float, pop_65plus: float, pop_working: float) -> float;
+function child_dependency_ratio(pop_under15: float, pop_working: float) -> float;
+function old_age_dependency_ratio(pop_65plus: float, pop_working: float) -> float;
+function population_projection(p0: float, growth_rate: float, years: float) -> float;
+function mean_income(incomes: float[]) -> float;
+function gini_coefficient(incomes: float[]) -> float;
+function theil_index(incomes: float[]) -> float;
+function atkinson_index(incomes: float[], epsilon: float) -> float;
+function poverty_headcount_ratio(poor_count: float, total_population: float) -> float;
+function poverty_gap_index(incomes: float[], poverty_line: float) -> float;
+function palma_ratio(top10_share: float, bottom40_share: float) -> float;
+function income_share_ratio(top_share: float, bottom_share: float) -> float;
+function relative_poverty_line(median_income: float, threshold_fraction: float) -> float;
+function voter_turnout_rate(votes_cast: float, eligible_voters: float) -> float;
+function dhondt_apportionment(votes: float[], total_seats: int) -> int[];
+function sainte_lague_apportionment(votes: float[], total_seats: int) -> int[];
+function effective_number_of_parties(vote_shares: float[]) -> float;
+function gallagher_index(vote_shares: float[], seat_shares: float[]) -> float;
+function seat_vote_deviation(vote_share: float, seat_share: float) -> float;
+function banzhaf_power_index_3player(w1: float, w2: float, w3: float, quota: float) -> (float, 3);
+function shapley_shubik_power_index_3player(w1: float, w2: float, w3: float, quota: float) -> (float, 3);
+function node_degree(adjacency: int[][], node_index: int) -> int;
+function degree_centrality(adjacency: int[][], node_index: int) -> float;
+function network_density(adjacency: int[][]) -> float;
+function average_degree(adjacency: int[][]) -> float;
+function clustering_coefficient(adjacency: int[][], node_index: int) -> float;
+function shortest_path_length(adjacency: int[][], source: int, target: int) -> int;
+function closeness_centrality(adjacency: int[][], node_index: int) -> float;
+function betweenness_centrality(adjacency: int[][], node_index: int) -> float;
+function homophily_index(adjacency: int[][], attributes: int[]) -> float;
+function coefficient_of_relationship(num_paths: int, links_per_path: int) -> float;
+function inbreeding_coefficient(parental_relationship: float) -> float;
+function simpsons_diversity_index(counts: float[]) -> float;
+function simpsons_reciprocal_index(counts: float[]) -> float;
+function shannon_diversity_index(counts: float[]) -> float;
+function shannon_evenness_index(counts: float[]) -> float;
+function cultural_distance_index(differing_traits: int, total_traits: int) -> float;
+function cultural_similarity_index(differing_traits: int, total_traits: int) -> float;
+function cronbachs_alpha(item_variances: float[], total_variance: float) -> float;
+function cohens_kappa(observed_agreement: float, expected_agreement: float) -> float;
+function standard_error_of_proportion(p: float, n: float) -> float;
+function margin_of_error_proportion(p: float, n: float, z_score: float) -> float;
+function sample_size_for_proportion(z_score: float, p: float, margin_of_error: float) -> float;
+function confidence_interval_proportion(p: float, n: float, z_score: float) -> (float, 2);
+function standard_error_of_mean(std_dev: float, n: float) -> float;
+function pooled_standard_deviation(std1: float, n1: float, std2: float, n2: float) -> float;
+function cohens_d(mean1: float, mean2: float, pooled_std: float) -> float;
+function pearson_correlation_coefficient(x: float[], y: float[]) -> float;
+function life_expectancy_index(life_expectancy: float, min_val: float, max_val: float) -> float;
+function schooling_index(years: float, min_years: float, max_years: float) -> float;
+function education_index(mean_years_index: float, expected_years_index: float) -> float;
+function income_index(gni_per_capita: float, min_gni: float, max_gni: float) -> float;
+function human_development_index(life_exp_idx: float, edu_idx: float, inc_idx: float) -> float;
+function gdp_per_capita_growth_rate(gdp0: float, gdp1: float, years: float) -> float;
+function income_elasticity_of_demand(percent_change_quantity: float, percent_change_income: float) -> float;
+function engels_coefficient(food_expenditure: float, total_expenditure: float) -> float;
+function unemployment_rate(unemployed: float, labor_force: float) -> float;
+function labor_force_participation_rate(labor_force: float, working_age_population: float) -> float;
+function purchasing_power_parity_adjustment(nominal_value: float, ppp_conversion_factor: float) -> float;
+function misery_index(inflation_rate: float, unemployment_rate_val: float) -> float;

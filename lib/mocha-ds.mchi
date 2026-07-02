@@ -250,6 +250,12 @@ class Graph function union_sets(parent: int[], rank: int[], a: int, b: int) -> b
 class Graph function kruskal() -> float;
 class Graph function boruvka() -> float;
 class Graph function gravity_merge() -> DSValue[];
+class Graph function degree_centrality(label: str) -> float;
+class Graph function network_density() -> float;
+class Graph function average_degree() -> float;
+class Graph function clustering_coefficient(label: str) -> float;
+class Graph function closeness_centrality(label: str) -> float;
+class Graph function betweenness_centrality(label: str) -> float;
 class BloomFilter;
 class BloomFilter field bits: bool[];
 class BloomFilter field m: int;
