@@ -1,4 +1,4 @@
-"""function test(didLoad) -> null {
+function test(didLoad) -> null {
 
     // Test 1: basic try/rescue with binding
     try {
@@ -35,11 +35,13 @@
 
     // Test 5: unhandled — should print runtime error and exit
     // uncomment to test:
-    // fail "unhandled!";
+    print("before fail", newLine=true);
+    fail "unhandled!";
+    print("after fail", newLine=true);
 
-};"""
+};
 
-function test(didLoad) -> null {
+"""function test(didLoad) -> null {
     print("before try", newLine=true);
     try {
         print("inside try", newLine=true);
@@ -50,4 +52,4 @@ function test(didLoad) -> null {
         //but gets stuck and does not exit rescue
     };
     print("after try", newLine=true); //This never prints
-};
+};"""

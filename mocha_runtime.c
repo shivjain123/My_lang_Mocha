@@ -197,6 +197,8 @@
 #include <ctype.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <unistd.h>
+#include <limits.h>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -228,22 +230,19 @@ static void mocha_crash_handler(int sig) {
 /* ===============================================================
    Mocha Reference Counting (This is also partially working since \
    full was not possible yet.) \
-   For now, it masks gc, and helps strings not baloon up somewhat, \
-   better than nothing but not full \
+   For now, it masks gc, and is working for strings, 1D arrays, \
+   tuples, sets, and dicts; Classes, tags and extend (maybe)\
+   and 2D Arrays are remaining (Also Bloc scoping)
    =============================================================== */
 
-typedef struct {
-    size_t  ref_count;
-    size_t  size;
-} MochaRCHeader;
-
-#define RC_HEADER(ptr) ((MochaRCHeader*)(((uint8_t*)(ptr)) - sizeof(MochaRCHeader)))
-#define RC_DATA(header) ((void*)(((uint8_t*)(header)) + sizeof(MochaRCHeader)))
-
 typedef struct MochaRCNode {
-    MochaRCHeader        header;
-    struct MochaRCNode*  next;
+    size_t                ref_count;
+    size_t                size;
+    struct MochaRCNode*   next;
 } MochaRCNode;
+
+#define RC_NODE(ptr)  ((MochaRCNode*)(((uint8_t*)(ptr)) - sizeof(MochaRCNode)))
+#define RC_DATA(node) ((void*)(((uint8_t*)(node)) + sizeof(MochaRCNode)))
 
 static MochaRCNode* rc_head = NULL;
 
@@ -253,35 +252,44 @@ void* rc_alloc(size_t size) {
         fprintf(stderr, "MochaRuntimeError: Out of memory!\n");
         _exit(2);
     }
-    node->header.ref_count = 1;
-    node->header.size      = size;
-    node->next             = rc_head;
-    rc_head                = node;
-    memset(RC_DATA(&node->header), 0, size);
-    return RC_DATA(&node->header);
+    node->ref_count = 1;
+    node->size      = size;
+    node->next      = rc_head;
+    rc_head         = node;
+    memset(RC_DATA(node), 0, size);
+    return RC_DATA(node);
 }
 
 void rc_retain(void* ptr) {
     if (!ptr) return;
-    RC_HEADER(ptr)->ref_count++;
+    RC_NODE(ptr)->ref_count++;
 }
 
 void rc_release(void* ptr) {
     if (!ptr) return;
-    MochaRCHeader* header = RC_HEADER(ptr);
-    if (header->ref_count == 0) {
+    MochaRCNode* node = RC_NODE(ptr);
+    if (node->ref_count == 0) {
         fprintf(stderr, "MochaRuntimeError: rc_release called on already-freed object!\n");
         return;
     }
-    header->ref_count--;
-    if (header->ref_count == 0) {
-        free(header);
+    node->ref_count--;
+    if (node->ref_count == 0) {
+        if (rc_head == node) {
+            rc_head = node->next;
+        } else {
+            MochaRCNode* cur = rc_head;
+            while (cur && cur->next != node) {
+                cur = cur->next;
+            }
+            if (cur) cur->next = node->next;
+        }
+        free(node);
     }
 }
 
 size_t rc_count(void* ptr) {
     if (!ptr) return 0;
-    return RC_HEADER(ptr)->ref_count;
+    return RC_NODE(ptr)->ref_count;
 }
 
 /* gc_alloc is now rc_alloc — existing code unchanged */
@@ -291,6 +299,13 @@ void* gc_alloc(size_t size) {
 
 void gc_free(void* ptr) {
     rc_release(ptr);
+}
+
+static char* rc_strdup(const char* src) {
+    size_t len = strlen(src);
+    char* copy = (char*)rc_alloc(len + 1);
+    memcpy(copy, src, len + 1);
+    return copy;
 }
 
 /* ===============================================================
@@ -336,7 +351,11 @@ typedef struct MochaArray2D {
     int32_t     rows, cols, elem_size, fixed_r, fixed_c;
 } MochaArray2D;
 
-typedef struct MochaTuple { void **slots; int32_t count; } MochaTuple;
+typedef struct MochaTuple {
+    void   **slots;
+    int32_t  count;
+    int32_t  is_ptr_elem;   // 1 if slots hold i8* directly (str), 0 if boxed scalars
+} MochaTuple;
 
 typedef struct { char *key; void *value; int value_type; } MochaDictEntry;
 typedef struct { MochaDictEntry *entries; int32_t size, capacity; } MochaDict;
@@ -606,12 +625,7 @@ static void gc_sweep() {
 void mocha_gc_collect() { gc_mark(); gc_sweep(); }
 
 static char* gc_alloc_string(size_t len) {
-    //if (gc_alloc_count >= GC_THRESHOLD) mocha_gc_collect(); HAD STARTED DOING
-    // DANGLING POINTERS SO NOW IT IS JUST A FAKE ARENA ALLOCATION!
-    GcNode *node = (GcNode*)malloc(sizeof(GcNode) + len + 1);
-    if (!node) { fprintf(stderr, "MochaRuntimeError: Out of memory!\n"); exit(2); }
-    node->marked = 0; node->next = gc_head; gc_head = node; gc_alloc_count++;
-    return node->data;
+    return (char*)rc_alloc(len + 1);
 }
 
 void mocha_gc_stats() {
@@ -1186,9 +1200,12 @@ static void fixed_check(MochaArray *arr, const char *op) {
 /* Grow capacity by 2x if needed */
 static void ensure_capacity(MochaArray *arr) {
     if (arr->length < arr->capacity) return;
+    int32_t old_capacity = arr->capacity;
     arr->capacity = arr->capacity == 0 ? 8 : arr->capacity * 2;
     arr->data = realloc(arr->data, arr->capacity * arr->elem_size);
     MOCHA_OOM_CHECK(arr->data);
+    memset((char*)arr->data + old_capacity * arr->elem_size, 0,
+           (arr->capacity - old_capacity) * arr->elem_size);
 }
 
 /* ---- Public API ---- */
@@ -1197,20 +1214,35 @@ static void ensure_capacity(MochaArray *arr) {
 int32_t mocha_array_length(MochaArray *arr) { return arr->length; }
 
 MochaArray* mocha_array_new(int32_t capacity, int32_t elem_size, int32_t fixed) {
-    MochaArray *arr = (MochaArray *)malloc(sizeof(MochaArray));
+    MochaArray *arr = (MochaArray *)rc_alloc(sizeof(MochaArray));  // was malloc
     int32_t cap = capacity > 0 ? capacity : 4;
     arr->data = calloc(cap, elem_size);
     MOCHA_OOM_CHECK(arr->data);
     arr->capacity  = cap;
     arr->elem_size = elem_size;
     arr->fixed     = fixed;
-    
-    if (fixed) {
-        arr->length = cap;  // Static array: length = capacity
-    } else {
-        arr->length = 0;    // Dynamic array: starts empty
-    }
+    if (fixed) arr->length = cap;
+    else arr->length = 0;
     return arr;
+}
+
+void mocha_array_retain(MochaArray *arr) {
+    if (!arr) return;
+    rc_retain(arr);
+}
+
+void mocha_array_release(MochaArray *arr, int32_t elem_is_str) {
+    if (!arr) return;
+    if (rc_count(arr) == 1) {
+        if (elem_is_str) {
+            char **items = (char **)arr->data;
+            for (int32_t i = 0; i < arr->length; i++) {
+                rc_release(items[i]);
+            }
+        }
+        free(arr->data);
+    }
+    rc_release(arr);
 }
 
 MochaArray* mocha_array_alloc_filled(int32_t size, int32_t elem_size) {
@@ -1222,17 +1254,41 @@ MochaArray* mocha_array_alloc_filled(int32_t size, int32_t elem_size) {
 void mocha_array_set(MochaArray *arr, int32_t index, void *value) {
     // For dynamic arrays: auto-resize if index is out of bounds
     if (!arr->fixed && index >= arr->length) {
+        int32_t old_capacity = arr->capacity;
         // Grow capacity as needed
         while (index >= arr->capacity) {
             arr->capacity = arr->capacity * 2;
             arr->data = realloc(arr->data, arr->capacity * arr->elem_size);
             MOCHA_OOM_CHECK(arr->data);
         }
+        memset((char*)arr->data + old_capacity * arr->elem_size, 0,
+               (arr->capacity - old_capacity) * arr->elem_size);
         arr->length = index + 1;
     }
     
     bounds_check(arr, index);
     memcpy((char *)arr->data + index * arr->elem_size, value, arr->elem_size);
+}
+
+void mocha_array_set_str(MochaArray *arr, int32_t index, char *value) {
+    // growth handling, identical to mocha_array_set
+    if (!arr->fixed && index >= arr->length) {
+        int32_t old_capacity = arr->capacity;
+        while (index >= arr->capacity) {
+            arr->capacity = arr->capacity * 2;
+            arr->data = realloc(arr->data, arr->capacity * arr->elem_size);
+            MOCHA_OOM_CHECK(arr->data);
+        }
+        memset((char*)arr->data + old_capacity * arr->elem_size, 0,
+               (arr->capacity - old_capacity) * arr->elem_size);
+        arr->length = index + 1;
+    }
+    bounds_check(arr, index);
+
+    char **slot = (char**)((char*)arr->data + index * arr->elem_size);
+    char *old = *slot;
+    rc_release(old);   // safely no-ops if old is NULL (a never-yet-set slot)
+    *slot = value;
 }
 
 /* Init-time only — raw write during array literal construction.
@@ -1556,17 +1612,37 @@ void mocha_array2d_drop_col(MochaArray2D *arr, int32_t col) {
  * TUPLE RUNTIME
  * ============================================================ */
 
-MochaTuple* mocha_tuple_new(int32_t count) {
-    MochaTuple *t = (MochaTuple*)malloc(sizeof(MochaTuple));
-    MOCHA_OOM_CHECK(t);
+MochaTuple* mocha_tuple_new(int32_t count, int32_t is_ptr_elem) {
+    MochaTuple *t = (MochaTuple*)rc_alloc(sizeof(MochaTuple));  // was malloc
     t->slots = (void**)malloc(count * sizeof(void*));
     MOCHA_OOM_CHECK(t->slots);
     t->count = count;
+    t->is_ptr_elem = is_ptr_elem;
     return t;
 }
 
-void  mocha_tuple_set(MochaTuple *t, int32_t i, void *v) { 
-    t->slots[i] = v; 
+void mocha_tuple_retain(MochaTuple *t) {
+    if (!t) return;
+    rc_retain(t);
+}
+
+void mocha_tuple_release(MochaTuple *t) {
+    if (!t) return;
+    if (rc_count(t) == 1) {
+        for (int32_t i = 0; i < t->count; i++) {
+            if (t->is_ptr_elem) {
+                rc_release((char*)t->slots[i]);
+            } else {
+                free(t->slots[i]);
+            }
+        }
+        free(t->slots);
+    }
+    rc_release(t);
+}
+
+void mocha_tuple_set(MochaTuple *t, int32_t i, void *v) {
+    t->slots[i] = v;
 }
 
 void* mocha_tuple_get(MochaTuple *t, int32_t i) {
@@ -2374,6 +2450,11 @@ double mocha_wrap_sqrt_f(double x) { return sqrt(x); }
  * Fuzzy key suggestions via Levenshtein distance on key errors.
  * ============================================================ */
 
+ /* Forward declaration — needed because releasing a dict value may recurse
+ * into releasing a nested dict, and releasing a dict releases its values. */
+void mocha_dict_release(MochaDict *d);
+static void mocha_dict_release_value(void *value, int value_type);
+
 /* Internal Helpers */
 
 static int mocha_dict_find(MochaDict *d, const char *key) {
@@ -2393,6 +2474,7 @@ static void dict_grow(MochaDict *d) {
 static void dict_set_entry(MochaDict *d, char *key, void *value, int value_type) {
     int idx = mocha_dict_find(d, key);
     if (idx >= 0) {
+        mocha_dict_release_value(d->entries[idx].value, d->entries[idx].value_type);
         d->entries[idx].value      = value;
         d->entries[idx].value_type = value_type;
         return;
@@ -2435,11 +2517,56 @@ static const char* mocha_dict_type_name(int type) {
     }
 }
 
+static void mocha_dict_release_value(void *value, int value_type) {
+    if (!value) return;
+    switch (value_type) {
+        case MOCHA_DICT_INT:
+        case MOCHA_DICT_FLOAT:
+        case MOCHA_DICT_BOOL:
+        case MOCHA_DICT_VAST:
+            /* these are plain malloc'd boxes (int32_t*, double*, etc) */
+            free(value);
+            break;
+        case MOCHA_DICT_STR:
+            /* now rc_strdup'd (Step 30) — safe to rc_release */
+            rc_release(value);
+            break;
+        case MOCHA_DICT_DICT:
+            /* nested dict — recurse; mocha_dict_release itself checks
+             * refcount before actually freeing anything inside */
+            mocha_dict_release((MochaDict*)value);
+            break;
+        case MOCHA_DICT_OBJECT:
+            /* objects aren't RC'd yet (same as sets) — deliberately
+             * left untouched until class instances get their own RC pass */
+            break;
+    }
+}
+
 /* ---- Construction ---- */
 MochaDict* mocha_dict_new() {
-    MochaDict *d = malloc(sizeof(MochaDict));
+    MochaDict *d = rc_alloc(sizeof(MochaDict));
     d->entries = malloc(sizeof(MochaDictEntry) * 8);
     d->size = 0; d->capacity = 8; return d;
+}
+
+void mocha_dict_retain(MochaDict *d) {
+    if (!d) return;
+    rc_retain(d);
+}
+
+void mocha_dict_release(MochaDict *d) {
+    if (!d) return;
+    if (rc_count(d) == 1) {
+        /* last owner — safe to release everything inside before the
+         * struct itself gets freed by rc_release below */
+        for (int32_t i = 0; i < d->size; i++) {
+            free(d->entries[i].key);
+            mocha_dict_release_value(d->entries[i].value, d->entries[i].value_type);
+        }
+        free(d->entries);
+    }
+    rc_release(d);
 }
 
 /* ---- Setters ---- */
@@ -2454,7 +2581,7 @@ void mocha_dict_set_float(MochaDict *d, char *key, double val) {
 }
 
 void mocha_dict_set_str(MochaDict *d, char *key, char *val) {
-    dict_set_entry(d, key, strdup(val), MOCHA_DICT_STR);
+    dict_set_entry(d, key, rc_strdup(val), MOCHA_DICT_STR);
 }
 
 void mocha_dict_set_bool(MochaDict *d, char *key, int8_t val) {
@@ -2548,12 +2675,22 @@ int8_t mocha_dict_has(MochaDict *d, char *key) {
     return mocha_dict_find(d, key) >= 0 ? 1 : 0;
 }
 int32_t mocha_dict_length(MochaDict *d) { return d->size; }
-void    mocha_dict_clean(MochaDict *d)  { d->size = 0;    }
+
 void mocha_dict_remove(MochaDict *d, char *key) {
     int idx = mocha_dict_find(d, key);
     if (idx < 0) { fprintf(stderr, "MochaRuntimeError: Cannot remove key '%s' — not found.\n", key); exit(2); }
+    free(d->entries[idx].key);
+    mocha_dict_release_value(d->entries[idx].value, d->entries[idx].value_type);
     for (int32_t i=idx; i<d->size-1; i++) d->entries[i]=d->entries[i+1];
     d->size--;
+}
+
+void mocha_dict_clean(MochaDict *d) {
+    for (int32_t i = 0; i < d->size; i++) {
+        free(d->entries[i].key);
+        mocha_dict_release_value(d->entries[i].value, d->entries[i].value_type);
+    }
+    d->size = 0;
 }
 
 /* ---- Bulk operations ---- */
@@ -2581,20 +2718,51 @@ MochaArray* mocha_dict_allvalues(MochaDict *d) {
     return arr;
 }
 
+static void* mocha_dict_dup_value(void *val, int vt) {
+    switch (vt) {
+        case MOCHA_DICT_INT: {
+            int32_t *v = malloc(sizeof(int32_t));
+            *v = *(int32_t*)val;
+            return v;
+        }
+        case MOCHA_DICT_FLOAT: {
+            double *v = malloc(sizeof(double));
+            *v = *(double*)val;
+            return v;
+        }
+        case MOCHA_DICT_BOOL: {
+            int8_t *v = malloc(sizeof(int8_t));
+            *v = *(int8_t*)val;
+            return v;
+        }
+        case MOCHA_DICT_VAST: {
+            int64_t *v = malloc(sizeof(int64_t));
+            *v = *(int64_t*)val;
+            return v;
+        }
+        case MOCHA_DICT_STR:
+            return rc_strdup((char*)val);
+        case MOCHA_DICT_DICT:
+            mocha_dict_retain((MochaDict*)val);
+            return val;
+        default: /* MOCHA_DICT_OBJECT — not RC'd yet */
+            return val;
+    }
+}
+
 MochaDict* mocha_dict_merge(MochaDict *a, MochaDict *b, int8_t override) {
     MochaDict *result = mocha_dict_new();
 
     // Copy all entries from a
     for (int32_t i = 0; i < a->size; i++) {
-        dict_set_entry(result,
-            strdup(a->entries[i].key),
-            a->entries[i].value,
-            a->entries[i].value_type);
+        void *new_val = mocha_dict_dup_value(a->entries[i].value, a->entries[i].value_type);
+        dict_set_entry(result, strdup(a->entries[i].key), new_val, a->entries[i].value_type);
     }
 
     // Merge entries from b
     for (int32_t i = 0; i < b->size; i++) {
         char *key = b->entries[i].key;
+        void *new_val = mocha_dict_dup_value(b->entries[i].value, b->entries[i].value_type);
         if (mocha_dict_find(result, key) >= 0) {
             if (!override) {
                 fprintf(stderr,
@@ -2604,13 +2772,9 @@ MochaDict* mocha_dict_merge(MochaDict *a, MochaDict *b, int8_t override) {
                 exit(2);
             }
             // override=true — b wins, update existing entry
-            dict_set_entry(result, key,
-                b->entries[i].value,
-                b->entries[i].value_type);
+            dict_set_entry(result, key, new_val, b->entries[i].value_type);
         } else {
-            dict_set_entry(result, strdup(key),
-                b->entries[i].value,
-                b->entries[i].value_type);
+            dict_set_entry(result, strdup(key), new_val, b->entries[i].value_type);
         }
     }
 
@@ -2637,10 +2801,8 @@ void mocha_dict_print_value(MochaDict *d, char *key, int8_t newline) {
 MochaDict* mocha_dict_copy(MochaDict *src) {
     MochaDict *d = mocha_dict_new();
     for (int32_t i = 0; i < src->size; i++) {
-        dict_set_entry(d,
-            strdup(src->entries[i].key),
-            src->entries[i].value,
-            src->entries[i].value_type);
+        void *new_val = mocha_dict_dup_value(src->entries[i].value, src->entries[i].value_type);
+        dict_set_entry(d, strdup(src->entries[i].key), new_val, src->entries[i].value_type);
     }
     return d;
 }
@@ -2691,7 +2853,7 @@ static void set_ensure_capacity(MochaSet *s) {
 
 /* ---- Construction ---- */
 MochaSet* mocha_set_new(int32_t elem_type) {
-    MochaSet *s  = malloc(sizeof(MochaSet));
+    MochaSet *s  = rc_alloc(sizeof(MochaSet));
     s->elem_type = elem_type;
     s->elem_size = set_elem_size(elem_type);
     s->size      = 0;
@@ -2700,6 +2862,33 @@ MochaSet* mocha_set_new(int32_t elem_type) {
     MOCHA_OOM_CHECK(s->data);
     return s;
 }
+/* ---- Reference Counting ---- */
+void mocha_set_retain(MochaSet *s) {
+    if (!s) return;
+    rc_retain(s);
+}
+
+void mocha_set_release(MochaSet *s) {
+    if (!s) return;
+    if (rc_count(s) == 1) {
+        /* This is the last owner — safe to free the element buffer's contents */
+        if (s->elem_type == MOCHA_SET_STR) {
+            for (int32_t i = 0; i < s->size; i++) {
+                char *v;
+                memcpy(&v, (char *)s->data + i * s->elem_size, sizeof(char*));
+                rc_release(v);
+            }
+        } else if (s->elem_type == MOCHA_SET_OBJECT) {
+            for (int32_t i = 0; i < s->size; i++) {
+                void *v;
+                memcpy(&v, (char *)s->data + i * s->elem_size, sizeof(void*));
+                rc_release(v);
+            }
+        }
+        free(s->data);
+    }
+    rc_release(s);
+}
 
 /* ---- Mutation ---- */
 void mocha_set_insert(MochaSet *s, void *value) {
@@ -2707,9 +2896,12 @@ void mocha_set_insert(MochaSet *s, void *value) {
     set_ensure_capacity(s);
     void *slot = (char *)s->data + s->size * s->elem_size;
     if (s->elem_type == MOCHA_SET_STR)
-        *(char **)slot = strdup(*(char **)value);
-    else
+        *(char **)slot = rc_strdup(*(char **)value);
+    else {
         memcpy(slot, value, s->elem_size);
+        if (s->elem_type == MOCHA_SET_OBJECT)
+            rc_retain(*(void **)slot);
+    }
     s->size++;
 }
 
@@ -2718,6 +2910,15 @@ void mocha_set_delete(MochaSet *s, void *value) {
     if (idx < 0) {
         fprintf(stderr, "MochaRuntimeError: Cannot delete value — not found in set.\n");
         exit(2);
+    }
+    if (s->elem_type == MOCHA_SET_STR) {
+        char *old;
+        memcpy(&old, (char *)s->data + idx * s->elem_size, sizeof(char*));
+        rc_release(old);
+    } else if (s->elem_type == MOCHA_SET_OBJECT) {
+        void *old;
+        memcpy(&old, (char *)s->data + idx * s->elem_size, sizeof(void*));
+        rc_release(old);
     }
     /* Shift elements left to fill the gap */
     for (int32_t i = idx; i < s->size - 1; i++) {
@@ -2746,6 +2947,19 @@ void mocha_set_retype(MochaSet *s, int32_t new_type) {
     }
     fprintf(stderr, "MochaWarning: retype() — all existing data will be lost. "
                     "New type: %s\n", set_type_name(new_type));
+    if (s->elem_type == MOCHA_SET_STR) {
+        for (int32_t i = 0; i < s->size; i++) {
+            char *v;
+            memcpy(&v, (char *)s->data + i * s->elem_size, sizeof(char*));
+            rc_release(v);
+        }
+    } else if (s->elem_type == MOCHA_SET_OBJECT) {
+        for (int32_t i = 0; i < s->size; i++) {
+            void *v;
+            memcpy(&v, (char *)s->data + i * s->elem_size, sizeof(void*));
+            rc_release(v);
+        }
+    }
     s->size      = 0;
     s->elem_type = new_type;
     s->elem_size = set_elem_size(new_type);
@@ -2779,7 +2993,23 @@ void mocha_set_get(MochaSet *s, int32_t index, void *out) {
 
 int8_t  mocha_set_has  (MochaSet *s, void *v) { return mocha_set_find(s, v) >= 0 ? 1 : 0; }
 int32_t mocha_set_size (MochaSet *s)           { return s->size; }
-void    mocha_set_clean(MochaSet *s)           { s->size = 0; }
+
+void mocha_set_clean(MochaSet *s) {
+    if (s->elem_type == MOCHA_SET_STR) {
+        for (int32_t i = 0; i < s->size; i++) {
+            char *v;
+            memcpy(&v, (char *)s->data + i * s->elem_size, sizeof(char*));
+            rc_release(v);
+        }
+    } else if (s->elem_type == MOCHA_SET_OBJECT) {
+        for (int32_t i = 0; i < s->size; i++) {
+            void *v;
+            memcpy(&v, (char *)s->data + i * s->elem_size, sizeof(void*));
+            rc_release(v);
+        }
+    }
+    s->size = 0;
+}
 
 
 /* ---- Set operations — all return a new set ---- */
@@ -2841,6 +3071,7 @@ char* mocha_set_min_str(MochaSet *s) {
         memcpy(&v, (char*)s->data + i * s->elem_size, sizeof(char*));
         if (strcmp(v, m) < 0) m = v;
     }
+    rc_retain(m);
     return m;
 }
 
@@ -2856,6 +3087,7 @@ char* mocha_set_max_str(MochaSet *s) {
         memcpy(&v, (char*)s->data + i * s->elem_size, sizeof(char*));
         if (strcmp(v, m) > 0) m = v;
     }
+    rc_retain(m);
     return m;
 }
 
@@ -4255,23 +4487,22 @@ typedef struct MochaExFrame {
 static volatile MochaExFrame* mocha_ex_top = NULL;
 static volatile int mocha_ex_landed = 0;
 
-__attribute__((noinline)) void mocha_ex_enter(MochaExFrame* frame) {
+void mocha_ex_reset_landed(void) {
     mocha_ex_landed = 0;
-    RtlCaptureContext(&frame->ctx);
-    // when RtlRestoreContext brings us back, landed will be 1
-    // then we set it to 2 to avoid infinite loop
-    if (mocha_ex_landed == 1) {
-        mocha_ex_landed = 2;
-    }
+}
+
+void* mocha_ex_env_ptr(MochaExFrame* frame) {
+    return (void*)&frame->ctx;
 }
 
 int mocha_ex_did_land(void) {
-    return (mocha_ex_landed == 2) ? 1 : 0;
+    return mocha_ex_landed;   // 0 = no jump happened, 1 = we just landed from a jump
 }
 
 void mocha_ex_throw(const char* msg) {
     if (!mocha_ex_top) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
         exit(2);
     }
     MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
@@ -4283,13 +4514,15 @@ void mocha_ex_throw(const char* msg) {
 
 void mocha_ex_rethrow(void) {
     if (!mocha_ex_top) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): rethrow with no active exception.\n");
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): rethrow with no active exception.\n");
         exit(2);
     }
     const char* msg = ((MochaExFrame*)mocha_ex_top)->message;
     mocha_ex_top = ((MochaExFrame*)mocha_ex_top)->prev;
     if (!mocha_ex_top) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
         exit(2);
     }
     MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
@@ -4310,7 +4543,8 @@ const char* mocha_ex_pop(void) {
 MochaExFrame* mocha_ex_push(void) {
     MochaExFrame* frame = (MochaExFrame*)malloc(sizeof(MochaExFrame));
     if (!frame) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): Out of memory.\n");
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): Out of memory.\n");
         exit(2);
     }
     frame->message = NULL;
@@ -4332,22 +4566,15 @@ typedef struct MochaExFrame {
 } MochaExFrame;
 
 static volatile MochaExFrame* mocha_ex_top = NULL;
-static volatile int mocha_ex_landed = 0;
 
-__attribute__((noinline)) void mocha_ex_enter(MochaExFrame* frame) {
-    mocha_ex_landed = 0;
-    if (setjmp(frame->env) != 0) {
-        mocha_ex_landed = 1;
-    }
-}
-
-int mocha_ex_did_land(void) {
-    return mocha_ex_landed;
+void* mocha_ex_env_ptr(MochaExFrame* frame) {
+    return (void*)&frame->env;
 }
 
 void mocha_ex_throw(const char* msg) {
     if (!mocha_ex_top) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
         exit(2);
     }
     MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
@@ -4358,13 +4585,15 @@ void mocha_ex_throw(const char* msg) {
 
 void mocha_ex_rethrow(void) {
     if (!mocha_ex_top) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): rethrow with no active exception.\n");
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): rethrow with no active exception.\n");
         exit(2);
     }
     const char* msg = ((MochaExFrame*)mocha_ex_top)->message;
     mocha_ex_top = ((MochaExFrame*)mocha_ex_top)->prev;
     if (!mocha_ex_top) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): Unhandled exception: %s\n", msg);
         exit(2);
     }
     MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
@@ -4384,7 +4613,8 @@ const char* mocha_ex_pop(void) {
 MochaExFrame* mocha_ex_push(void) {
     MochaExFrame* frame = (MochaExFrame*)malloc(sizeof(MochaExFrame));
     if (!frame) {
-        fprintf(stderr, "MochaRuntimeError (try/rescue): Out of memory.\n");
+        fflush(stdout);   // ← flush whatever's pending before we print to stderr
+        fprintf(stderr, "\nMochaRuntimeError (try/rescue): Out of memory.\n");
         exit(2);
     }
     frame->message = NULL;

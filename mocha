@@ -28,11 +28,21 @@ if [ "$1" = "execute" ]; then
     OUTPUT="$(dirname "$INPUT")/$(basename "$INPUT" .mch)"
     python3 "$COMPILER" "$INPUT" "$OUTPUT"
     if [ $? -eq 0 ]; then
+        set +e
         "$OUTPUT"
+        EXEC_EXIT=$?
+        set -e
         echo ""
-        echo "✅ Execution Done."
+        if [ $EXEC_EXIT -eq 0 ]; then
+            echo "✅ Execution Done."
+        else
+            echo "❌ Execution failed (exit code $EXEC_EXIT)"
+        fi
+        exit $EXEC_EXIT
+    else
+        echo "❌ Compilation failed."
+        exit 1
     fi
-    exit 0
 fi
 
 if [ "$1" = "--lib" ]; then

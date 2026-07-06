@@ -27,10 +27,16 @@ if "%1"=="execute" (
     python "%COMPILER%" "%~f2" "%CD%\%~n2"
     if !errorlevel!==0 (
         "%CD%\%~n2.exe"
+        set EXECEXIT=!errorlevel!
         echo.
-        echo ✅ Execution Done.
+        if !EXECEXIT!==0 (
+            echo ✅ Execution Done.
+        ) else (
+            echo ❌ Execution failed ^(exit code !EXECEXIT!^)
+        )
+        exit /b !EXECEXIT!
     )
-    exit /b
+    exit /b !errorlevel!
 )
 
 if "%1"=="--lib" (
