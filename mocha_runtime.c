@@ -348,7 +348,7 @@ typedef struct MochaArray {
 
 typedef struct MochaArray2D {
     MochaArray **data;
-    int32_t     rows, cols, elem_size, fixed_r, fixed_c;
+    int32_t     rows, cols, elem_size, fixed_r, fixed_c, elem_is_str;
 } MochaArray2D;
 
 typedef struct MochaTuple {
@@ -1446,16 +1446,16 @@ static void resize_rows(MochaArray2D *arr, int32_t new_rows,
         arr->data[r] = alloc_row(new_cols, elem_size, arr->fixed_c);
 }
 
-/* ---- Access ---- */        // set, get, get_row, get_col, rows, cols
 MochaArray2D* mocha_array2d_new(int32_t rows, int32_t cols,
-                                 int32_t elem_size, int32_t fixed_r, int32_t fixed_c) {
-    MochaArray2D *arr = (MochaArray2D *)malloc(sizeof(MochaArray2D));
-    MOCHA_OOM_CHECK(arr);
+                                 int32_t elem_size, int32_t fixed_r, int32_t fixed_c,
+                                 int32_t elem_is_str) {
+    MochaArray2D *arr = (MochaArray2D *)rc_alloc(sizeof(MochaArray2D));
     arr->rows     = rows;
     arr->cols     = cols;
     arr->elem_size = elem_size;
     arr->fixed_r  = fixed_r;
     arr->fixed_c  = fixed_c;
+    arr->elem_is_str = elem_is_str;
     arr->data = (MochaArray **)malloc(rows * sizeof(MochaArray *));
     MOCHA_OOM_CHECK(arr->data);
     for (int32_t r = 0; r < rows; r++)
@@ -1463,6 +1463,25 @@ MochaArray2D* mocha_array2d_new(int32_t rows, int32_t cols,
     return arr;
 }
 
+void mocha_array2d_retain(MochaArray2D *arr) {
+    if (!arr) return;
+    rc_retain(arr);
+}
+
+void mocha_array2d_release(MochaArray2D *arr) {
+    if (!arr) return;
+    if (rc_count(arr) == 1) {
+        /* last owner — release each row (which are themselves independently
+         * RC'd MochaArray* structs) before the 2D struct itself is freed */
+        for (int32_t r = 0; r < arr->rows; r++) {
+            mocha_array_release(arr->data[r], arr->elem_is_str);
+        }
+        free(arr->data);
+    }
+    rc_release(arr);
+}
+
+/* ---- Access ---- */        // set, get, get_row, get_col, rows, cols
 void mocha_array2d_set(MochaArray2D *arr, int32_t row, int32_t col, void *value) {
     MOCHA_BOUNDS_CHECK_ROW(arr, row);
     MOCHA_BOUNDS_CHECK_COL(arr, col);
@@ -1477,7 +1496,9 @@ void mocha_array2d_get(MochaArray2D *arr, int32_t row, int32_t col, void *out) {
 
 MochaArray* mocha_array2d_get_row(MochaArray2D *arr, int32_t row) {
     MOCHA_BOUNDS_CHECK_ROW(arr, row);
-    return arr->data[row];
+    MochaArray *row_arr = arr->data[row];
+    mocha_array_retain(row_arr);
+    return row_arr;
 }
 
 MochaArray* mocha_array2d_get_col(MochaArray2D *arr, int32_t col) {
@@ -1588,8 +1609,7 @@ void mocha_array2d_resize(MochaArray2D *arr, int32_t new_rows,
 
 void mocha_array2d_drop_row(MochaArray2D *arr, int32_t row) {
     MOCHA_BOUNDS_CHECK_ROW(arr, row);
-    free(arr->data[row]->data);
-    free(arr->data[row]);
+    mocha_array_release(arr->data[row], arr->elem_is_str);
     for (int32_t r = row; r < arr->rows - 1; r++)
         arr->data[r] = arr->data[r + 1];
     arr->rows--;
@@ -1599,6 +1619,11 @@ void mocha_array2d_drop_col(MochaArray2D *arr, int32_t col) {
     MOCHA_BOUNDS_CHECK_COL(arr, col);
     for (int32_t r = 0; r < arr->rows; r++) {
         char *data = (char *)arr->data[r]->data;
+        if (arr->elem_is_str) {
+            char *old;
+            memcpy(&old, data + col * arr->elem_size, sizeof(char*));
+            rc_release(old);
+        }
         for (int32_t c = col; c < arr->cols - 1; c++)
             memcpy(data + c * arr->elem_size,
                    data + (c + 1) * arr->elem_size,

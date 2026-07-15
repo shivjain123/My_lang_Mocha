@@ -584,6 +584,13 @@ class CodeGen:
             self.emit(f"  {tmp} = load %MochaDict*, %MochaDict** {ptr}")
             self.emit(f"  call void @mocha_dict_release(%MochaDict* {tmp})")
     
+    def emit_release_owned_arr2d_locals(self):
+        for name in self.owned_arr2d_locals:
+            ptr, llvm_type = self.locals[name]
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = load %MochaArray2D*, %MochaArray2D** {ptr}")
+            self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {tmp})")
+    
     def is_str_array_type(self, mocha_type: str) -> bool:
         return mocha_type == "str[]"
     
@@ -600,6 +607,8 @@ class CodeGen:
             "RC Runtime": [
                 "declare void @rc_retain(i8*) nounwind",
                 "declare void @rc_release(i8*) nounwind",
+                "declare i64 @rc_count(i8*) nounwind",
+                "declare i8* @rc_alloc(i64) nounwind",
             ],
 
             "String Runtime": [
@@ -679,7 +688,9 @@ class CodeGen:
 
             "2D Array Runtime": [
                 "%MochaArray2D = type { %MochaArray**, i32, i32, i32, i32, i32 }",
-                "declare %MochaArray2D* @mocha_array2d_new(i32, i32, i32, i32, i32)",
+                "declare %MochaArray2D* @mocha_array2d_new(i32, i32, i32, i32, i32, i32)",
+                "declare void @mocha_array2d_retain(%MochaArray2D*)",
+                "declare void @mocha_array2d_release(%MochaArray2D*)",
                 "declare void @mocha_array2d_set(%MochaArray2D*, i32, i32, i8*)",
                 "declare void @mocha_array2d_get(%MochaArray2D*, i32, i32, i8*)",
                 "declare void @mocha_array2d_resize(%MochaArray2D*, i32, i32, i32)",
@@ -1706,15 +1717,23 @@ class CodeGen:
             return ("void", "void")
 
         elif member == "drop":
-            arg = node.args[0]
+            row_arg = None
+            col_arg = None
+            for arg in node.args:
+                if isinstance(arg, Assignment) and isinstance(arg.target, Identifier):
+                    if arg.target.name == "row":
+                        row_arg = arg.value
+                    elif arg.target.name == "col":
+                        col_arg = arg.value
 
-            if isinstance(arg, RowSlice):
-                row_reg, _ = self.gen_expr(arg.row)
+            if row_arg is not None:
+                row_reg, _ = self.gen_expr(row_arg)
                 self.emit(f"  call void @mocha_array2d_drop_row(%MochaArray2D* {arr_reg}, i32 {row_reg})")
-
-            elif isinstance(arg, ColSlice):
-                col_reg, _ = self.gen_expr(arg.col)
+            elif col_arg is not None:
+                col_reg, _ = self.gen_expr(col_arg)
                 self.emit(f"  call void @mocha_array2d_drop_col(%MochaArray2D* {arr_reg}, i32 {col_reg})")
+            else:
+                raise MochaCodeGenError(f"'drop' on 2D array requires a 'row=' or 'col=' argument", node.line, node.col)
 
             return ("void", "void")
 
@@ -1736,8 +1755,7 @@ class CodeGen:
                 raise MochaCodeGenError(f"'{member}' requires a value argument", node.line, node.col)
             val_reg, val_type = self.gen_expr(val_arg)
 
-            slot = self.fresh_temp()
-            self.emit(f"  {slot} = alloca {val_type}")
+            slot = self.alloca_at_entry(val_type)
             self.emit(f"  store {val_type} {val_reg}, {val_type}* {slot}")
 
             cast = self.fresh_temp()
@@ -1784,6 +1802,15 @@ class CodeGen:
 
             data_reg, _ = self.gen_expr(data_arg)
 
+            # Same lookup pattern as 'resize' above — reused here to get
+            # elem_is_str for the RC release call below.
+            mocha_type = self.local_mocha_types.get(obj_name, "")
+            bracket = mocha_type.rfind("[")
+            base = mocha_type[:bracket]
+            bracket2 = base.rfind("[")
+            elem_mocha = base[:bracket2] if "[" in base else base
+            elem_is_str = 1 if elem_mocha == "str" else 0
+
             is_col_push = (
                 col_kwarg is not None and
                 isinstance(col_kwarg, BoolLiteral) and
@@ -1792,7 +1819,17 @@ class CodeGen:
 
             if is_col_push:
                 self.emit(f"  call void @mocha_array2d_push_col(%MochaArray2D* {arr_reg}, %MochaArray* {data_reg})")
+                # RC: push_col only reads col's elements (copies them into each
+                # row) — never stores col itself. A fresh (non-borrowed) col
+                # array is orphaned after this call.
+                if not isinstance(data_arg, Identifier):
+                    self.emit(f"  call void @mocha_array_release(%MochaArray* {data_reg}, i32 {elem_is_str})")
             else:
+                # RC: push_row stores the raw pointer directly — if this is a
+                # borrowed array variable, retain it since the 2D array now
+                # co-owns it.
+                if isinstance(data_arg, Identifier):
+                    self.emit(f"  call void @mocha_array_retain(%MochaArray* {data_reg})")
                 self.emit(f"  call void @mocha_array2d_push_row(%MochaArray2D* {arr_reg}, %MochaArray* {data_reg})")
 
             return ("void", "void")
@@ -3030,9 +3067,16 @@ class CodeGen:
 
             ptr = self.unique_ptr_name(node.name)
             if is_2d:
+                # RC: retain if borrowed from an existing variable; a fresh
+                # 2D array (literal, alloc, or a function call returning one)
+                # already has ref_count=1 from mocha_array2d_new.
+                if isinstance(node.value, Identifier):
+                    self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
+
                 self.alloca_at_entry("%MochaArray2D*", ptr)
                 self.emit(f"  store %MochaArray2D* {val_reg}, %MochaArray2D** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaArray2D*")
+                self.owned_arr2d_locals.append(node.name)
             else:
                 # RC: retain if borrowed from an existing variable; fresh values
                 # (array literals, function calls returning arrays) already have
@@ -3047,7 +3091,6 @@ class CodeGen:
             self.local_mocha_types[node.name] = node.type
             return
         
-        # Sets!
         # Sets!
         if node.type.startswith("set<"):
             if isinstance(node.value, SetLiteral) and not node.value.elements:
@@ -3131,10 +3174,6 @@ class CodeGen:
             p = self.fresh_temp()
             self.emit(f"  {p} = inttoptr i32 {val_reg} to {llvm_type}")
             val_reg = p
-
-        #self.emit(f"  store {llvm_type} {val_reg}, {llvm_type}* {ptr}")
-        #self.locals[node.name] = (ptr, llvm_type)
-        #self.local_mocha_types[node.name] = node.type
 
         # RC: if this is a str and the source is a borrowed value (another variable),
         # retain it before storing — fresh values (literals, concat, format, calls) already
@@ -3225,6 +3264,7 @@ class CodeGen:
             is_arr_target = "[" in target_mocha_type and llvm_type == "%MochaArray*"
             is_set_target = target_mocha_type.startswith("set<") and llvm_type == "%MochaSet*"
             is_dict_target = target_mocha_type == "dict" and llvm_type == "%MochaDict*"
+            is_arr2d_target = "[" in target_mocha_type and llvm_type == "%MochaArray2D*"
             
             if is_str_target:
                 old_reg = self.fresh_temp()
@@ -3254,6 +3294,13 @@ class CodeGen:
                 self.emit(f"  call void @mocha_dict_release(%MochaDict* {old_dict_reg})")
                 if isinstance(node.value, Identifier):
                     self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
+            
+            if is_arr2d_target:
+                old_arr2d_reg = self.fresh_temp()
+                self.emit(f"  {old_arr2d_reg} = load %MochaArray2D*, %MochaArray2D** {ptr}")
+                self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old_arr2d_reg})")
+                if isinstance(node.value, Identifier):
+                    self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
             self.emit(f"  store {llvm_type} {val_reg}, {llvm_type}* {ptr}")
 
@@ -3291,6 +3338,7 @@ class CodeGen:
                         p = self.fresh_temp()
                         self.emit(f"  {p} = sitofp i32 {val_reg} to double")
                         val_reg = p
+
                     self.emit(f"  store {llvm_ftype} {val_reg}, {llvm_ftype}* {ptr}")
                     break
 
@@ -3369,6 +3417,7 @@ class CodeGen:
             self.emit_release_owned_tuple_locals()
             self.emit_release_owned_set_locals()
             self.emit_release_owned_dict_locals()
+            self.emit_release_owned_arr2d_locals()
             self.emit("  call void @mocha_stack_pop()")
             self.emit("  ret void")
             return
@@ -3381,6 +3430,7 @@ class CodeGen:
             self.emit_release_owned_tuple_locals()
             self.emit_release_owned_set_locals()
             self.emit_release_owned_dict_locals()
+            self.emit_release_owned_arr2d_locals()
             self.emit("  call void @mocha_stack_pop()")
             if self.current_return_type == "i8*":
                 self.emit("  ret i8* null")
@@ -3425,12 +3475,19 @@ class CodeGen:
         if self.current_return_type == "%MochaDict*" and val_type == "%MochaDict*":
             if isinstance(node.value, Identifier):
                 self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
+        
+        # RC: same protection for a returned 2D array — retain before we
+        # release the function's own owned 2D array locals below.
+        if self.current_return_type == "%MochaArray2D*" and val_type == "%MochaArray2D*":
+            if isinstance(node.value, Identifier):
+                self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
         self.emit_release_owned_str_locals()
         self.emit_release_owned_arr_locals()
         self.emit_release_owned_tuple_locals()
         self.emit_release_owned_set_locals()
         self.emit_release_owned_dict_locals()
+        self.emit_release_owned_arr2d_locals()
 
         self.emit("  call void @mocha_stack_pop()")
 
@@ -3996,6 +4053,7 @@ class CodeGen:
         self.owned_tuple_locals = []
         self.owned_set_locals = []
         self.owned_dict_locals = []
+        self.owned_arr2d_locals = []
 
         # Store 'this'
         if self.current_class and not getattr(node, 'is_shared', False):
@@ -4029,6 +4087,7 @@ class CodeGen:
             self.emit_release_owned_tuple_locals()
             self.emit_release_owned_set_locals()
             self.emit_release_owned_dict_locals()
+            self.emit_release_owned_arr2d_locals()
             if ret_llvm == "void":
                 self.emit("  call void @mocha_stack_pop()")
                 self.emit("  ret void")
@@ -4074,6 +4133,7 @@ class CodeGen:
         self.owned_tuple_locals = []
         self.owned_set_locals = []
         self.owned_dict_locals = []
+        self.owned_arr2d_locals = []
         self.local_name_counts = {}  # tracks how many times a name has been used
         self.in_function         = False
         self.entry_allocas       = []
@@ -4440,15 +4500,17 @@ class CodeGen:
             if rows == 1 and cols == 0:
                 expected = self.expected_assign_type or ""
                 elem_size = 4 if "int" in expected else 8
+                elem_is_str = 1 if "str" in expected else 0
                 arr = self.fresh_temp()
-                self.emit(f"  {arr} = call %MochaArray2D* @mocha_array2d_new(i32 0, i32 0, i32 {elem_size}, i32 0, i32 0)")
+                self.emit(f"  {arr} = call %MochaArray2D* @mocha_array2d_new(i32 0, i32 0, i32 {elem_size}, i32 0, i32 0, i32 {elem_is_str})")
                 return (arr, "%MochaArray2D*")
             # Get element type from first element of first row
             first_elem_reg, elem_llvm = self.gen_expr(node.elements[0].elements[0])
             elem_size = {"i32": 4, "double": 8, "i8*": 8, "i8": 1}.get(elem_llvm, 4)
+            elem_is_str = 1 if elem_llvm == "i8*" else 0
 
             arr = self.fresh_temp()
-            self.emit(f"  {arr} = call %MochaArray2D* @mocha_array2d_new(i32 {rows}, i32 {cols}, i32 {elem_size}, i32 1, i32 1)")
+            self.emit(f"  {arr} = call %MochaArray2D* @mocha_array2d_new(i32 {rows}, i32 {cols}, i32 {elem_size}, i32 1, i32 1, i32 {elem_is_str})")
 
             # Init set each element
             for r, row_node in enumerate(node.elements):
@@ -4796,7 +4858,22 @@ class CodeGen:
         col_reg, _ = self.gen_expr(node.target.col)
         val_reg, val_type = self.gen_expr(node.value)
 
-        slot = self.alloca_at_entry(val_type)  # ← was fresh_temp + inline alloca
+        # RC: str elements need the dedicated row-level string setter, same
+        # as 1D array index-assignment — releases the old value and retains
+        # the new one if it's borrowed from an existing variable.
+        if val_type == "i8*":
+            row_arr_reg = self.fresh_temp()
+            self.emit(f"  {row_arr_reg} = call %MochaArray* @mocha_array2d_get_row(%MochaArray2D* {arr_reg}, i32 {row_reg})")
+            if isinstance(node.value, Identifier):
+                self.emit(f"  call void @rc_retain(i8* {val_reg})")
+            self.emit(f"  call void @mocha_array_set_str(%MochaArray* {row_arr_reg}, i32 {col_reg}, i8* {val_reg})")
+            # mocha_array2d_get_row retains the row (Step 68) — since we're
+            # only using it transiently here (not storing it), release that
+            # extra retain immediately after use.
+            self.emit(f"  call void @mocha_array_release(%MochaArray* {row_arr_reg}, i32 1)")
+            return
+
+        slot = self.alloca_at_entry(val_type)
         self.emit(f"  store {val_type} {val_reg}, {val_type}* {slot}")
         cast = self.fresh_temp()
         self.emit(f"  {cast} = bitcast {val_type}* {slot} to i8*")
@@ -5197,8 +5274,9 @@ class CodeGen:
         # 2D alloc: alloc int[n][m]
         if node.size_expr2 is not None:
             size2_reg, _ = self.gen_expr(node.size_expr2)
+            elem_is_str = 1 if node.elem_type == "str" else 0
             tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = call %MochaArray2D* @mocha_array2d_new(i32 {size_reg}, i32 {size2_reg}, i32 {esize}, i32 0, i32 {size2_reg})")
+            self.emit(f"  {tmp} = call %MochaArray2D* @mocha_array2d_new(i32 {size_reg}, i32 {size2_reg}, i32 {esize}, i32 0, i32 {size2_reg}, i32 {elem_is_str})")
             return (tmp, "%MochaArray2D*")
 
         # 1D alloc (unchanged)
