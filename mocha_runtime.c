@@ -3283,7 +3283,29 @@ double mocha_wrap_lgamma(double x) { return lgamma(x); }
 double mocha_wrap_exp(double x)    { return exp(x);    }
 
 /* ---- system wrappers ---- */
-int mocha_wrap_system(const char *cmd) { return system(cmd); }
+static int _system_warning_shown = 0;
+
+int mocha_wrap_system(const char *cmd) {
+    if (!_system_warning_shown) {
+        fprintf(stderr, "\n⚠️  WARNING: system() is dangerous. It can install malware, delete software, or corrupt the system. Do you wanna Continue? [y/N]: ");
+        fflush(stderr);
+        
+        char response[10];
+        if (!fgets(response, sizeof(response), stdin)) {
+            return -1;  // No input = abort
+        }
+        
+        if (response[0] != 'y' && response[0] != 'Y') {
+            fprintf(stderr, "❌ Command aborted.\n");
+            return -1;
+        }
+        _system_warning_shown = 1;
+        fprintf(stderr, "\n");
+    }
+    
+    fprintf(stderr, "🔧 Mocha: Executing: %s\n", cmd);
+    return system(cmd);
+}
 
 /* ---- RUNTIME Exception ---- */
 
@@ -3477,19 +3499,37 @@ int mocha_sqlite3_changes(void *db) {
 }
 
 /* Check if table exists — returns 1 if yes, 0 if no */
+
 int mocha_sqlite3_table_exists(void *db, const char *table) {
-    if (!db) return 0;
-    char sql[512];
-    snprintf(sql, sizeof(sql),
-        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='%s'", table);
-    mocha_sqlite3_free_results();
-    sqlite3_exec((sqlite3*)db, sql, mocha_sqlite3_collect_callback, 0, 0);
-    if (mocha_sqlite3_result_nrows > 0 && mocha_sqlite3_result_ncols > 0) {
-        int exists = atoi(mocha_sqlite3_result_rows[0][0]);
-        mocha_sqlite3_free_results();
-        return exists;
+    if (!db || !table) return 0;
+
+    sqlite3_stmt *stmt = NULL;
+
+    /* 1. Prepare with ? placeholder */
+    int rc = sqlite3_prepare_v2(db,
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?",
+        -1, &stmt, NULL);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "MochaSQLiteError: prepare failed for table_exists\n");
+        return 0;
     }
-    return 0;
+
+    /* 2. Bind the data */
+    sqlite3_bind_text(stmt, 1, table, -1, SQLITE_STATIC);
+
+    /* 3. Execute and read result */
+    rc = sqlite3_step(stmt);
+    int exists = 0;
+    if (rc == SQLITE_ROW) {
+        exists = sqlite3_column_int(stmt, 0) > 0;
+    }
+
+    /* 4. Clean up */
+    sqlite3_finalize(stmt);
+
+    /* DON'T clear the result cache! Save the user's data! */
+    return exists;
 }
 
 /* ============================================================
@@ -3612,6 +3652,9 @@ void* mocha_lua_clear_stack(void *L) {
 double mocha_lua_call_number(void *L, const char *funcname) {
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call_number('%s') failed: %s\n", 
+                funcname, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return 0.0;
     }
@@ -3624,6 +3667,9 @@ double mocha_lua_call_number(void *L, const char *funcname) {
 const char* mocha_lua_call_string(void *L, const char *funcname) {
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call_string('%s') failed: %s\n", 
+                funcname, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return "";
     }
@@ -3636,6 +3682,9 @@ const char* mocha_lua_call_string(void *L, const char *funcname) {
 int mocha_lua_call_int(void *L, const char *funcname) {
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call_int('%s') failed: %s\n", 
+                funcname, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return 0;
     }
@@ -3649,6 +3698,9 @@ double mocha_lua_call1n_number(void *L, const char *funcname, double arg) {
     lua_getglobal((lua_State*)L, funcname);
     lua_pushnumber((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1n_number('%s', %f) failed: %s\n", 
+                funcname, arg, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return 0.0;
     }
@@ -3662,6 +3714,9 @@ const char* mocha_lua_call1s_string(void *L, const char *funcname, const char *a
     lua_getglobal((lua_State*)L, funcname);
     lua_pushstring((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1s_string('%s', '%s') failed: %s\n", 
+                funcname, arg, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return "";
     }
@@ -3676,6 +3731,9 @@ double mocha_lua_call2n_number(void *L, const char *funcname, double a, double b
     lua_pushnumber((lua_State*)L, a);
     lua_pushnumber((lua_State*)L, b);
     if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call2n_number('%s', %f, %f) failed: %s\n", 
+                funcname, a, b, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return 0.0;
     }
@@ -3690,6 +3748,9 @@ const char* mocha_lua_call2s_string(void *L, const char *funcname, const char *a
     lua_pushstring((lua_State*)L, a);
     lua_pushstring((lua_State*)L, b);
     if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call2s_string('%s', '%s', '%s') failed: %s\n", 
+                funcname, a, b, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return "";
     }
@@ -3698,10 +3759,14 @@ const char* mocha_lua_call2s_string(void *L, const char *funcname, const char *a
     return r;
 }
 
+// call func(number) → string
 const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
     lua_getglobal((lua_State*)L, funcname);
     lua_pushnumber((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1n_string('%s', %f) failed: %s\n", 
+                funcname, arg, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
         return "";
     }
@@ -3719,277 +3784,312 @@ const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
 #ifdef MOCHA_WITH_WREN
 #include "wren/include/wren.h"
 
-/* Module load callback — returns source for imported modules */
+/* ============================================================
+ * INTERNAL: Callback functions (required by Wren config)
+ * ============================================================ */
+
 static WrenLoadModuleResult mocha_wren_load_module(WrenVM* vm, const char* name) {
+    (void)vm; (void)name;  /* Silence unused warnings */
     WrenLoadModuleResult result = {0};
-    return result;  // no module loading for now
+    return result;  /* No external module loading for now */
 }
 
-/* Write callback — Wren's print goes here */
 static void mocha_wren_write(WrenVM* vm, const char* text) {
+    (void)vm;
     printf("%s", text);
 }
 
-/* Error callback */
 static void mocha_wren_error(WrenVM* vm, WrenErrorType type,
                               const char* module, int line, const char* msg) {
-    if (type == WREN_ERROR_COMPILE)
-        fprintf(stderr, "WrenCompileError [%s line %d]: %s\n", module, line, msg);
-    else if (type == WREN_ERROR_RUNTIME)
-        fprintf(stderr, "WrenRuntimeError: %s\n", msg);
-    else
-        fprintf(stderr, "WrenStackTrace [%s line %d]: %s\n", module, line, msg);
+    (void)vm;
+    switch (type) {
+        case WREN_ERROR_COMPILE:
+            fprintf(stderr, "WrenCompileError [%s line %d]: %s\n", module, line, msg);
+            break;
+        case WREN_ERROR_RUNTIME:
+            fprintf(stderr, "WrenRuntimeError: %s\n", msg);
+            break;
+        default:
+            fprintf(stderr, "WrenStackTrace [%s line %d]: %s\n", module, line, msg);
+            break;
+    }
 }
 
-/* Create a new Wren VM */
-void* mocha_wren_new() {
+/* ============================================================
+ * INTERNAL: Generic Wren method caller
+ * Eliminates 95% of the repetition in the call functions.
+ * ============================================================ */
+
+typedef enum {
+    WREN_RET_DOUBLE = 0,
+    WREN_RET_STRING = 1,
+    WREN_RET_BOOL   = 2,
+    WREN_RET_INT    = 3
+} WrenReturnType;
+
+typedef enum {
+    WREN_ARG_NONE = 0,
+    WREN_ARG_DOUBLE,
+    WREN_ARG_STRING,
+    WREN_ARG_BOOL
+} WrenArgType;
+
+/* Call a static Wren method with any number/type of arguments.
+ * Returns a void* that must be cast to the appropriate type.
+ */
+static void* mocha_wren_call_generic(WrenVM* vm,
+                                     const char* module,
+                                     const char* classname,
+                                     const char* signature,
+                                     WrenReturnType ret_type,
+                                     int arg_count,
+                                     ...) {
+    va_list args;
+    va_start(args, arg_count);
+
+    /* Ensure slots: 1 for receiver + arg_count */
+    wrenEnsureSlots(vm, 1 + arg_count);
+
+    /* Get receiver (the class object) */
+    wrenGetVariable(vm, module, classname, 0);
+    WrenHandle* receiver = wrenGetSlotHandle(vm, 0);
+
+    /* Create call handle for the method */
+    WrenHandle* method = wrenMakeCallHandle(vm, signature);
+
+    /* Set up slots with receiver and arguments */
+    wrenEnsureSlots(vm, 1 + arg_count);
+    wrenSetSlotHandle(vm, 0, receiver);
+
+    for (int i = 0; i < arg_count; i++) {
+        WrenArgType arg_type = va_arg(args, WrenArgType);
+        int slot = i + 1;
+        switch (arg_type) {
+            case WREN_ARG_DOUBLE:
+                wrenSetSlotDouble(vm, slot, va_arg(args, double));
+                break;
+            case WREN_ARG_STRING:
+                wrenSetSlotString(vm, slot, va_arg(args, const char*));
+                break;
+            case WREN_ARG_BOOL:
+                wrenSetSlotBool(vm, slot, va_arg(args, int));
+                break;
+            default:
+                break;
+        }
+    }
+
+    /* Call the method */
+    wrenCall(vm, method);
+
+    /* Read result */
+    void* result = NULL;
+    switch (ret_type) {
+        case WREN_RET_DOUBLE:
+            result = (void*)(intptr_t)wrenGetSlotDouble(vm, 0);
+            break;
+        case WREN_RET_STRING:
+            result = (void*)wrenGetSlotString(vm, 0);
+            break;
+        case WREN_RET_BOOL:
+            result = (void*)(intptr_t)(wrenGetSlotBool(vm, 0) ? 1 : 0);
+            break;
+        case WREN_RET_INT:
+            result = (void*)(intptr_t)(int)wrenGetSlotDouble(vm, 0);
+            break;
+    }
+
+    /* Clean up */
+    wrenReleaseHandle(vm, receiver);
+    wrenReleaseHandle(vm, method);
+
+    va_end(args);
+    return result;
+}
+
+/* ============================================================
+ * INTERNAL: Generic Wren evaluator
+ * ============================================================ */
+
+static int wren_eval_counter = 0;
+
+static void* mocha_wren_eval_generic(WrenVM* vm, const char* expr, WrenReturnType ret_type) {
+    char module[32];
+    char code[1024];
+
+    snprintf(module, sizeof(module), "eval_%d", wren_eval_counter++);
+    snprintf(code, sizeof(code),
+        "class MochaEval {\n"
+        "  static run {\n"
+        "    return %s\n"
+        "  }\n"
+        "}", expr);
+
+    wrenInterpret(vm, module, code);
+
+    /* Reuse the generic call helper */
+    return mocha_wren_call_generic(vm, module, "MochaEval",
+                                   "run", ret_type, 0);
+}
+
+/* ============================================================
+ * PUBLIC API: VM lifecycle
+ * ============================================================ */
+
+void* mocha_wren_new(void) {
     WrenConfiguration config;
     wrenInitConfiguration(&config);
-    config.writeFn        = mocha_wren_write;
-    config.errorFn        = mocha_wren_error;
-    config.loadModuleFn   = mocha_wren_load_module;
-    WrenVM* vm = wrenNewVM(&config);
-    return (void*)vm;
+    config.writeFn      = mocha_wren_write;
+    config.errorFn      = mocha_wren_error;
+    config.loadModuleFn = mocha_wren_load_module;
+    return (void*)wrenNewVM(&config);
 }
 
-/* Free the Wren VM */
 void* mocha_wren_free(void* vm) {
     wrenFreeVM((WrenVM*)vm);
     return NULL;
 }
 
-/* Execute a Wren string — returns 0 on success */
+/* ============================================================
+ * PUBLIC API: Execute Wren code
+ * ============================================================ */
+
 int mocha_wren_dostring(void* vm, const char* module, const char* code) {
     WrenInterpretResult r = wrenInterpret((WrenVM*)vm, module, code);
     return (r == WREN_RESULT_SUCCESS) ? 0 : 1;
 }
 
-/* Execute a Wren file */
 int mocha_wren_dofile(void* vm, const char* filename) {
     FILE* f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "WrenError: cannot open file '%s'\n", filename);
         return 1;
     }
+
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     rewind(f);
+
     char* src = (char*)malloc(len + 1);
+    if (!src) {
+        fclose(f);
+        fprintf(stderr, "WrenError: out of memory reading '%s'\n", filename);
+        return 1;
+    }
+
     fread(src, 1, len, f);
     src[len] = '\0';
     fclose(f);
+
     int r = mocha_wren_dostring(vm, filename, src);
     free(src);
     return r;
 }
 
-/* ── Get global variables from Wren ── */
-/* In Wren, globals live in class fields — access via slot API after interpret */
-
-double mocha_wren_getnumber(void* vm, const char* module, const char* classname, const char* field) {
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* handle = wrenGetSlotHandle((WrenVM*)vm, 0);
-    // call getter via method handle
-    wrenReleaseHandle((WrenVM*)vm, handle);
-    // simpler: evaluate inline expression
-    char code[256];
-    snprintf(code, sizeof(code), "System.print(%s.%s)", classname, field);
-    // actually just use a temp eval approach
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    double r = wrenGetSlotDouble((WrenVM*)vm, 0);
-    return r;
-}
-
-static int wren_eval_counter = 0;
-
-double mocha_wren_eval_number(void* vm, const char* expr) {
-    char module[32];
-    char code[1024];
-    snprintf(module, sizeof(module), "eval_%d", wren_eval_counter++);
-    snprintf(code, sizeof(code),
-    "class MochaEval {\n  static run {\n    return %s\n  }\n}", expr);
-    wrenInterpret((WrenVM*)vm, module, code);
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, "MochaEval", 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, "run");
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenCall((WrenVM*)vm, method);
-    double r = wrenGetSlotDouble((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-const char* mocha_wren_eval_string(void* vm, const char* expr) {
-    char module[32];
-    char code[1024];
-    snprintf(module, sizeof(module), "eval_%d", wren_eval_counter++);
-    snprintf(code, sizeof(code),
-    "class MochaEval {\n  static run {\n    return %s\n  }\n}", expr);
-    wrenInterpret((WrenVM*)vm, module, code);
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, "MochaEval", 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, "run");
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenCall((WrenVM*)vm, method);
-    const char* r = wrenGetSlotString((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-int mocha_wren_eval_bool(void* vm, const char* expr) {
-    char module[32];
-    char code[1024];
-    snprintf(module, sizeof(module), "eval_%d", wren_eval_counter++);
-    snprintf(code, sizeof(code),
-    "class MochaEval {\n  static run {\n    return %s\n  }\n}", expr);
-    wrenInterpret((WrenVM*)vm, module, code);
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, "MochaEval", 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, "run");
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenCall((WrenVM*)vm, method);
-    int r = wrenGetSlotBool((WrenVM*)vm, 0) ? 1 : 0;
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-int mocha_wren_eval_int(void* vm, const char* expr) {
-    return (int)mocha_wren_eval_number(vm, expr);
-}
-
-/* ── Call Wren methods from Mocha ── */
-/* Pattern: get receiver → make call handle → call → read result */
-
-// call Class.method() → number
-double mocha_wren_call_number(void* vm, const char* module,
-                               const char* classname, const char* signature) {
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, signature);
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenCall((WrenVM*)vm, method);
-    double r = wrenGetSlotDouble((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-// call Class.method() → string
-const char* mocha_wren_call_string(void* vm, const char* module,
-                                    const char* classname, const char* signature) {
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, signature);
-    wrenEnsureSlots((WrenVM*)vm, 1);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenCall((WrenVM*)vm, method);
-    const char* r = wrenGetSlotString((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-// call Class.method() → int
-int mocha_wren_call_int(void* vm, const char* module,
-                         const char* classname, const char* signature) {
-    return (int)mocha_wren_call_number(vm, module, classname, signature);
-}
-
-// call Class.method(number) → number
-double mocha_wren_call1n_number(void* vm, const char* module,
-                                 const char* classname, const char* signature, double arg) {
-    wrenEnsureSlots((WrenVM*)vm, 2);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, signature);
-    wrenEnsureSlots((WrenVM*)vm, 2);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenSetSlotDouble((WrenVM*)vm, 1, arg);
-    wrenCall((WrenVM*)vm, method);
-    double r = wrenGetSlotDouble((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-// call Class.method(string) → string
-const char* mocha_wren_call1s_string(void* vm, const char* module,
-                                      const char* classname, const char* signature,
-                                      const char* arg) {
-    wrenEnsureSlots((WrenVM*)vm, 2);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, signature);
-    wrenEnsureSlots((WrenVM*)vm, 2);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenSetSlotString((WrenVM*)vm, 1, arg);
-    wrenCall((WrenVM*)vm, method);
-    const char* r = wrenGetSlotString((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-// call Class.method(number, number) → number
-double mocha_wren_call2n_number(void* vm, const char* module,
-                                 const char* classname, const char* signature,
-                                 double a, double b) {
-    wrenEnsureSlots((WrenVM*)vm, 3);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, signature);
-    wrenEnsureSlots((WrenVM*)vm, 3);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenSetSlotDouble((WrenVM*)vm, 1, a);
-    wrenSetSlotDouble((WrenVM*)vm, 2, b);
-    wrenCall((WrenVM*)vm, method);
-    double r = wrenGetSlotDouble((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-// call Class.method(string, string) → string
-const char* mocha_wren_call2s_string(void* vm, const char* module,
-                                      const char* classname, const char* signature,
-                                      const char* a, const char* b) {
-    wrenEnsureSlots((WrenVM*)vm, 3);
-    wrenGetVariable((WrenVM*)vm, module, classname, 0);
-    WrenHandle* receiver = wrenGetSlotHandle((WrenVM*)vm, 0);
-    WrenHandle* method   = wrenMakeCallHandle((WrenVM*)vm, signature);
-    wrenEnsureSlots((WrenVM*)vm, 3);
-    wrenSetSlotHandle((WrenVM*)vm, 0, receiver);
-    wrenSetSlotString((WrenVM*)vm, 1, a);
-    wrenSetSlotString((WrenVM*)vm, 2, b);
-    wrenCall((WrenVM*)vm, method);
-    const char* r = wrenGetSlotString((WrenVM*)vm, 0);
-    wrenReleaseHandle((WrenVM*)vm, receiver);
-    wrenReleaseHandle((WrenVM*)vm, method);
-    return r;
-}
-
-/* ── Safe execution with error string return ── */
 const char* mocha_wren_safe_dostring(void* vm, const char* module, const char* code) {
     WrenInterpretResult r = wrenInterpret((WrenVM*)vm, module, code);
     return (r == WREN_RESULT_SUCCESS) ? "" : "WrenError: script failed";
 }
 
-#endif /* MOCHA_WITH_WREN */
+/* ============================================================
+ * PUBLIC API: Eval functions
+ * ============================================================ */
 
+double mocha_wren_eval_number(void* vm, const char* expr) {
+    return (double)(intptr_t)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_DOUBLE);
+}
+
+const char* mocha_wren_eval_string(void* vm, const char* expr) {
+    return (const char*)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_STRING);
+}
+
+int mocha_wren_eval_bool(void* vm, const char* expr) {
+    return (int)(intptr_t)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_BOOL);
+}
+
+int mocha_wren_eval_int(void* vm, const char* expr) {
+    return (int)(intptr_t)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_INT);
+}
+
+/* ============================================================
+ * PUBLIC API: Call functions (0 arguments)
+ * ============================================================ */
+
+double mocha_wren_call_number(void* vm, const char* module,
+                               const char* classname, const char* signature) {
+    return (double)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_DOUBLE, 0);
+}
+
+const char* mocha_wren_call_string(void* vm, const char* module,
+                                    const char* classname, const char* signature) {
+    return (const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_STRING, 0);
+}
+
+int mocha_wren_call_int(void* vm, const char* module,
+                         const char* classname, const char* signature) {
+    return (int)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_INT, 0);
+}
+
+/* ============================================================
+ * PUBLIC API: Call functions (1 argument)
+ * ============================================================ */
+
+double mocha_wren_call1n_number(void* vm, const char* module,
+                                 const char* classname, const char* signature,
+                                 double arg) {
+    return (double)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_DOUBLE, 1,
+                       WREN_ARG_DOUBLE, arg);
+}
+
+const char* mocha_wren_call1s_string(void* vm, const char* module,
+                                      const char* classname, const char* signature,
+                                      const char* arg) {
+    return (const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_STRING, 1,
+                       WREN_ARG_STRING, arg);
+}
+
+/* ============================================================
+ * PUBLIC API: Call functions (2 arguments)
+ * ============================================================ */
+
+double mocha_wren_call2n_number(void* vm, const char* module,
+                                 const char* classname, const char* signature,
+                                 double a, double b) {
+    return (double)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_DOUBLE, 2,
+                       WREN_ARG_DOUBLE, a,
+                       WREN_ARG_DOUBLE, b);
+}
+
+const char* mocha_wren_call2s_string(void* vm, const char* module,
+                                      const char* classname, const char* signature,
+                                      const char* a, const char* b) {
+    return (const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_STRING, 2,
+                       WREN_ARG_STRING, a,
+                       WREN_ARG_STRING, b);
+}
+
+/* ============================================================
+ * PUBLIC API: Get global variables (deprecated/legacy)
+ * ============================================================ */
+
+double mocha_wren_getnumber(void* vm, const char* module,
+                             const char* classname, const char* field) {
+    /* This function appears unused/broken in original.
+     * Keeping it for API compatibility but using the proper eval approach.
+     */
+    char expr[512];
+    snprintf(expr, sizeof(expr), "%s.%s", classname, field);
+    return mocha_wren_eval_number(vm, expr);
+}
+
+#endif /* MOCHA_WITH_WREN */
 /* INSERT HERE NEXT FFI*/
 
 // ============================================================
@@ -4062,6 +4162,22 @@ char* mocha_sb_reverse(MochaStringBuilder* sb) {
 
 void mocha_sb_clear(MochaStringBuilder* sb) { sb->length  = 0; sb->data[0] = '\0'; }
 int mocha_sb_length(MochaStringBuilder* sb) { return sb->length; }
+int mocha_sb_length_chars(MochaStringBuilder* sb) {
+    // Count UTF-8 codepoints
+    int count = 0;
+    int i = 0;
+    while (i < sb->length) {
+        unsigned char c = (unsigned char)sb->data[i];
+        int size;
+        if      (c < 0x80)   size = 1;
+        else if (c < 0xE0)   size = 2;
+        else if (c < 0xF0)   size = 3;
+        else                  size = 4;
+        count++;
+        i += size;
+    }
+    return count;
+}
 void mocha_sb_free(MochaStringBuilder* sb) {free(sb->data); free(sb); }
 
 /* ============================================================
@@ -5188,11 +5304,9 @@ void ink_save(InkPlot* p, const char* path) {
         for (int s = 0; s < p->n_series; s++) {
             int iy = ly + 10 + s * 22;
             const char* col = p->series[s].color;
-            const char* lbl = p->series[s].label[0]
-                              ? p->series[s].label
-                              : (s == 0 ? "Series 1" :
-                                 s == 1 ? "Series 2" :
-                                 s == 2 ? "Series 3" : "Series");
+            char default_label[32];
+            snprintf(default_label, sizeof(default_label), "Series %d", s + 1);
+            const char* lbl = p->series[s].label[0] ? p->series[s].label : default_label;
             fprintf(f,
                 "<rect x=\"%d\" y=\"%d\" width=\"14\" height=\"14\" fill=\"%s\" rx=\"2\"/>\n",
                 lx - lw + 8, iy, col
@@ -7744,19 +7858,19 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
 void ink_violin_show(InkViolinPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_violin_save(p, tmp);
-#ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
-#elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
-#else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
-#endif
+    #ifdef _WIN32
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "start %s", tmp);
+        system(cmd);
+    #elif defined(__APPLE__)
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "open %s", tmp);
+        system(cmd);
+    #else
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
+        system(cmd);
+    #endif
 }
 
 /* ── wrappers ── */
@@ -10528,17 +10642,18 @@ static double st_dry_adiabat_t(double theta_k, double p_hpa) {
 /* moist adiabat: integrate dT/dP downward from (t0_c, p0_hpa)
    returns T in °C at pressure p_hpa
    uses MetPy-verified formula: dT/dP = (1/P)*(Rd*T + Lv*rs) / (Cpd + Lv²*rs*ε/(Rd*T²)) */
+#define MOIST_STEP_SIZE 2.0  /* hPa — smaller = more accurate */
+
 static double st_moist_adiabat_t(double t0_c, double p0_hpa, double p_hpa) {
     double t_k = t0_c + 273.15;
     double p   = p0_hpa;
-    /* step size: negative when going up (decreasing p) */
-    double dp  = (p_hpa > p0_hpa) ? 5.0 : -5.0;
-    int    steps = (int)(fabs(p_hpa - p0_hpa) / fabs(dp)) + 1;
+    double dp  = (p_hpa > p0_hpa) ? MOIST_STEP_SIZE : -MOIST_STEP_SIZE;
 
-    for (int i = 0; i < steps; i++) {
+    while (fabs(p - p_hpa) > 0.01) {
         double p_next = p + dp;
-        if (dp < 0 && p_next < p_hpa) p_next = p_hpa;
-        if (dp > 0 && p_next > p_hpa) p_next = p_hpa;
+        if ((dp < 0 && p_next < p_hpa) || (dp > 0 && p_next > p_hpa)) {
+            p_next = p_hpa;
+        }
 
         double rs     = st_rs(t_k - 273.15, p);
         double numer  = ST_RD * t_k + ST_LV * rs;
@@ -10546,7 +10661,6 @@ static double st_moist_adiabat_t(double t0_c, double p0_hpa, double p_hpa) {
         double dtdp   = (1.0 / p) * (numer / denom);
         t_k += dtdp * (p_next - p);
         p    = p_next;
-        if (p == p_hpa) break;
     }
     return t_k - 273.15;
 }
@@ -10816,6 +10930,7 @@ static void ink_st_draw_sounding(FILE* f, InkSTPlot* p,
     double Td_k = td_sfc + 273.15;
     double T_lcl_k = 1.0 / (1.0 / (Td_k - 56.0) +
                      log(T_k / Td_k) / 800.0) + 56.0;
+                     
     /* LCL pressure: p_lcl = p_sfc * (T_lcl/T)^(Cp/Rd) */
     double p_lcl = p_sfc * pow(T_lcl_k / T_k, ST_CPD / ST_RD);
     double t_lcl = T_lcl_k - 273.15;
@@ -10845,6 +10960,7 @@ static void ink_st_draw_sounding(FILE* f, InkSTPlot* p,
         "<rect x=\"%d\" y=\"%d\" width=\"105\" height=\"52\" "
         "fill=\"white\" stroke=\"#DDD\" stroke-width=\"1\" "
         "rx=\"3\" opacity=\"0.9\"/>\n", lx, ly);
+
     /* temp swatch */
     fprintf(f,
         "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
@@ -10854,6 +10970,7 @@ static void ink_st_draw_sounding(FILE* f, InkSTPlot* p,
         "<text x=\"%d\" y=\"%d\" font-size=\"11\" "
         "font-family=\"Consolas,sans-serif\" fill=\"#333\">Temp</text>\n",
         lx + 28, ly + 18);
+
     /* dewpoint swatch */
     fprintf(f,
         "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "

@@ -720,13 +720,7 @@ function has_seventh_aspect(house_distance: int) -> bool {
 
 ~~ Checks whether a house distance qualifies for Mars's special aspects (4th, 7th, 8th).
 function has_mars_special_aspect(house_distance: int) -> bool {
-    if (house_distance == 4) {
-        return true;
-    };
-    if (house_distance == 7) {
-        return true;
-    };
-    if (house_distance == 8) {
+    if (house_distance == 4 || house_distance == 7 || house_distance == 8) {
         return true;
     };
     return false;
@@ -734,13 +728,7 @@ function has_mars_special_aspect(house_distance: int) -> bool {
 
 ~~ Checks whether a house distance qualifies for Jupiter's special aspects (5th, 7th, 9th).
 function has_jupiter_special_aspect(house_distance: int) -> bool {
-    if (house_distance == 5) {
-        return true;
-    };
-    if (house_distance == 7) {
-        return true;
-    };
-    if (house_distance == 9) {
+    if (house_distance == 5 || house_distance == 7 || house_distance == 9) {
         return true;
     };
     return false;
@@ -748,22 +736,16 @@ function has_jupiter_special_aspect(house_distance: int) -> bool {
 
 ~~ Checks whether a house distance qualifies for Saturn's special aspects (3rd, 7th, 10th).
 function has_saturn_special_aspect(house_distance: int) -> bool {
-    if (house_distance == 3) {
-        return true;
-    };
-    if (house_distance == 7) {
-        return true;
-    };
-    if (house_distance == 10) {
+    if (house_distance == 3 || house_distance == 7 || house_distance == 10) {
         return true;
     };
     return false;
 };
 
 ~~ Checks whether a house distance qualifies for Rahu/Ketu's special aspects, using the widely-adopted
-~~ convention of treating the lunar nodes like Saturn (3rd, 7th, 10th). Not universal across all classical texts.
+~~ convention of treating the lunar nodes like Saturn (5th, 7th, 9th). Not universal across all classical texts.
 function has_rahu_ketu_special_aspect(house_distance: int) -> bool {
-    return has_saturn_special_aspect(house_distance);
+    return has_jupiter_special_aspect(house_distance);
 };
 
 ~~ Shortest angular separation between two ecliptic longitudes, in degrees (0-180).

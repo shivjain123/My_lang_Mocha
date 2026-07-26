@@ -63,9 +63,7 @@ def parse_module(ll_text: str) -> dict[str, Function]:
                 params.append((p, ""))  # unnamed param
 
         func = Function(name=fname, params=params, ret_type=ret_type.strip())
-        current_label = "entry"
-        func.blocks[current_label] = BasicBlock(label=current_label)
-        func.block_order.append(current_label)
+        current_label = None
         i += 1
 
         while i < len(lines):
@@ -79,8 +77,41 @@ def parse_module(ll_text: str) -> dict[str, Function]:
                 func.blocks[current_label] = BasicBlock(label=current_label)
                 func.block_order.append(current_label)
             elif l and not l.startswith(';'):
+                if current_label is None:
+                    # instructions before any label = implicit "entry"
+                    current_label = "entry"
+                    func.blocks[current_label] = BasicBlock(label=current_label)
+                    func.block_order.append(current_label)
                 func.blocks[current_label].instrs.append(parse_instr(l))
             i += 1
 
         functions[fname] = func
     return functions
+
+if __name__ == "__main__":
+    with open("geo_seisimo.ll", "r", encoding="utf-8") as f:
+        ll_text = f.read()
+
+    functions = parse_module(ll_text)
+
+    print("Functions found:", list(functions.keys()))
+    print()
+
+    fn = functions["mocha_entry_main"]
+    print("Blocks in mocha_entry_main:", fn.block_order)
+    print()
+
+    # peek at the first block's instructions
+    first_block = fn.blocks[fn.block_order[0]]
+    for instr in first_block.instrs[:10]:
+        print(f"  op={instr.op!r:15} result={instr.result!r:10} text={instr.text}")
+    
+    print()
+    print("=== and_right_231 ===")
+    for instr in fn.blocks["and_right_231"].instrs:
+        print(f"  op={instr.op!r:15} result={instr.result!r:10} text={instr.text}")
+
+    print()
+    print("=== and_done_232 ===")
+    for instr in fn.blocks["and_done_232"].instrs:
+        print(f"  op={instr.op!r:15} result={instr.result!r:10} text={instr.text}")
