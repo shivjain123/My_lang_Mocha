@@ -207,13 +207,22 @@ import sys
 # ============================================================
 
 class MochaParseError(Exception):
-    def __init__(self, message, token):
-        super().__init__(
-            f"MochaParseError at line {token.line}, "
-            f"col {token.column}: {message}. "
-            f"Got '{token.value}' ({token.type.name})"
-        )
+    def __init__(self, message, token, prev_token=None):
+        if prev_token is not None:
+            super().__init__(
+                f"MochaParseError at line {prev_token.line}, "
+                f"col {prev_token.column}: {message} "
+                f"(found '{token.value}' [{token.type.name}] instead, "
+                f"at line {token.line}, col {token.column})"
+            )
+        else:
+            super().__init__(
+                f"MochaParseError at line {token.line}, "
+                f"col {token.column}: {message}. "
+                f"Got '{token.value}' ({token.type.name})"
+            )
         self.token = token
+        self.prev_token = prev_token
 
 # ============================================================
 # PARSER
@@ -296,7 +305,8 @@ class Parser:
     def expect(self, type: TokenType, message: str) -> Token:
         if self.check(type):
             return self.advance()
-        raise MochaParseError(message, self.current())
+        prev_token = self.tokens[self.pos - 1] if self.pos > 0 else self.current()
+        raise MochaParseError(message, self.current(), prev_token)
 
     def is_at_end(self) -> bool:
         return self.current().type == TokenType.EOF
@@ -2051,7 +2061,7 @@ class Parser:
 
             self.advance()
 
-    def parse(self, silent: bool = False) -> Program:
+    def parse(self, silent: bool = False) -> Program: #bool true is passed when LSP calls it
         statements = []
         errors = []
 

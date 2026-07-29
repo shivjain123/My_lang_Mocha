@@ -2,7 +2,7 @@
   "name": "mocha-language",
   "displayName": "Mocha Language",
   "description": "Syntax highlighting and language support for the Mocha programming language (.mch)",
-  "version": "0.9.0",
+  "version": "1.1.0",
   "publisher": "shiv-jain",
   "activationEvents": [
     "onLanguage:mocha"
@@ -51,7 +51,17 @@
         "language": "mocha",
         "path": "./snippets/mocha.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Mocha",
+      "properties": {
+        "mocha.installPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to mocha_lsp.py (e.g. C:\\path\\to\\mocha_lsp.py)"
+        }
+      }
+    }
   },
   "dependencies": {
     "vscode-languageclient": "^10.0.1"

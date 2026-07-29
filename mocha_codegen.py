@@ -590,6 +590,13 @@ class CodeGen:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = load %MochaArray2D*, %MochaArray2D** {ptr}")
             self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {tmp})")
+
+    def emit_release_owned_complex_locals(self):
+        for name in self.owned_complex_locals:
+            ptr, llvm_type = self.locals[name]
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = load %struct.MochaComplex*, %struct.MochaComplex** {ptr}")
+            self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {tmp})")
     
     def is_str_array_type(self, mocha_type: str) -> bool:
         return mocha_type == "str[]"
@@ -597,14 +604,11 @@ class CodeGen:
     def build_header(self):
         sections = {
             "Mocha compiled output": [],
-            
-            "GC Runtime": [
-                "declare void @mocha_gc_init()",
-                "declare void @mocha_gc_collect()",
-                "declare void @mocha_gc_shutdown()",
-            ],
 
             "RC Runtime": [
+                "declare void @mocha_signal_handlers_init()",
+                "declare void @mocha_rc_stats()",
+                "declare void @mocha_rc_shutdown()",
                 "declare void @rc_retain(i8*) nounwind",
                 "declare void @rc_release(i8*) nounwind",
                 "declare i64 @rc_count(i8*) nounwind",
@@ -803,6 +807,8 @@ class CodeGen:
             "Complex Runtime": [
                 "%struct.MochaComplex = type { double, double }",
                 "declare %struct.MochaComplex* @mocha_complex_new(double, double)",
+                "declare void @mocha_complex_retain(%struct.MochaComplex*)",
+                "declare void @mocha_complex_release(%struct.MochaComplex*)",
                 "declare %struct.MochaComplex* @mocha_complex_add(%struct.MochaComplex*, %struct.MochaComplex*)",
                 "declare %struct.MochaComplex* @mocha_complex_sub(%struct.MochaComplex*, %struct.MochaComplex*)",
                 "declare %struct.MochaComplex* @mocha_complex_mul(%struct.MochaComplex*, %struct.MochaComplex*)",
@@ -3121,6 +3127,24 @@ class CodeGen:
             self.local_mocha_types[node.name] = node.type
             self.owned_set_locals.append(node.name)
             return
+
+        # Complex numbers!
+        if node.type == "Complex":
+            val_reg, val_type = self.gen_expr(node.value)
+
+            # RC: retain if borrowed from an existing variable; a fresh
+            # Complex (constructor call, or an arithmetic op result) already
+            # has ref_count=1 from mocha_complex_new / rc_alloc.
+            if isinstance(node.value, Identifier):
+                self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
+
+            ptr = self.unique_ptr_name(node.name)
+            self.alloca_at_entry("%struct.MochaComplex*", ptr)
+            self.emit(f"  store %struct.MochaComplex* {val_reg}, %struct.MochaComplex** {ptr}")
+            self.locals[node.name] = (ptr, "%struct.MochaComplex*")
+            self.local_mocha_types[node.name] = node.type
+            self.owned_complex_locals.append(node.name)
+            return
         
         # null as opaque pointer (FFI handle)
         if node.type == "null":
@@ -3265,6 +3289,7 @@ class CodeGen:
             is_set_target = target_mocha_type.startswith("set<") and llvm_type == "%MochaSet*"
             is_dict_target = target_mocha_type == "dict" and llvm_type == "%MochaDict*"
             is_arr2d_target = "[" in target_mocha_type and llvm_type == "%MochaArray2D*"
+            is_complex_target = target_mocha_type == "Complex" and llvm_type == "%struct.MochaComplex*"
             
             if is_str_target:
                 old_reg = self.fresh_temp()
@@ -3301,6 +3326,13 @@ class CodeGen:
                 self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old_arr2d_reg})")
                 if isinstance(node.value, Identifier):
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
+
+            if is_complex_target:
+                old_complex_reg = self.fresh_temp()
+                self.emit(f"  {old_complex_reg} = load %struct.MochaComplex*, %struct.MochaComplex** {ptr}")
+                self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {old_complex_reg})")
+                if isinstance(node.value, Identifier):
+                    self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
 
             self.emit(f"  store {llvm_type} {val_reg}, {llvm_type}* {ptr}")
 
@@ -3418,6 +3450,7 @@ class CodeGen:
             self.emit_release_owned_set_locals()
             self.emit_release_owned_dict_locals()
             self.emit_release_owned_arr2d_locals()
+            self.emit_release_owned_complex_locals()
             self.emit("  call void @mocha_stack_pop()")
             self.emit("  ret void")
             return
@@ -3431,6 +3464,7 @@ class CodeGen:
             self.emit_release_owned_set_locals()
             self.emit_release_owned_dict_locals()
             self.emit_release_owned_arr2d_locals()
+            self.emit_release_owned_complex_locals()
             self.emit("  call void @mocha_stack_pop()")
             if self.current_return_type == "i8*":
                 self.emit("  ret i8* null")
@@ -3482,12 +3516,19 @@ class CodeGen:
             if isinstance(node.value, Identifier):
                 self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
+        # RC: same protection for a returned Complex — retain before we
+        # release the function's own owned Complex locals below.
+        if self.current_return_type == "%struct.MochaComplex*" and val_type == "%struct.MochaComplex*":
+            if isinstance(node.value, Identifier):
+                self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
+
         self.emit_release_owned_str_locals()
         self.emit_release_owned_arr_locals()
         self.emit_release_owned_tuple_locals()
         self.emit_release_owned_set_locals()
         self.emit_release_owned_dict_locals()
         self.emit_release_owned_arr2d_locals()
+        self.emit_release_owned_complex_locals()
 
         self.emit("  call void @mocha_stack_pop()")
 
@@ -4054,6 +4095,7 @@ class CodeGen:
         self.owned_set_locals = []
         self.owned_dict_locals = []
         self.owned_arr2d_locals = []
+        self.owned_complex_locals = []
 
         # Store 'this'
         if self.current_class and not getattr(node, 'is_shared', False):
@@ -4134,6 +4176,7 @@ class CodeGen:
         self.owned_set_locals = []
         self.owned_dict_locals = []
         self.owned_arr2d_locals = []
+        self.owned_complex_locals = []
         self.local_name_counts = {}  # tracks how many times a name has been used
         self.in_function         = False
         self.entry_allocas       = []
@@ -5639,7 +5682,7 @@ class CodeGen:
             self.emit("entry:")
             if self.target_os == "Windows":
                 self.emit("  call i32 @SetConsoleOutputCP(i32 65001)")
-            self.emit("  call void @mocha_gc_init()")
+            self.emit("  call void @mocha_signal_handlers_init()")
             for lib_init in self.lib_init_calls:
                 self.emit(f"  call void @{lib_init}()")
             if top_level_vars:
@@ -5737,7 +5780,7 @@ class CodeGen:
                 if top_level:
                     self.emit("  call void @mocha_main()")
 
-            self.emit("  call void @mocha_gc_shutdown()")
+            self.emit("  call void @mocha_rc_shutdown()")
             self.emit("  ret i32 0")
             self.emit("}")
 

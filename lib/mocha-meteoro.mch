@@ -1203,8 +1203,9 @@ function cape_cin(pressure_mb: float[], temp_c: float[], dewpoint_c: float[]) ->
         i = i + 1;
     };
 
-    if (cin > 0.0) {
-        cin = -cin;
+    if (!lfc_found) {
+        cape = 0.0;
+        cin  = 0.0;
     };
 
     var result: float[] = [cape, cin, lfc, el];

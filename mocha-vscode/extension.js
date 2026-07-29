@@ -12,8 +12,17 @@ let client;
 function activate(context) {
     console.log('[mocha] activated');
 
-    // Path to mocha_lsp.py — sits one folder up from the extension
-    const serverScript = 'C:\\Users\\shiv jain\\Coding_Projects\\My_Codes\\Mocha\\Python_AND_ExecutableFiles\\mocha_lsp.py';
+    // Path to mocha_lsp.py — configurable via the "mocha.installPath" VS Code setting
+    const config = workspace.getConfiguration('mocha');
+    const serverScript = config.get('installPath');
+
+    if (!serverScript) {
+        window.showErrorMessage(
+            'Mocha: "mocha.installPath" is not set. Please set it in VS Code settings ' +
+            'to the path of mocha_lsp.py.'
+        );
+        return;
+    }
 
     const serverOptions = {
         command: 'python',
