@@ -6,10 +6,9 @@
 """
 
 //FFI Wrappers
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
-//function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
-function c_exp(x: float) -> float native mocha_wrap_exp;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
+local function c_exp(x: float) -> float native mocha_wrap_exp;
 
 """  ========================
      CONSTANTS
@@ -35,37 +34,37 @@ const AORTIC_DISSECTION_RISK_THRESHOLD: float = 2.75;
      VALIDATORS
      ========================  """
 
-function validate_systolic(systolic: float) -> null {
+local function validate_systolic(systolic: float) -> null {
     if (systolic < SYSTOLIC_MIN || systolic > SYSTOLIC_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): systolic pressure out of physiological range (50-300 mmHg).");
     };
 };
 
-function validate_diastolic(diastolic: float) -> null {
+local function validate_diastolic(diastolic: float) -> null {
     if (diastolic < DIASTOLIC_MIN || diastolic > DIASTOLIC_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): diastolic pressure out of physiological range (20-200 mmHg).");
     };
 };
 
-function validate_heart_rate(hr: float) -> null {
+local function validate_heart_rate(hr: float) -> null {
     if (hr < HR_MIN || hr > HR_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): heart rate out of physiological range (20-300 bpm).");
     };
 };
 
-function validate_stroke_volume(sv: float) -> null {
+local function validate_stroke_volume(sv: float) -> null {
     if (sv < SV_MIN || sv > SV_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): stroke volume out of physiological range (10-200 mL).");
     };
 };
 
-function validate_ejection_fraction(ef: float) -> null {
+local function validate_ejection_fraction(ef: float) -> null {
     if (ef < EF_MIN || ef > EF_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): ejection fraction out of physiological range (0-100%).");
     };
 };
 
-function validate_bsa_inputs(weight_kg: float, height_cm: float) -> null {
+local function validate_bsa_inputs(weight_kg: float, height_cm: float) -> null {
     if (weight_kg < WEIGHT_MIN || weight_kg > WEIGHT_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): weight out of physiological range (1-500 kg).");
     };
@@ -436,19 +435,19 @@ const HGB_MAX: float = 25.0;
      PULMONARY VALIDATORS
      ========================  """
 
-function validate_respiratory_rate(rr: float) -> null {
+local function validate_respiratory_rate(rr: float) -> null {
     if (rr < RR_MIN || rr > RR_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): respiratory rate out of physiological range (4-60 breaths/min).");
     };
 };
 
-function validate_fio2(fio2: float) -> null {
+local function validate_fio2(fio2: float) -> null {
     if (fio2 < FIO2_MIN || fio2 > FIO2_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): FiO2 out of range (0.21-1.0). Room air = 0.21, pure O2 = 1.0.");
     };
 };
 
-function validate_hgb(hgb: float) -> null {
+local function validate_hgb(hgb: float) -> null {
     if (hgb < HGB_MIN || hgb > HGB_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): haemoglobin out of physiological range (1-25 g/dL).");
     };
@@ -731,19 +730,19 @@ const AVDO2_MAX: float = 0.09;
      NEUROLOGY VALIDATORS
      ========================  """
 
-function validate_sodium(na: float) -> null {
+local function validate_sodium(na: float) -> null {
     if (na < NA_MIN || na > NA_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): sodium out of physiological range (100-180 mEq/L).");
     };
 };
 
-function validate_glucose(glucose: float) -> null {
+local function validate_glucose(glucose: float) -> null {
     if (glucose < GLUCOSE_MIN || glucose > GLUCOSE_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): glucose out of physiological range (20-800 mg/dL).");
     };
 };
 
-function validate_icp(icp: float) -> null {
+local function validate_icp(icp: float) -> null {
     if (icp < 0.0 || icp > 100.0) {
         c_print_err("MochaBioWarning (mocha-bio): ICP out of physiological range (0-100 mmHg).");
     };
@@ -787,8 +786,8 @@ tag GcsSeverity {
      NEUROLOGY FORMULAE
      ========================  """
 
-~~ Internal helpers — convert GCS Tag components to integer scores
-function gcs_eye_score(eye: GcsEye) -> int {
+// Internal helpers — convert GCS Tag components to integer scores
+local function gcs_eye_score(eye: GcsEye) -> int {
     match(eye) {
         case GcsEye.NO_RESPONSE: return 1;
         case GcsEye.TO_PAIN:     return 2;
@@ -798,7 +797,7 @@ function gcs_eye_score(eye: GcsEye) -> int {
     };
 };
 
-function gcs_verbal_score(verbal: GcsVerbal) -> int {
+local function gcs_verbal_score(verbal: GcsVerbal) -> int {
     match(verbal) {
         case GcsVerbal.NO_RESPONSE:      return 1;
         case GcsVerbal.INCOMPREHENSIBLE: return 2;
@@ -809,7 +808,7 @@ function gcs_verbal_score(verbal: GcsVerbal) -> int {
     };
 };
 
-function gcs_motor_score(motor: GcsMotor) -> int {
+local function gcs_motor_score(motor: GcsMotor) -> int {
     match(motor) {
         case GcsMotor.NO_RESPONSE:         return 1;
         case GcsMotor.EXTENSION_POSTURING: return 2;
@@ -986,19 +985,19 @@ const URINE_SG_MAX_POSSIBLE: float = 1.040;
      RENAL VALIDATORS
      ========================  """
 
-function validate_creatinine(cr: float) -> null {
+local function validate_creatinine(cr: float) -> null {
     if (cr < CREATININE_MIN || cr > CREATININE_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): creatinine out of physiological range (0.1-20 mg/dL).");
     };
 };
 
-function validate_potassium(k: float) -> null {
+local function validate_potassium(k: float) -> null {
     if (k < POTASSIUM_MIN || k > POTASSIUM_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): potassium out of physiological range (1.0-9.0 mEq/L).");
     };
 };
 
-function validate_urine_sg(sg: float) -> null {
+local function validate_urine_sg(sg: float) -> null {
     if (sg < URINE_SG_WATER || sg > URINE_SG_MAX_POSSIBLE) {
         c_print_err("MochaBioError (mocha-bio): Urine specific gravity must be between 1.000 and 1.040.");
         c_exit(2);
@@ -1327,31 +1326,31 @@ const ALBUMIN_MAX: float = 6.0;
      ENDOCRINE VALIDATORS
      ========================  """
 
-function validate_waist(waist_cm: float) -> null {
+local function validate_waist(waist_cm: float) -> null {
     if (waist_cm < WAIST_MIN || waist_cm > WAIST_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): waist circumference out of physiological range (40-200 cm).");
     };
 };
 
-function validate_hip(hip_cm: float) -> null {
+local function validate_hip(hip_cm: float) -> null {
     if (hip_cm < HIP_MIN || hip_cm > HIP_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): hip circumference out of physiological range (50-200 cm).");
     };
 };
 
-function validate_hba1c(hba1c: float) -> null {
+local function validate_hba1c(hba1c: float) -> null {
     if (hba1c < HBA1C_MIN || hba1c > HBA1C_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): HbA1c out of physiological range (3-20%).");
     };
 };
 
-function validate_calcium(calcium: float) -> null {
+local function validate_calcium(calcium: float) -> null {
     if (calcium < CALCIUM_MIN || calcium > CALCIUM_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): calcium out of physiological range (5-15 mg/dL).");
     };
 };
 
-function validate_albumin(albumin: float) -> null {
+local function validate_albumin(albumin: float) -> null {
     if (albumin < ALBUMIN_MIN || albumin > ALBUMIN_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): albumin out of physiological range (1-6 g/dL).");
     };
@@ -1646,25 +1645,25 @@ const HILL_N_MAX: float = 10.0;
      PHARMACOKINETICS VALIDATORS
      ========================  """
 
-function validate_concentration(c: float) -> null {
+local function validate_concentration(c: float) -> null {
     if (c < CONCENTRATION_MIN) {
         c_print_err("MochaBioWarning (mocha-bio): concentration cannot be negative.");
     };
 };
 
-function validate_bioavailability(f: float) -> null {
+local function validate_bioavailability(f: float) -> null {
     if (f <= F_MIN || f > F_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): bioavailability must be between 0.0 (exclusive) and 1.0.");
     };
 };
 
-function validate_vd(vd: float) -> null {
+local function validate_vd(vd: float) -> null {
     if (vd <= VD_MIN) {
         c_print_err("MochaBioError (mocha-bio): volume of distribution must be positive.");
     };
 };
 
-function validate_clearance(cl: float) -> null {
+local function validate_clearance(cl: float) -> null {
     if (cl <= CL_MIN) {
         c_print_err("MochaBioError (mocha-bio): clearance must be positive.");
     };
@@ -2016,25 +2015,25 @@ const NORMAL_HCT_FEMALE: float = 41.0;
      HEMATOLOGY VALIDATORS
      ========================  """
 
-function validate_rbc(rbc: float) -> null {
+local function validate_rbc(rbc: float) -> null {
     if (rbc < RBC_MIN || rbc > RBC_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): RBC count out of physiological range (1-8 x10⁶/µL).");
     };
 };
 
-function validate_wbc(wbc: float) -> null {
+local function validate_wbc(wbc: float) -> null {
     if (wbc < WBC_MIN || wbc > WBC_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): WBC count out of physiological range (0.1-100 x10³/µL).");
     };
 };
 
-function validate_hematocrit(hct: float) -> null {
+local function validate_hematocrit(hct: float) -> null {
     if (hct < HCT_MIN || hct > HCT_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): hematocrit out of physiological range (5-65%).");
     };
 };
 
-function validate_retic(retic: float) -> null {
+local function validate_retic(retic: float) -> null {
     if (retic < RETIC_MIN || retic > RETIC_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): reticulocyte percentage out of physiological range (0-20%).");
     };
@@ -2303,16 +2302,18 @@ const TBSA_MAX: float = 100.0;
 const BURN_REGION_MIN: float = 0.0;
 const BURN_REGION_MAX: float = 100.0;
 
-function validate_tbsa(tbsa: float) -> null {
+//Validators
+
+local function validate_tbsa(tbsa: float) -> null {
     if (tbsa < TBSA_MIN || tbsa > TBSA_MAX) {
         c_print_err("MochaBioError (mocha-bio): TBSA must be between 0 and 100.");
         c_exit(2);
     };
 };
 
-function validate_burn_region(val: float, region: str) -> null {
+local function validate_burn_region(val: float, region: str) -> null {
     if (val < BURN_REGION_MIN || val > BURN_REGION_MAX) {
-        c_print_err("MochaBioError (mocha-bio): Burn region percentage must be between 0 and 100.");
+        c_print_err("MochaBioError (mocha-bio): " + region + " percentage must be between 0 and 100.");
         c_exit(2);
     };
 };
@@ -2395,35 +2396,37 @@ const INFUSION_TIME_MIN: float = 0.0;
 const INFUSION_VOLUME_MIN: float = 0.0;
 const CONCENTRATION_IV_MIN: float = 0.0;
 
-function validate_drop_factor(drop_factor: float) -> null {
+//Validators
+
+local function validate_drop_factor(drop_factor: float) -> null {
     if (drop_factor < DROP_FACTOR_MIN) {
         c_print_err("MochaBioError (mocha-bio): Drop factor must be positive (typically 10, 15, 20, or 60).");
         c_exit(2);
     };
 };
 
-function validate_infusion_rate(rate: float) -> null {
+local function validate_infusion_rate(rate: float) -> null {
     if (rate <= INFUSION_RATE_MIN) {
         c_print_err("MochaBioError (mocha-bio): Infusion rate must be greater than 0.");
         c_exit(2);
     };
 };
 
-function validate_infusion_time(time: float) -> null {
+local function validate_infusion_time(time: float) -> null {
     if (time <= INFUSION_TIME_MIN) {
         c_print_err("MochaBioError (mocha-bio): Infusion time must be greater than 0.");
         c_exit(2);
     };
 };
 
-function validate_infusion_volume(volume: float) -> null {
+local function validate_infusion_volume(volume: float) -> null {
     if (volume <= INFUSION_VOLUME_MIN) {
         c_print_err("MochaBioError (mocha-bio): Infusion volume must be greater than 0.");
         c_exit(2);
     };
 };
 
-function validate_concentration_iv(conc: float) -> null {
+local function validate_concentration_iv(conc: float) -> null {
     if (conc <= CONCENTRATION_IV_MIN) {
         c_print_err("MochaBioError (mocha-bio): Concentration must be greater than 0.");
         c_exit(2);
@@ -2557,28 +2560,28 @@ const FREE_T_ALB_KA:                float = 4.06E4;
 
 // ---- Validation ----
 
-function validate_cycle_length(days: float) -> null {
+local function validate_cycle_length(days: float) -> null {
     if (days < 21.0 || days > 35.0) {
         c_print_err("MochaBioError (mocha-bio): Cycle length must be between 21 and 35 days.");
         c_exit(2);
     };
 };
 
-function validate_amh(amh: float) -> null {
+local function validate_amh(amh: float) -> null {
     if (amh < 0.0) {
         c_print_err("MochaBioError (mocha-bio): AMH cannot be negative.");
         c_exit(2);
     };
 };
 
-function validate_doppler(val: float, name: str) -> null {
+local function validate_doppler(val: float, name: str) -> null {
     if (val <= 0.0) {
-        c_print_err("MochaBioError (mocha-bio): Doppler velocity values must be positive.");
+        c_print_err("MochaBioError (mocha-bio): " + name + " velocity must be positive.");
         c_exit(2);
     };
 };
 
-function validate_kupperman_score(score: int, symptom: str) -> null {
+local function validate_kupperman_score(score: int, symptom: str) -> null {
     if (score < 0 || score > 3) {
         c_print_err("MochaBioError (mocha-bio): Kupperman symptom score must be 0-3.");
         c_exit(2);
@@ -2824,21 +2827,23 @@ const POP_R_MAX:  float = 10.0;
 const POP_K_MIN:  float = 1.0;
 const POP_AREA_MIN: float = 0.0;
 
-function validate_population(n: float) -> null {
+//Validators
+
+local function validate_population(n: float) -> null {
     if (n < 0.0) {
         c_print_err("MochaBioError (mocha-bio): Population size cannot be negative.");
         c_exit(2);
     };
 };
 
-function validate_growth_rate(r: float) -> null {
+local function validate_growth_rate(r: float) -> null {
     if (r < POP_R_MIN || r > POP_R_MAX) {
         c_print_err("MochaBioError (mocha-bio): Growth rate r must be between -10 and 10.");
         c_exit(2);
     };
 };
 
-function validate_carrying_capacity(k: float) -> null {
+local function validate_carrying_capacity(k: float) -> null {
     if (k < POP_K_MIN) {
         c_print_err("MochaBioError (mocha-bio): Carrying capacity K must be >= 1.");
         c_exit(2);
@@ -2929,14 +2934,16 @@ const MICHAELIS_VMAX_MIN:  float = 0.0;
 const BEER_EPSILON_MIN:    float = 0.0;
 const BEER_PATH_MIN:       float = 0.0;
 
-function validate_km(km: float) -> null {
+//Validators
+
+local function validate_km(km: float) -> null {
     if (km <= MICHAELIS_KM_MIN) {
         c_print_err("MochaBioError (mocha-bio): Michaelis constant Km must be positive.");
         c_exit(2);
     };
 };
 
-function validate_vmax(vmax: float) -> null {
+local function validate_vmax(vmax: float) -> null {
     if (vmax <= MICHAELIS_VMAX_MIN) {
         c_print_err("MochaBioError (mocha-bio): Maximum reaction rate Vmax must be positive.");
         c_exit(2);
@@ -3068,14 +3075,16 @@ function rate_at_temperature(r1: float, q10_val: float, t1: float, t2: float) ->
      GENETICS
      ========================  """
 
-function validate_allele_freq(p: float) -> null {
+//Validators
+
+local function validate_allele_freq(p: float) -> null {
     if (p < 0.0 || p > 1.0) {
         c_print_err("MochaBioError (mocha-bio): Allele frequency must be between 0 and 1.");
         c_exit(2);
     };
 };
 
-function validate_mutation_rate(mu: float) -> null {
+local function validate_mutation_rate(mu: float) -> null {
     if (mu < 0.0 || mu > 1.0) {
         c_print_err("MochaBioError (mocha-bio): Mutation rate must be between 0 and 1.");
         c_exit(2);

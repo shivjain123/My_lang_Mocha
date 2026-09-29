@@ -2,7 +2,7 @@
 # Mocha AST Nodes
 # ============================================================
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 # --- Base Class ---
@@ -136,6 +136,7 @@ class FunctionDecl(Node):
     is_native:   bool = False
     native_name: str  = "" # None
     is_variadic: bool = False
+    is_local:    bool = False   # like static of C (local=true function only for that file)
     doc:         list = None   # type: ignore # list of ~~ comment strings
 
 # --- Function Call: add(1, 2) ---

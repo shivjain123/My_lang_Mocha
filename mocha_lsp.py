@@ -14,7 +14,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from mocha_doc import collect_items, parse_doc_lines
+from mocha_doc import collect_items
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -41,8 +41,6 @@ def build_hover_markdown(item: dict) -> str:
         lines.append(f"```mocha\nfunction {name}({params}) -> {ret}\n```")
 
     # Docstring description
-    desc, doc_params, doc_return = parse_doc_lines(item.get("doc_desc") or [])
-    
     # doc_desc is already parsed by collect_items so use it directly
     if item.get("doc_desc"):
         for desc_line in item["doc_desc"]:

@@ -6,13 +6,13 @@
 ~~ License: Polyform Non-Commercial
 
 // mocha-lib-deps: mocha-math
-function c_exp(x: float) -> float native mocha_wrap_exp;
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
-function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
-function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
-function unsafe_add(a: float, b: float) -> float native mocha_unsafe_add;
-function unsafe_sub(a: float, b: float) -> float native mocha_unsafe_sub;
+local function c_exp(x: float) -> float native mocha_wrap_exp;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
+local function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
+local function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
+local function unsafe_add(a: float, b: float) -> float native mocha_unsafe_add;
+local function unsafe_sub(a: float, b: float) -> float native mocha_unsafe_sub;
 
 const DEG_TO_RAD: float = 0.01745329251994;
 const RAD_TO_DEG: float = 57.29577951308232;

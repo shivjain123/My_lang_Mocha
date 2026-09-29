@@ -1,6 +1,6 @@
 // mocha-lib-deps: mocha-math, mocha-string
 """
-    mocha-ds v0.1 — Mocha Data Structures Library
+    mocha-ds — Mocha Data Structures Library
     Sections:=
     1. Core Value Wrapper
     2. Singly Linked List
@@ -16,8 +16,8 @@
 """
 
 // FFI
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 function mocha_fnv1a(key: str) -> int native ht_fnv1a;
 function mocha_djb2(key: str)  -> int native ht_djb2;
 
@@ -600,7 +600,7 @@ class Heap {
     };
 
     // Returns true if a should be higher in heap than b
-    function should_swap(a: DSValue, b: DSValue) -> bool {
+    private function should_swap(a: DSValue, b: DSValue) -> bool {
         if (a.kind == DSKind.BOOL) {
             c_print_err("MochaDSError (mocha-ds): Heap does not support DSKind.BOOL.");
             c_exit(2);
@@ -626,7 +626,7 @@ class Heap {
     };
 
     // Sift up from index i
-    function sift_up(i: int) -> null {
+    private function sift_up(i: int) -> null {
         while (i > 0) {
             var parent: int  = (i - 1) / 2;
             var should: bool = this.should_swap(this.data[i], this.data[parent]);
@@ -642,7 +642,7 @@ class Heap {
     };
 
     // Sift down from index i
-    function sift_down(i: int) -> null {
+    private function sift_down(i: int) -> null {
         var left: int = 2 * i + 1;
         while (left < this.size) {
             var best: int = i;
@@ -744,7 +744,7 @@ class AVLTree {
     };
 
     // Node height — 0 if null
-    function node_height(n: AVLNode) -> int {
+    private function node_height(n: AVLNode) -> int {
         if (n == null) {
             return 0;
         };
@@ -752,7 +752,7 @@ class AVLTree {
     };
 
     // Balance factor of a node
-    function balance_factor(n: AVLNode) -> int {
+    private function balance_factor(n: AVLNode) -> int {
         if (n == null) {
             return 0;
         };
@@ -760,7 +760,7 @@ class AVLTree {
     };
 
     // Update height of a node from its children
-    function update_height(n: AVLNode) -> null {
+    private function update_height(n: AVLNode) -> null {
         var lh: int = this.node_height(n.left);
         var rh: int = this.node_height(n.right);
         if (lh > rh) {
@@ -771,7 +771,12 @@ class AVLTree {
     };
 
     // Compare two DSValues — returns -1, 0, 1
-    function cmp(a: DSValue, b: DSValue) -> int {
+    private function cmp(a: DSValue, b: DSValue) -> int {
+        if (a.kind != b.kind) {
+            c_print_err("MochaDSError (mocha-ds): AVLTree cannot compare keys of different kinds (e.g. INT with STR).");
+            c_exit(2);
+            return 0;
+        };
         if (a.kind == DSKind.BOOL) {
             c_print_err("MochaDSError (mocha-ds): AVLTree does not support DSKind.BOOL.");
             c_exit(2);
@@ -795,7 +800,7 @@ class AVLTree {
     };
 
     // Right rotation
-    function rotate_right(y: AVLNode) -> AVLNode {
+    private function rotate_right(y: AVLNode) -> AVLNode {
         var x:  AVLNode = y.left;
         var t2: AVLNode = x.right;
         x.right = y;
@@ -806,7 +811,7 @@ class AVLTree {
     };
 
     // Left rotation
-    function rotate_left(x: AVLNode) -> AVLNode {
+    private function rotate_left(x: AVLNode) -> AVLNode {
         var y:  AVLNode = x.right;
         var t2: AVLNode = y.left;
         y.left  = x;
@@ -817,7 +822,7 @@ class AVLTree {
     };
 
     // Rebalance a node after insert/delete
-    function rebalance(n: AVLNode) -> AVLNode {
+    private function rebalance(n: AVLNode) -> AVLNode {
         this.update_height(n);
         var bf: int = this.balance_factor(n);
 
@@ -843,7 +848,7 @@ class AVLTree {
     };
 
     // Internal insert
-    function insert_node(n: AVLNode, key: DSValue) -> AVLNode {
+    private function insert_node(n: AVLNode, key: DSValue) -> AVLNode {
         if (n == null) {
             return AVLNode(key);
         };
@@ -859,7 +864,7 @@ class AVLTree {
     };
 
     // Internal min node
-    function min_node(n: AVLNode) -> AVLNode {
+    private function min_node(n: AVLNode) -> AVLNode {
         var cur: AVLNode = n;
         while (cur.left != null) {
             cur = cur.left;
@@ -868,7 +873,7 @@ class AVLTree {
     };
 
     // Internal max node
-    function max_node(n: AVLNode) -> AVLNode {
+    private function max_node(n: AVLNode) -> AVLNode {
         var cur: AVLNode = n;
         while (cur.right != null) {
             cur = cur.right;
@@ -877,7 +882,7 @@ class AVLTree {
     };
 
     // Internal remove
-    function remove_node(n: AVLNode, key: DSValue) -> AVLNode {
+    private function remove_node(n: AVLNode, key: DSValue) -> AVLNode {
         if (n == null) {
             return null;
         };
@@ -905,7 +910,7 @@ class AVLTree {
     };
 
     // Internal contains
-    function contains_node(n: AVLNode, key: DSValue) -> bool {
+    private function contains_node(n: AVLNode, key: DSValue) -> bool {
         if (n == null) {
             return false;
         };
@@ -920,7 +925,7 @@ class AVLTree {
     };
 
     // Internal inorder print
-    function inorder_node(n: AVLNode) -> null {
+    private function inorder_node(n: AVLNode) -> null {
         if (n == null) {
             return;
         };
@@ -930,7 +935,7 @@ class AVLTree {
     };
 
     // Internal successor
-    function successor_node(n: AVLNode, key: DSValue, best: AVLNode) -> AVLNode {
+    private function successor_node(n: AVLNode, key: DSValue, best: AVLNode) -> AVLNode {
         if (n == null) {
             return best;
         };
@@ -945,7 +950,7 @@ class AVLTree {
     };
 
     // Internal predecessor
-    function predecessor_node(n: AVLNode, key: DSValue, best: AVLNode) -> AVLNode {
+    private function predecessor_node(n: AVLNode, key: DSValue, best: AVLNode) -> AVLNode {
         if (n == null) {
             return best;
         };
@@ -962,11 +967,19 @@ class AVLTree {
     // Public API
 
     function insert(key: DSValue) -> null {
+        if (this.contains_node(this.root, key)) {
+            return;    // duplicate: silently ignored, like set.insert()
+        };
         this.root = this.insert_node(this.root, key);
         this.size = this.size + 1;
     };
 
     function remove(key: DSValue) -> null {
+        if (this.contains_node(this.root, key) == false) {
+            c_print_err("MochaDSError (mocha-ds): remove() key not found in AVLTree.");
+            c_exit(2);
+            return;
+        };
         this.root = this.remove_node(this.root, key);
         this.size = this.size - 1;
     };
@@ -1473,7 +1486,7 @@ class RBTree {
 };
 
 """  ========================
-     MY BALL TREE
+     MY BALL TREE (##This is not standard. This is Online Ball Tree)
      ========================  """
 
 class BallPoint {
@@ -1526,7 +1539,7 @@ class BallTree {
     };
 
     // Euclidean distance squared between two coordinate arrays
-    function dist_sq(a: float[], b: float[]) -> float {
+    private function dist_sq(a: float[], b: float[]) -> float {
         var sum: float = 0.0;
         var i: int     = 0;
         while (i < this.k) {
@@ -1538,13 +1551,13 @@ class BallTree {
     };
 
     // Euclidean distance
-    function dist(a: float[], b: float[]) -> float {
+    private function dist(a: float[], b: float[]) -> float {
         var sq: float = this.dist_sq(a, b);
         return sq.sqrt().real;
     };
 
     // Compute centroid of a set of points
-    function compute_centroid(points: BallPoint[]) -> float[] {
+    private function compute_centroid(points: BallPoint[]) -> float[] {
         var result: float[] = [];
         var i: int          = 0;
         // Initialize result with zeros
@@ -1570,7 +1583,7 @@ class BallTree {
     };
 
     // Compute radius — max distance from centroid to any point
-    function compute_radius(centroid: float[], points: BallPoint[]) -> float {
+    private function compute_radius(centroid: float[], points: BallPoint[]) -> float {
         var max_d: float = 0.0;
         var i: int       = 0;
         while (i < points.length) {
@@ -1584,7 +1597,7 @@ class BallTree {
     };
 
     // Find the dimension with the most spread
-    function max_spread_dim(points: BallPoint[]) -> int {
+    private function max_spread_dim(points: BallPoint[]) -> int {
         var best_dim:    int   = 0;
         var best_spread: float = 0.0;
         var d: int             = 0;
@@ -1612,7 +1625,7 @@ class BallTree {
     };
 
     // Build a subtree from a set of points
-    function build_node(points: BallPoint[]) -> BallNode {
+    private function build_node(points: BallPoint[]) -> BallNode {
         if (points.length == 1) {
             return BallNode(points[0], this.k);
         };
@@ -1657,7 +1670,7 @@ class BallTree {
     };
 
     // Collect all points in a subtree
-    function collect_points(n: BallNode, out: BallPoint[]) -> null {
+    private function collect_points(n: BallNode, out: BallPoint[]) -> null {
         if (n == null) {
             return;
         };
@@ -1670,7 +1683,7 @@ class BallTree {
     };
 
     // Check balance ratio of a node — returns ratio of larger to smaller child radius
-    function balance_ratio(n: BallNode) -> float {
+    private function balance_ratio(n: BallNode) -> float {
         if (n.is_leaf) {
             return 1.0;
         };
@@ -1695,7 +1708,7 @@ class BallTree {
     };
 
     // Update adaptive threshold every 10 inserts
-    function update_threshold(n: BallNode) -> null {
+    private function update_threshold(n: BallNode) -> null {
         if (n == null || n.is_leaf) {
             return;
         };
@@ -1706,7 +1719,7 @@ class BallTree {
         this.update_threshold(n.right);
     };
 
-    function recalibrate() -> null {
+    private function recalibrate() -> null {
         if (this.ratio_count == 0) {
             return;
         };
@@ -1736,7 +1749,7 @@ class BallTree {
     };
 
     // Insert into subtree, rebalance locally if needed
-    function insert_node(n: BallNode, point: BallPoint) -> BallNode {
+    private function insert_node(n: BallNode, point: BallPoint) -> BallNode {
         if (n == null) {
             return BallNode(point, this.k);
         };
@@ -1770,19 +1783,12 @@ class BallTree {
         return n;
     };
 
-    // Nearest neighbor search — returns best label and updates best_dist
-    function nn_search(n: BallNode, query: float[], best_label: DSValue, best_dist: float) -> float[] {
-        // We encode result as [best_dist, label_encoded] — but since we can't
-        // return two values, we use a workaround: store best in tree-level fields
-        // This is handled by the public wrapper instead
-        return query;
-    };
-
-    // Internal NN — uses mutable approach via wrapper fields
+    // Internal NN — uses mutable approach via wrapper fields because 2 hetero returns
+    // are not possible via 1 function
     var nn_best_dist:  float;
     var nn_best_label: DSValue;
 
-    function nn_node(n: BallNode, query: float[]) -> null {
+    private function nn_node(n: BallNode, query: float[]) -> null {
         if (n == null) {
             return;
         };
@@ -1812,7 +1818,7 @@ class BallTree {
     };
 
     // Internal range search
-    function range_node(n: BallNode, query: float[], radius: float, out: DSValue[]) -> null {
+    private function range_node(n: BallNode, query: float[], radius: float, out: DSValue[]) -> null {
         if (n == null) {
             return;
         };
@@ -1863,24 +1869,25 @@ class BallTree {
     };
 
     function contains(coords: float[]) -> bool {
-        var cur: BallNode = this.root;
-        while (cur != null) {
-            if (cur.is_leaf) {
-                var d: float = this.dist(coords, cur.point.coords);
-                if (d == 0.0) {
-                    return true;
-                };
-                return false;
-            };
-            var dl: float = this.dist(coords, cur.left.centroid);
-            var dr: float = this.dist(coords, cur.right.centroid);
-            if (dl <= dr) {
-                cur = cur.left;
-            } else {
-                cur = cur.right;
-            };
+        return this.contains_node(this.root, coords);
+    };
+
+    private function contains_node(n: BallNode, coords: float[]) -> bool {
+        if (n == null) {
+            return false;
         };
-        return false;
+        var d_center: float = this.dist(coords, n.centroid);
+        if (d_center - n.radius > 0.0001) {
+            return false;
+        };
+        if (n.is_leaf) {
+            var d: float = this.dist(coords, n.point.coords);
+            return d < 0.0001;
+        };
+        if (this.contains_node(n.left, coords)) {
+            return true;
+        };
+        return this.contains_node(n.right, coords);
     };
 
     function is_empty() -> bool {
@@ -1918,12 +1925,12 @@ class Patricia {
     };
 
     // Single character at index i
-    function char_at(s: str, i: int) -> str {
+    private function char_at(s: str, i: int) -> str {
         return s.substring(i, i);
     };
 
     // Length of common prefix between two strings
-    function common_prefix_len(a: str, b: str) -> int {
+    private function common_prefix_len(a: str, b: str) -> int {
         var la: int      = a.length;
         var lb: int      = b.length;
         var min_len: int = la;
@@ -1943,7 +1950,7 @@ class Patricia {
     };
 
     // Substring from begin to end of string
-    function substr(s: str, begin: int) -> str {
+    private function substr(s: str, begin: int) -> str {
         if (begin >= s.length) {
             return "";
         };
@@ -1959,7 +1966,7 @@ class Patricia {
     };
 
     // Returns true if a new key was inserted (false if existing key was updated)
-    function insert_node(node: PatriciaNode, key: str, value: DSValue) -> bool {
+    private function insert_node(node: PatriciaNode, key: str, value: DSValue) -> bool {
         if (key.length == 0) {
             var was_new: bool = node.is_terminal == false;
             node.is_terminal  = true;
@@ -2015,7 +2022,7 @@ class Patricia {
     };
 
     // Find node for exact key, or null
-    function find_node(key: str) -> PatriciaNode {
+    private function find_node(key: str) -> PatriciaNode {
         var node: PatriciaNode = this.root;
         var remaining: str     = key;
         while (remaining.length > 0) {
@@ -2091,7 +2098,7 @@ class Patricia {
     };
 
     // Collect all words under a node with accumulated prefix
-    function collect_words(node: PatriciaNode, prefix: str, out: DSValue[]) -> null {
+    private function collect_words(node: PatriciaNode, prefix: str, out: DSValue[]) -> null {
         if (node.is_terminal) {
             out.push(ds_str(prefix));
         };
@@ -2147,7 +2154,7 @@ class Patricia {
     };
 
     // Rebuild edge arrays excluding index idx
-    function remove_edge_at(node: PatriciaNode, idx: int) -> null {
+    private function remove_edge_at(node: PatriciaNode, idx: int) -> null {
         var new_labels: str[]            = [];
         var new_children: PatriciaNode[] = [];
         var i: int = 0;
@@ -2163,7 +2170,7 @@ class Patricia {
     };
 
     // Recursive delete with edge merging — mutates node in place, returns node
-    function delete_rec(node: PatriciaNode, key: str) -> PatriciaNode {
+    private function delete_rec(node: PatriciaNode, key: str) -> PatriciaNode {
         if (key.length == 0) {
             if (node.is_terminal) {
                 node.is_terminal  = false;
@@ -2233,7 +2240,7 @@ class Patricia {
 
 """  ========================
      GRAPH
-     ========================  """
+     ======================== """
 
 class GraphEdge {
     var to:     str;
@@ -2266,7 +2273,7 @@ class Graph {
         this.size        = 0;
     };
 
-    function index_of(label: str) -> int {
+    private function index_of(label: str) -> int {
         var i: int = 0;
         while (i < this.nodes.length) {
             if (this.nodes[i].label == label) {
@@ -2357,7 +2364,7 @@ class Graph {
         return out;
     };
 
-    function dfs_visit(label: str, visited: str[], out: DSValue[]) -> null {
+    private function dfs_visit(label: str, visited: str[], out: DSValue[]) -> null {
         visited.push(label);
         out.push(ds_str(label));
         var ci: int = this.index_of(label);
@@ -2549,7 +2556,7 @@ class Graph {
     };
 
     // Find root of set containing x (with path compression)
-    function find_set(parent: int[], x: int) -> int {
+    private function find_set(parent: int[], x: int) -> int {
         if (parent[x] != x) {
             parent[x] = this.find_set(parent, parent[x]);
         };
@@ -2557,7 +2564,7 @@ class Graph {
     };
 
     // Union two sets, returns true if they were different (i.e. union happened)
-    function union_sets(parent: int[], rank: int[], a: int, b: int) -> bool {
+    private function union_sets(parent: int[], rank: int[], a: int, b: int) -> bool {
         var ra: int = this.find_set(parent, a);
         var rb: int = this.find_set(parent, b);
         if (ra == rb) {
@@ -2831,7 +2838,10 @@ class Graph {
 
         // ---- Seeding: greedy non-overlapping cheapest edges, capped at 5 ----
         var num_clusters: int = 0;
-        var max_seeds: int = 5;
+        var max_seeds: int = n / 20;
+        if (max_seeds < 5) {
+            max_seeds = 5;
+        };
         var e: int = 0;
         while (e < m && num_clusters < max_seeds) {
             var su: int = edge_u[e];
@@ -3210,7 +3220,7 @@ class BloomFilter {
     };
 
     // Kirsch-Mitzenmacher double hashing: h_i(x) = (h1 + i*h2) mod m
-    function index_for(item: str, i: int) -> int {
+    private function index_for(item: str, i: int) -> int {
         var h1: int = mocha_fnv1a(item);
         var h2: int = mocha_djb2(item);
         if (h1 < 0) {
@@ -3291,7 +3301,7 @@ class CountingBloomFilter {
         this.count = 0;
     };
 
-    function index_for(item: str, i: int) -> int {
+    private function index_for(item: str, i: int) -> int {
         var h1: int = mocha_fnv1a(item);
         var h2: int = mocha_djb2(item);
         if (h1 < 0) {

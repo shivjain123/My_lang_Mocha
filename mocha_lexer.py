@@ -152,6 +152,7 @@ class TokenType(Enum):
     IMPLEMENTS   = auto()
     SHARED       = auto()
     PRIVATE      = auto()
+    LOCAL      = auto()
     PROTECTED    = auto()
     THIS         = auto()
     ALLOC        = auto()
@@ -268,6 +269,7 @@ KEYWORDS = {
     "implements": TokenType.IMPLEMENTS,
     "shared":     TokenType.SHARED,
     "private":    TokenType.PRIVATE,
+    "local":      TokenType.LOCAL,
     "protected":  TokenType.PROTECTED,
     "this":       TokenType.THIS,
     "alloc":        TokenType.ALLOC,
@@ -388,9 +390,9 @@ class Lexer:
 
     # --- Token factory ---
 
-    def make_token(self, type: TokenType, value: str,
+    def make_token(self, token_type: TokenType, value: str,
                    line: int, column: int) -> Token:
-        return Token(type, value, line, column)
+        return Token(token_type, value, line, column)
 
     # --- Skip whitespace ---
 
@@ -503,7 +505,7 @@ class Lexer:
                     num = num[:-1]
                     self.pos -= 1
                     self.column -= 1
-                    is_float = False if '.' not in num else True
+                    is_float = '.' in num
 
         # Strip underscores before storing — they're purely for readability
         num = num.replace("_", "")

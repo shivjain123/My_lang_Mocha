@@ -1,7 +1,10 @@
 // mocha-lib-deps: mocha-stats, mocha-matvec
 
 """
-mocha-processing — filter, map, reduce for int, float, str
+mocha-processing — Functional Utilities & Data Preprocessing Library for Mocha
+Functions: filter/map/reduce (int, float, str variants)
+Classes: StandardScaler, MinMaxScaler, RobustScaler, PCAReducer
+Part of the Mocha Scientific Library Ecosystem
 """
 
 function filter(arr: int[], pred: lambda) -> int[] {

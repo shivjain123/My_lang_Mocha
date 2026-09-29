@@ -587,7 +587,6 @@ class Gru {
 
         // weight matrices: [input+hidden x hidden]
         this.Wr = Tensor(combined, hidden_size);
-        c_print_err("Wr created: ptr=" + str(this.Wr.ptr) + " rows=" + str(this.Wr.nrows) + " cols=" + str(this.Wr.ncols) + "\n");
         this.Wz = Tensor(combined, hidden_size);
         this.Wh = Tensor(combined, hidden_size);
 
@@ -632,58 +631,30 @@ class Gru {
     // @param h: hidden state [batch x hidden_size]
     // @return: new hidden state [batch x hidden_size]
     function forward(x: Tensor, h: Tensor) -> Tensor {
-        c_print_err("Entered forward\n");
         // concat [h, x] → [batch x (hidden+input)]
-        c_print_err("Before hx\n");
         var hx: Tensor = h.concat(x);
-        c_print_err("After hx\n");
 
         // reset gate: r = sigmoid(hx @ Wr + br)
-        c_print_err("Before r_pre\n");
-        c_print_err("Before Wr.matmul\n");
-        c_print_err("Wr.ptr = " + str(this.Wr.ptr) + "\n");
-        c_print_err("Wr.rows = " + str(this.Wr.nrows) + "\n");
-        c_print_err("Wr.cols = " + str(this.Wr.ncols) + "\n");
-        c_print_err("hx.ptr = " + str(hx.ptr) + "\n");
-        c_print_err("hx.rows = " + str(hx.nrows) + "\n");
-        c_print_err("hx.cols = " + str(hx.ncols) + "\n");
-        c_print_err("Wr before matmul: ptr=" + str(this.Wr.ptr) + " rows=" + str(this.Wr.nrows) + " cols=" + str(this.Wr.ncols) + "\n");
         var r_pre: Tensor = hx.matmul(this.Wr);
-        c_print_err("After Wr.matmul\n");
-        c_print_err("After r_pre\n");
         mocha_tensor_add_bias(r_pre.ptr, this.br.ptr);
         r_pre.sigmoid();
 
         // update gate: z = sigmoid(hx @ Wz + bz)
-        c_print_err("Before z_pre\n");
         var z_pre: Tensor = hx.matmul(this.Wz);
-        c_print_err("After z_pre\n");
         mocha_tensor_add_bias(z_pre.ptr, this.bz.ptr);
         z_pre.sigmoid();
 
         // candidate: h~ = tanh([r*h, x] @ Wh + bh)
-        c_print_err("Before rh\n");
         var rh: Tensor = r_pre.mul(h);
-        c_print_err("After rh\n");
-        c_print_err("Before rhx\n");
         var rhx: Tensor = rh.concat(x);
-        c_print_err("After rhx\n");
-        c_print_err("Before cand\n");
         var cand: Tensor = rhx.matmul(this.Wh);
-        c_print_err("After cand\n");
         mocha_tensor_add_bias(cand.ptr, this.bh.ptr);
         cand.tanh();
 
         // new hidden: h_new = (1-z)*h + z*h~
-        c_print_err("Before one_minus_z_h\n");
         var one_minus_z_h: Tensor = z_pre.one_minus_mul(h);
-        c_print_err("After one_minus_z_h\n");
-        c_print_err("Before z_cand\n");
         var z_cand: Tensor = z_pre.mul(cand);
-        c_print_err("After z_cand\n");
-        c_print_err("Before h_new\n");
         var h_new: Tensor = one_minus_z_h.add(z_cand);
-        c_print_err("After h_new\n");
 
         // cache for backprop — CLONE so caller can dispose originals safely
         this.last_x    = x.clone_tensor();
@@ -823,48 +794,46 @@ class Gru {
             lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
 
         // cleanup
-        c_print_err("Disposing dWr\n"); dWr.dispose();
-        c_print_err("Disposing dWz\n"); dWz.dispose();
-        c_print_err("Disposing dWh\n"); dWh.dispose();
-        c_print_err("Disposing dbr\n"); dbr.dispose();
-        c_print_err("Disposing dbz\n"); dbz.dispose();
-        c_print_err("Disposing dbh\n"); dbh.dispose();
-        c_print_err("Disposing dh_prev_total\n"); dh_prev_total.dispose();
+        dWr.dispose();
+        dWz.dispose();
+        dWh.dispose();
+        dbr.dispose();
+        dbz.dispose();
+        dbh.dispose();
+        dh_prev_total.dispose();
 
         // dispose cached tensors now that backward is done
-        c_print_err("Disposing last_x\n"); this.last_x.dispose();
-        c_print_err("Disposing last_h\n"); this.last_h.dispose();
-        c_print_err("Disposing last_r\n"); this.last_r.dispose();
-        c_print_err("Disposing last_z\n"); this.last_z.dispose();
-        c_print_err("Disposing last_cand\n"); this.last_cand.dispose();
-        c_print_err("Disposing last_hx\n"); this.last_hx.dispose();
-        c_print_err("Disposing last_rhx\n"); this.last_rhx.dispose();
+        this.last_x.dispose();
+        this.last_h.dispose();
+        this.last_r.dispose();
+        this.last_z.dispose();
+        this.last_cand.dispose();
+        this.last_hx.dispose();
+        this.last_rhx.dispose();
         this.has_input = false;
 
-        c_print_err("Returning dx\n");
         return dx;
     };
 
     function dispose() -> null {
-        c_print_err("Disposing Wr\n"); this.Wr.dispose();
-        c_print_err("Disposing Wz\n"); this.Wz.dispose();
-        c_print_err("Disposing Wh\n"); this.Wh.dispose();
-        c_print_err("Disposing br\n"); this.br.dispose();
-        c_print_err("Disposing bz\n"); this.bz.dispose();
-        c_print_err("Disposing bh\n"); this.bh.dispose();
-        c_print_err("Disposing mWr\n"); this.mWr.dispose();
-        c_print_err("Disposing vWr\n"); this.vWr.dispose();
-        c_print_err("Disposing mWz\n"); this.mWz.dispose();
-        c_print_err("Disposing vWz\n"); this.vWz.dispose();
-        c_print_err("Disposing mWh\n"); this.mWh.dispose();
-        c_print_err("Disposing vWh\n"); this.vWh.dispose();
-        c_print_err("Disposing mbr\n"); this.mbr.dispose();
-        c_print_err("Disposing vbr\n"); this.vbr.dispose();
-        c_print_err("Disposing mbz\n"); this.mbz.dispose();
-        c_print_err("Disposing vbz\n"); this.vbz.dispose();
-        c_print_err("Disposing mbh\n"); this.mbh.dispose();
-        c_print_err("Disposing vbh\n"); this.vbh.dispose();
-        c_print_err("Finished dispose\n");
+        this.Wr.dispose();
+        this.Wz.dispose();
+        this.Wh.dispose();
+        this.br.dispose();
+        this.bz.dispose();
+        this.bh.dispose();
+        this.mWr.dispose();
+        this.vWr.dispose();
+        this.mWz.dispose();
+        this.vWz.dispose();
+        this.mWh.dispose();
+        this.vWh.dispose();
+        this.mbr.dispose();
+        this.vbr.dispose();
+        this.mbz.dispose();
+        this.vbz.dispose();
+        this.mbh.dispose();
+        this.vbh.dispose();
     };
 
     function save(path: str) -> null {

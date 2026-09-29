@@ -1,7 +1,11 @@
-function mocha_str_toupper_ffi(s: str) -> str native mocha_str_toupper;
-function mocha_str_tolower_ffi(s: str) -> str native mocha_str_tolower;
-function c_isalpha(c: str) -> int native mocha_wrap_isalpha_str;
-function c_isdigit(c: str) -> int native mocha_wrap_isdigit_str;
+local function mocha_str_toupper_ffi(s: str) -> str native mocha_str_toupper;
+local function mocha_str_tolower_ffi(s: str) -> str native mocha_str_tolower;
+local function c_isalpha(c: str) -> int native mocha_wrap_isalpha_str;
+local function c_isdigit(c: str) -> int native mocha_wrap_isdigit_str;
+
+local function mocha_str_char_equal(a: str, i: int, b: str, j: int) -> bool {
+    return a.charAt(i) == b.charAt(j);
+};
 
 extend str {
 
@@ -45,10 +49,6 @@ extend str {
         return true;
     };
 
-    function charEqual(i: int, other: str, j: int) -> bool {
-        return this.charAt(i) == other.charAt(j);
-    };
-
     function indexOf(sub: str) -> int {
         var subLen: int = sub.length;
         var tLen: int = this.length;
@@ -57,7 +57,7 @@ extend str {
             var j: int = 0;
             var found: bool = true;
             while (j < subLen) {
-                if (!this.charEqual(i + j, sub, j)) {
+                if (!mocha_str_char_equal(this, i + j, sub, j)) {
                     found = false;
                     j = subLen;
                 };
@@ -130,6 +130,8 @@ extend str {
         return result;
     };
 
+    // Function is no longer how I had written it because prev Claude did these
+    // changes to try and solve the problem, but to no avail
     function trimRight() -> str {
         var i: int = this.length - 1;
         while (i >= 0) {
@@ -139,25 +141,33 @@ extend str {
             };
             i = i - 1;
         };
+        // If i < 0, string is all whitespace
+        if (i < 0) {
+            return "";
+        };
         var result: str = "";
         var j: int = 0;
-        while (j <= i) {
+        while (j < i) {  // ← CHANGE FROM <= TO <
             result = result + str(this.charAt(j));
             j = j + 1;
         };
+        // Add the last character (at index i)
+        result = result + str(this.charAt(i));
         return result;
     };
 
+    ~~ Removes whitespace on each side of the string
     function rip() -> str {
         return this.trimLeft().trimRight();
     };
 
+    ~~ This is inclusive of end (like Lua)
+    ~~ So, hippo.substring(0,2) = "hip"
     function substring(startIdx: int, endIdx: int) -> str {
         var result: str = "";
         var i: int = startIdx;
         while (i <= endIdx) {
             result = result + str(this.charAt(i));
-            //My substrings are inclusive of end, think Lua-like
             i = i + 1;
         };
         return result;
@@ -251,7 +261,7 @@ extend str {
                     found = false;
                     j = dLen;
                 };
-                if (found && !this.charEqual(i + j, delim, j)) {
+                if (found && !mocha_str_char_equal(this, i + j, delim, j)) {
                     found = false;
                     j = dLen;
                 };
@@ -430,15 +440,15 @@ extend str[] {
 
 // ── char class helpers ──
 
-function regex_is_digit(c: str) -> bool {
+local function regex_is_digit(c: str) -> bool {
     return c_isdigit(c) != 0;
 };
 
-function regex_is_word(c: str) -> bool {
+local function regex_is_word(c: str) -> bool {
     return c_isalpha(c) != 0 || c_isdigit(c) != 0 || c == "_";
 };
 
-function regex_is_space(c: str) -> bool {
+local function regex_is_space(c: str) -> bool {
     return c == " " || c == "\t" || c == "\n" || c == "\r";
 };
 
@@ -446,7 +456,7 @@ function regex_is_space(c: str) -> bool {
 // returns true if char c matches pattern at position pi
 // advances pi_out to next pattern position
 
-function regex_match_char(pat: str, pi: int, c: str) -> bool {
+local function regex_match_char(pat: str, pi: int, c: str) -> bool {
     var plen: int = pat.length;
     if (pi >= plen) { return false; };
     var p: str = str(pat.charAt(pi));
@@ -497,7 +507,7 @@ function regex_match_char(pat: str, pi: int, c: str) -> bool {
 };
 
 // ── how many pattern chars does one token consume? ──
-function regex_token_len(pat: str, pi: int) -> int {
+local function regex_token_len(pat: str, pi: int) -> int {
     var plen: int = pat.length;
     if (pi >= plen) { return 0; };
     var p: str = str(pat.charAt(pi));
@@ -518,7 +528,7 @@ function regex_token_len(pat: str, pi: int) -> int {
 };
 // ── core recursive matcher ──
 // returns length of match from ti, or -1 if no match
-function regex_match_here(pat: str, text: str, pi: int, ti: int) -> int {
+local function regex_match_here(pat: str, text: str, pi: int, ti: int) -> int {
     var plen: int = pat.length;
     var tlen: int = text.length;
 
@@ -600,7 +610,7 @@ function regex_match_here(pat: str, text: str, pi: int, ti: int) -> int {
 
 // ── try match starting at position ti ──
 // returns end position of match, or -1
-function regex_match_at(pat: str, text: str, ti: int) -> int {
+local function regex_match_at(pat: str, text: str, ti: int) -> int {
     var plen: int = pat.length;
     var p0: str = str(pat.charAt(0));
 
@@ -614,7 +624,7 @@ function regex_match_at(pat: str, text: str, ti: int) -> int {
 
 // ── find start and end of first match ──
 // returns int[] of [start, end] or [-1, -1]
-function regex_find_span(pat: str, text: str) -> int[] {
+local function regex_find_span(pat: str, text: str) -> int[] {
     var tlen: int = text.length;
     var plen: int = pat.length;
     var result: int[] = alloc int[2];

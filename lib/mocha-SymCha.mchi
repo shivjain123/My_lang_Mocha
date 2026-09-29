@@ -5,18 +5,6 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_sin(x: float) -> float native mocha_wrap_sin;
-function c_cos(x: float) -> float native mocha_wrap_cos;
-function c_log(x: float) -> float native mocha_wrap_log;
-function c_tan(x: float) -> float native mocha_wrap_tan;
-function c_asin(x: float) -> float native mocha_wrap_asin;
-function c_acos(x: float) -> float native mocha_wrap_acos;
-function c_atan(x: float) -> float native mocha_wrap_atan;
-function c_sinh(x: float) -> float native mocha_wrap_sinh;
-function c_cosh(x: float) -> float native mocha_wrap_cosh;
-function c_tanh(x: float) -> float native mocha_wrap_tanh;
-function c_asinh(x: float) -> float native mocha_wrap_asinh;
-function c_atanh(x: float) -> float native mocha_wrap_atanh;
 function c_print_err(msg: str) -> null native mocha_print_stderr;
 function c_exit(code: int) -> null native mocha_exit;
 const NUM: int = 0;
@@ -32,9 +20,9 @@ const COS: int = 9;
 const LN: int = 10;
 const EXP: int = 11;
 const TAN: int = 12;
-const ASIN: int = 13;
-const ACOS: int = 14;
-const ATAN: int = 15;
+const INV_SIN: int = 13;
+const INV_COS: int = 14;
+const INV_TAN: int = 15;
 const SINH: int = 16;
 const COSH: int = 17;
 const TANH: int = 18;

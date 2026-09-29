@@ -1,7 +1,6 @@
 // mocha-lib-deps: mocha-math
 """
 mocha-matvec — Vector and Matrix operations for Mocha
-!!THIS IS VERSION 0.3. FROM PREVIOUS VERSION, BREAKING CHANGES HAVE OCCURED!!
 Extends int[], float[], int[][], float[][] with mathematical operations.
 
 Operations:
@@ -18,15 +17,26 @@ Operations:
   .rank()           — rank of matrix (2D only, int)
   .svd()
   .singular_values()
+
+Free functions:
+  complex_dot(a, b)   — dot product of two Complex vectors (no conjugation)
+  complex_norm(v)     — magnitude of a Complex vector
+
+v0.4 changes:
+  - complex_dot() and complex_norm() are now public (previously internal-only)
+  - Both dropped their old 'n: int' length parameter — length is now read
+    from the array itself. If you were calling these directly before,
+    drop the third argument: complex_dot(a, b, n) -> complex_dot(a, b)
+  - newton_sqrt() is now local (internal-only) — was never documented,
+    no public behavior change
 """
 
 // ============================================================
 // NATIVE WRAPPERS
 // ============================================================
 
-//function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 
 // ============================================================
 // extend int[]
@@ -92,7 +102,6 @@ extend int[] {
             sum = sum + (elem * elem);
             i++;
         };
-        //return c_sqrt(sum);
         return sum.sqrt().real;
     };
 
@@ -172,7 +181,6 @@ extend float[] {
             sum = sum + (this[i] * this[i]);
             i++;
         };
-        //return c_sqrt(sum);
         return sum.sqrt().real;
     };
 
@@ -206,7 +214,7 @@ Dependencies: mocha-math (already a dep of mocha-matvec)
 // HELPER: Newton's method sqrt
 // ============================================================
 
-function newton_sqrt(x: float) -> float {
+local function newton_sqrt(x: float) -> float {
     if (x <= 0.0) { return 0.0; };
     var guess: float = x / 2.0;
     if (guess == 0.0) { guess = 0.0001; };
@@ -224,10 +232,15 @@ function newton_sqrt(x: float) -> float {
 // (no conjugation — not inner product, just dot)
 // ============================================================
 
-function complex_dot(a: Complex[], b: Complex[], n: int) -> Complex {
+~~ Dot product of two Complex vectors (no conjugation)
+~~ z1·z2 = sum(z1[i] * z2[i])
+~~ @param a: first Complex vector
+~~ @param b: second Complex vector — must be same length as a
+~~ @return: the dot product as a Complex value
+function complex_dot(a: Complex[], b: Complex[]) -> Complex {
     var result: Complex = 0.0 + 0im;
     var i: int = 0;
-    while (i < n) {
+    while (i < a.length) {
         result = result.add(a[i].mul(b[i]));
         i++;
     };
@@ -239,10 +252,14 @@ function complex_dot(a: Complex[], b: Complex[], n: int) -> Complex {
 // sqrt(sum |z[i]|^2) = sqrt(sum (re^2 + im^2))
 // ============================================================
 
-function complex_norm(v: Complex[], n: int) -> float {
+~~ Magnitude (norm) of a Complex vector
+~~ sqrt(sum |v[i]|^2) = sqrt(sum(re^2 + im^2))
+~~ @param v: the Complex vector
+~~ @return: the vector's magnitude as a float
+function complex_norm(v: Complex[]) -> float {
     var sum: float = 0.0;
     var i: int = 0;
-    while (i < n) {
+    while (i < v.length) {
         var re: float = v[i].real;
         var im: float = v[i].imag;
         sum = sum + (re * re) + (im * im);
@@ -1307,7 +1324,7 @@ extend float[][] {
                     vj[ri2] = result[ri2][cj];
                     ri2++;
                 };
-                var dot: Complex = complex_dot(vi2, vj, n);
+                var dot: Complex = complex_dot(vi2, vj);
                 var dot_re: float = dot.real;
                 var dot_im: float = dot.imag;
                 var dot_abs: float = newton_sqrt(dot_re*dot_re + dot_im*dot_im);
@@ -1480,7 +1497,7 @@ extend float[][] {
             };
 
             // Normalise
-            var norm: float = complex_norm(vec, n);
+            var norm: float = complex_norm(vec);
             if (norm < 0.0001) { norm = 1.0; };
 
             var si: int = 0;

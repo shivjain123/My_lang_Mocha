@@ -5,11 +5,6 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_exp(x: float) -> float native mocha_wrap_exp;
-function c_sin(x: float) -> float native mocha_wrap_sin;
-function c_cos(x: float) -> float native mocha_wrap_cos;
-function c_atan(x: float) -> float native mocha_wrap_atan;
-function c_log(x: float) -> float native mocha_wrap_log;
 function c_exit(code: int) -> null native mocha_exit;
 function c_print_err(msg: str) -> null native mocha_print_stderr;
 function c_sat_vp(t_c: float) -> float native metero_sat_vp;
@@ -174,7 +169,6 @@ function c_rain_to_snowfall(rain_mm: float, t_c: float) -> float native metero_r
 function c_hail_size_dbz(dbz: float) -> float native metero_hail_size_from_dbz;
 function c_runoff_cn(rainfall_mm: float, cn: float) -> float native metero_runoff_cn;
 function c_et_hargreaves(tmax: float, tmin: float, tmean: float, ra: float) -> float native metero_et_hargreaves;
-function c_api(decay: float) -> float native metero_api;
 tag RainfallIntensity { TRACE, LIGHT, MODERATE, HEAVY, VIOLENT };
 tag PrecipType { RAIN, DRIZZLE, SNOW, SLEET, HAIL, FREEZING_RAIN, NONE };
 function rainfall_intensity(rate_mmhr: float) -> RainfallIntensity;
@@ -245,7 +239,6 @@ function c_aqi_no2(no2: float) -> float native metero_aqi_no2_subindex;
 function c_aqi_so2(so2: float) -> float native metero_aqi_so2_subindex;
 function c_aqi_o3(o3: float) -> float native metero_aqi_o3_subindex;
 function c_aqi_co(co: float) -> float native metero_aqi_co_subindex;
-function c_aqi_combined(pm25: float, pm10: float, no2: float, so2: float, o3: float, co: float) -> float native metero_aqi_from_subindices;
 tag FogRisk { NONE, LOW, MODERATE, HIGH, DENSE };
 tag IcingRisk { NONE, TRACE, LIGHT, MODERATE, SEVERE };
 tag AQICategory { GOOD, SATISFACTORY, MODERATELY_POLLUTED, POORLY_POLLUTED, SEVERELY_POLLUTED, HAZARDOUS };
@@ -367,9 +360,6 @@ function koppen_class(t_mean_annual_c: float, precip_annual_mm: float, t_coldest
 function c_saffir_simpson(wind_kmh: float) -> int native metero_saffir_simpson_category;
 function c_jma_category(wind_kmh: float) -> int native metero_jma_category;
 function c_imd_category(wind_kmh: float) -> int native metero_imd_category;
-function c_enso_phase(oni: float) -> int native metero_enso_phase;
-function c_iod_phase(dmi: float) -> int native metero_iod_phase;
-function c_ao_phase(idx: float) -> int native metero_ao_phase;
 tag ENSOPhase { STRONG_LA_NINA, MODERATE_LA_NINA, WEAK_LA_NINA, NEUTRAL, WEAK_EL_NINO, MODERATE_EL_NINO, STRONG_EL_NINO };
 tag IODPhase { STRONG_NEGATIVE, WEAK_NEGATIVE, NEUTRAL, WEAK_POSITIVE, STRONG_POSITIVE };
 tag CycloneScale { TROPICAL_DEPRESSION, TROPICAL_STORM, CATEGORY_1, CATEGORY_2, CATEGORY_3, CATEGORY_4, CATEGORY_5 };

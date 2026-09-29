@@ -1,5 +1,5 @@
 """
-   MochaMath v0.5 — Mocha Standard Math Library
+   MochaMath v0.6 — Mocha Standard Math Library
    Save as: lib/mocha-math.mch
    Compile with: mocha --lib lib/mocha-math.mch
 """
@@ -33,6 +33,7 @@ const DEG: int = 1;
 
 // =============================================
 // ROUNDING — pure Mocha 🐶
+// (This emojis indicates Pure non-C dependent Mocha code)
 // =============================================
 
 function abs(x: float) -> float {
@@ -150,11 +151,13 @@ function limit_inf(f: lambda) -> float native mocha_math_limit_inf;
 
 //C's random. False-entropy. Same each time
 function rand_int(min: int, max: int) -> int native mocha_rand_int;
+function rand_vast(min: vast, max: vast) -> vast native mocha_rand_vast;
 function rand_float(min: float, max: float) -> float native mocha_rand_float;
 function rand_seed(seed: int) -> null native mocha_rand_seed;
 
 // ── Cryptographic RNG — OS entropy source (BCrypt/getrandom/getentropy) ──
 function crypto_rand_int(min: int, max: int) -> int native mocha_bcrypt_rand_int;
+function crypto_rand_vast(min: vast, max: vast) -> vast native mocha_bcrypt_rand_vast;
 function crypto_rand_float(min: float, max: float) -> float native mocha_bcrypt_rand_float;
 function crypto_rand_unit() -> float native mocha_bcrypt_rand_unit;
 function crypto_rand_ints(min: int, max: int, count: int) -> str native mocha_bcrypt_rand_ints;

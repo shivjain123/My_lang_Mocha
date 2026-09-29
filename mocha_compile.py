@@ -2,7 +2,7 @@ import sys, os, subprocess, shutil, io
 from typing import Optional, Set
 from mocha_lexer import Lexer, MochaLexError
 from mocha_parser import Parser, MochaParseError
-from mocha_typeChecker import TypeChecker
+from mocha_typeChecker import TypeChecker, MochaTypeError
 from mocha_codegen import CodeGen, MochaCodeGenError, mangle_function_name, to_llvm_type, _tag_types_registry
 from mocha_ast import (
     FieldDecl, ImportStmt, FunctionDecl, MethodDecl, ConstDecl, 
@@ -182,7 +182,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             key = f"{alias}.{func_name}" if alias else func_name
             try:
                 type_checker.symbols.declare(key, ret_type, is_function=True)
-            except Exception:
+            except MochaTypeError:
                 pass
 
         elif line.startswith("const "):
@@ -193,7 +193,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             key = f"{alias}.{const_name}" if alias else const_name
             try:
                 type_checker.symbols.declare(key, const_type, is_const=True)
-            except Exception:
+            except MochaTypeError:
                 pass
 
         elif line.startswith("extend "):
@@ -209,14 +209,14 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             key = f"{type_name}.{func_name}"
             try:
                 type_checker.symbols.declare(key, ret_type, is_function=True)
-            except Exception:
+            except MochaTypeError:
                 pass
 
         elif line.startswith("class ") and line.endswith(";") and " field " not in line and " function " not in line:
             class_name = line[6:-1].strip()
             try:
                 type_checker.symbols.declare(class_name, class_name, is_class=True)
-            except Exception:
+            except MochaTypeError:
                 pass
             
         elif line.startswith("class ") and " field " in line and " function " not in line:
@@ -228,7 +228,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             key = f"{class_name}.{field_name}"
             try:
                 type_checker.symbols.declare(key, field_type)
-            except Exception:
+            except MochaTypeError:
                 pass
 
         elif line.startswith("class ") and " function " in line and " field " not in line:
@@ -244,7 +244,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             key = f"{class_name}.{func_name}"
             try:
                 type_checker.symbols.declare(key, ret_type, is_function=True)
-            except Exception:
+            except MochaTypeError:
                 pass
         
         elif line.startswith("tag "):
@@ -254,13 +254,13 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             try:
                 type_checker.symbols.declare(tag_name, tag_name, is_class=True)
                 type_checker.tag_types.add(tag_name)
-            except Exception:
+            except MochaTypeError:
                 pass
             for i, member in enumerate(members):
                 key = f"{tag_name}.{member}"
                 try:
                     type_checker.symbols.declare(key, tag_name)
-                except Exception:
+                except MochaTypeError:
                     pass
 
 # ============================================================
@@ -620,6 +620,9 @@ def collect_dep_objects(lib_name: str, lib_dir: str, link_objects: list, seen: O
 def resolve_imports(ast, lib_dir: str, current_file: str = "", seen_files: Optional[Set] = None) -> tuple:
     if seen_files is None:
         seen_files = set()
+
+    for node in ast.statements:
+        node.source_file = current_file
 
     link_objects   = []
     native_libs    = set()
@@ -1155,7 +1158,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.0")
+    print(f"🔥 Mocha Compiler v1.1")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):
@@ -1301,7 +1304,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     
     clang_target, mingw_sysroot = get_clang_flags()
     def base_clang_flags():
-        flags = ["-O2", "-march=native", "-flto", "-target", clang_target]
+        flags = ["-O2", "-march=native", "-flto", "-target", clang_target, "-g"]
         if mingw_sysroot:
             flags += ["--sysroot", mingw_sysroot]
         return flags
@@ -1503,6 +1506,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
                 cuda_link_cmd.append(msvc_wren_obj)
             cuda_link_cmd += msvc_link_objects + [
                 "-o", exe_file,
+                "-Xlinker", "/MAP",
                 f"-L{CUDA_LIB_DIR}",
                 "-lcublas", "-lcudart",
                 CLANG_RT_LIB,

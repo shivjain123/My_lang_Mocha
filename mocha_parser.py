@@ -302,8 +302,8 @@ class Parser:
             return True
         return False
 
-    def expect(self, type: TokenType, message: str) -> Token:
-        if self.check(type):
+    def expect(self, token_type: TokenType, message: str) -> Token:
+        if self.check(token_type):
             return self.advance()
         prev_token = self.tokens[self.pos - 1] if self.pos > 0 else self.current()
         raise MochaParseError(message, self.current(), prev_token)
@@ -1569,7 +1569,7 @@ class Parser:
         return node
 
     def parse_function(self, visibility="public",
-                   is_shared=False, is_async=False, doc=None) -> Node:
+                   is_shared=False, is_async=False, is_local=False, doc=None) -> Node:
         """
         function add(a: int, b: int) -> int { ... };
         async function fetch(url: str) -> Result { ... };
@@ -1635,9 +1635,10 @@ class Parser:
                 body=[],
                 is_async=is_async,
                 has_didLoad=has_didLoad,
-                is_native=True,
+                is_native=is_native,
                 native_name=native_name,
                 is_variadic=is_variadic,
+                is_local=is_local,
                 doc=doc # type: ignore
             )
             node.line = tok.line
@@ -1671,6 +1672,7 @@ class Parser:
             is_async=is_async,
             has_didLoad=has_didLoad,
             is_variadic=is_variadic,
+            is_local=is_local,
             doc =doc #type:ignore
         )
         node.line = tok.line
@@ -1688,8 +1690,13 @@ class Parser:
         
         body = []
         while not self.check(TokenType.RBRACE) and not self.is_at_end():
+            doc = self.collect_doc()
+            is_local = False
+            if self.check(TokenType.LOCAL):
+                self.advance()
+                is_local = True
             if self.check(TokenType.FUNCTION):
-                body.append(self.parse_function())
+                body.append(self.parse_function(is_local=is_local, doc=doc))
             else:
                 raise MochaParseError(
                     f"Only function declarations are currently supported in extend blocks, got '{self.current().value}'",
@@ -2082,6 +2089,9 @@ class Parser:
                     statements.append(func)
                 elif self.check(TokenType.FUNCTION):
                     statements.append(self.parse_function(doc=doc))
+                elif self.check(TokenType.LOCAL):
+                    self.advance()
+                    statements.append(self.parse_function(is_local=True, doc=doc))
                 elif self.check(TokenType.EXTEND):
                     statements.append(self.parse_extend())
                 elif self.check(TokenType.TAG):

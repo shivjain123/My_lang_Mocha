@@ -1,7 +1,6 @@
 from "mocha-neuron" import *;
 
 function main(didLoad) -> null {
-    c_print_err("Entered main\n");
     rand_seed(42);
 
     // simple GRU test: process a sequence of 3 timesteps
@@ -25,7 +24,6 @@ function main(didLoad) -> null {
         // forward pass through sequence
         var h: Tensor = Tensor(1, 4);
         h.zeros();
-        c_print_err("Before forward x0\n");
 
         var h0: Tensor = gru.forward(x0, h);
         var h1: Tensor = gru.forward(x1, h0);
@@ -60,7 +58,7 @@ function main(didLoad) -> null {
             print(" Loss: ", loss);
         };
 
-        epoch = epoch + 1;
+        epoch++;
     };
 
     // final prediction
@@ -70,7 +68,7 @@ function main(didLoad) -> null {
     var h1: Tensor = gru.forward(x1, h0);
     var h2: Tensor = gru.forward(x2, h1);
     var out: Tensor = dense.forward(h2);
-    print("Final prediction (expect ~0): ");
+    print("Final prediction (expect ~0): ", newLine=true);
     out.show();
 
     // cleanup

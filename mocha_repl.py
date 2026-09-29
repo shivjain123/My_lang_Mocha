@@ -536,7 +536,7 @@ EXPR_TYPES = {
     'BinaryOp', 'UnaryOp', 'IntLiteral', 'FloatLiteral', 'StrLiteral',
     'BoolLiteral', 'FunctionCall', 'Identifier', 'IndexAccess',
     'TupleAccess', 'MemberAccess', 'PostIncrement', 'PreIncrement',
-    'PreIncrement', 'PostIncrement', 'PreDecrement', 'PostDecrement'
+    'PreDecrement', 'PostDecrement'
 }
 
 def format_val(val):

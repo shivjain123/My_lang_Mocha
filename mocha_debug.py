@@ -1,3 +1,4 @@
+""" Usage is mocha execute file.mch --debug"""
 import sys
 from mocha_lexer import Token
 from mocha_ast import Node

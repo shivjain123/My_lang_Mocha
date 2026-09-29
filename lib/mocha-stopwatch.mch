@@ -4,19 +4,19 @@
 """
 
 // ── C wrappers ──
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
-function c_time_ms() -> float native mocha_wrap_time_ms;
-function c_unix_time() -> float native mocha_wrap_unix_time;
-function c_datetime_now() -> str native mocha_wrap_datetime_now;
-function c_date_now() -> str native mocha_wrap_date_now;
-function c_time_now() -> str native mocha_wrap_time_now;
-function c_ampm_now() -> str native mocha_wrap_ampm_now;
-function c_day_now() -> str native mocha_wrap_day_now;
-function c_month_now() -> str native mocha_wrap_month_now;
-function c_year_now() -> str native mocha_wrap_year_now;
-function c_wall_ms() -> float native mocha_wrap_wall_ms;
-function c_wait_ms(ms: float) -> null native mocha_stopwatch_wait;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
+local function c_time_ms() -> float native mocha_wrap_time_ms;
+local function c_unix_time() -> float native mocha_wrap_unix_time;
+local function c_datetime_now() -> str native mocha_wrap_datetime_now;
+local function c_date_now() -> str native mocha_wrap_date_now;
+local function c_time_now() -> str native mocha_wrap_time_now;
+local function c_ampm_now() -> str native mocha_wrap_ampm_now;
+local function c_day_now() -> str native mocha_wrap_day_now;
+local function c_month_now() -> str native mocha_wrap_month_now;
+local function c_year_now() -> str native mocha_wrap_year_now;
+local function c_wall_ms() -> float native mocha_wrap_wall_ms;
+local function c_wait_ms(ms: float) -> null native mocha_stopwatch_wait;
 
 // ── Raw timestamp functions ──
 

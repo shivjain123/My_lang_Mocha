@@ -6,18 +6,6 @@ Pure Mocha 🐶 (almost)
 
 from "mocha-math" import *;
 
-function c_sin(x: float) -> float native mocha_wrap_sin;
-function c_cos(x: float) -> float native mocha_wrap_cos;
-function c_log(x: float) -> float native mocha_wrap_log;
-function c_tan(x: float) -> float native mocha_wrap_tan;
-function c_asin(x: float) -> float native mocha_wrap_asin;
-function c_acos(x: float) -> float native mocha_wrap_acos;
-function c_atan(x: float) -> float native mocha_wrap_atan;
-function c_sinh(x: float) -> float native mocha_wrap_sinh;
-function c_cosh(x: float) -> float native mocha_wrap_cosh;
-function c_tanh(x: float) -> float native mocha_wrap_tanh;
-function c_asinh(x: float) -> float native mocha_wrap_asinh;
-function c_atanh(x: float) -> float native mocha_wrap_atanh;
 function c_print_err(msg: str) -> null native mocha_print_stderr;
 function c_exit(code: int) -> null native mocha_exit;
 // =============================================
@@ -37,9 +25,9 @@ const COS: int = 9;
 const LN:  int = 10;
 const EXP: int = 11;
 const TAN:  int = 12;
-const ASIN: int = 13;
-const ACOS: int = 14;
-const ATAN: int = 15;
+const INV_SIN: int = 13;
+const INV_COS: int = 14;
+const INV_TAN: int = 15;
 const SINH: int = 16;
 const COSH: int = 17;
 const TANH: int = 18;
@@ -122,15 +110,15 @@ function tan_e(a: Expr) -> Expr {
 };
 
 function asin_e(a: Expr) -> Expr {
-    return Expr(ASIN, 0.0, "", a, null);
+    return Expr(INV_SIN, 0.0, "", a, null);
 };
 
 function acos_e(a: Expr) -> Expr {
-    return Expr(ACOS, 0.0, "", a, null);
+    return Expr(INV_COS, 0.0, "", a, null);
 };
 
 function atan_e(a: Expr) -> Expr {
-    return Expr(ATAN, 0.0, "", a, null);
+    return Expr(INV_TAN, 0.0, "", a, null);
 };
 
 function sinh_e(a: Expr) -> Expr {
@@ -231,21 +219,21 @@ function sym_diff_pass(e: Expr, var_name: str) -> Expr {
             return div_e(sym_diff(e.left, var_name), pow_e(cos_e(e.left), num(2.0)));
 
         // d/dx(asin(f)) = f' / sqrt(1 - f²)
-        case ASIN:
+        case INV_SIN:
             return div_e(
                 sym_diff(e.left, var_name),
                 pow_e(sub(num(1.0), pow_e(e.left, num(2.0))), num(0.5))
             );
 
         // d/dx(acos(f)) = -f' / sqrt(1 - f²)
-        case ACOS:
+        case INV_COS:
             return neg(div_e(
                 sym_diff(e.left, var_name),
                 pow_e(sub(num(1.0), pow_e(e.left, num(2.0))), num(0.5))
             ));
 
         // d/dx(atan(f)) = f' / (1 + f²)
-        case ATAN:
+        case INV_TAN:
             return div_e(
                 sym_diff(e.left, var_name),
                 add(num(1.0), pow_e(e.left, num(2.0)))
@@ -328,9 +316,9 @@ function sym_precedence(e: Expr) -> int {
     if (e.kind == LN)  { return 5; };
     if (e.kind == EXP) { return 5; };
     if (e.kind == TAN)  { return 5; };
-    if (e.kind == ASIN) { return 5; };
-    if (e.kind == ACOS) { return 5; };
-    if (e.kind == ATAN) { return 5; };
+    if (e.kind == INV_SIN) { return 5; };
+    if (e.kind == INV_COS) { return 5; };
+    if (e.kind == INV_TAN) { return 5; };
     if (e.kind == SINH) { return 5; };
     if (e.kind == COSH) { return 5; };
     if (e.kind == TANH) { return 5; };
@@ -434,13 +422,13 @@ function sym_print(e: Expr) -> str {
         case TAN:
             return "tan(" + sym_print(e.left) + ")";
 
-        case ASIN:
+        case INV_SIN:
             return "asin(" + sym_print(e.left) + ")";
 
-        case ACOS:
+        case INV_COS:
             return "acos(" + sym_print(e.left) + ")";
 
-        case ATAN:
+        case INV_TAN:
             return "atan(" + sym_print(e.left) + ")";
 
         case SINH:
@@ -525,7 +513,7 @@ function sym_equal(a: Expr, b: Expr) -> bool {
 
     // Unary nodes
     if (a.kind == NEG || a.kind == SIN || a.kind == COS || a.kind == LN || a.kind == EXP ||
-        a.kind == TAN || a.kind == ASIN || a.kind == ACOS || a.kind == ATAN ||
+        a.kind == TAN || a.kind == INV_SIN || a.kind == INV_COS || a.kind == INV_TAN ||
         a.kind == SINH || a.kind == COSH || a.kind == TANH) {
         return sym_equal(a.left, b.left);
     };
@@ -799,7 +787,7 @@ function sym_simplify(e: Expr) -> Expr {
             if (tan_inner.kind == NEG) { return neg(tan_e(tan_inner.left)); };
             return tan_e(tan_inner);
 
-        case ASIN:
+        case INV_SIN:
             var asin_inner: Expr = sym_simplify(e.left);
             // asin(0) → 0
             if (is_zero(asin_inner)) { return num(0.0); };
@@ -807,7 +795,7 @@ function sym_simplify(e: Expr) -> Expr {
             if (is_one(asin_inner)) { return num(1.5707963267948966); };
             return asin_e(asin_inner);
 
-        case ACOS:
+        case INV_COS:
             var acos_inner: Expr = sym_simplify(e.left);
             // acos(1) → 0
             if (is_one(acos_inner)) { return num(0.0); };
@@ -815,7 +803,7 @@ function sym_simplify(e: Expr) -> Expr {
             if (is_zero(acos_inner)) { return num(1.5707963267948966); };
             return acos_e(acos_inner);
 
-        case ATAN:
+        case INV_TAN:
             var atan_inner: Expr = sym_simplify(e.left);
             // atan(0) → 0
             if (is_zero(atan_inner)) { return num(0.0); };
@@ -909,47 +897,43 @@ function sym_eval(e: Expr, var_name: str, val: float) -> float {
 
         case SIN:
             var sv: float = sym_eval(e.left, var_name, val);
-            return c_sin(sv);
+            return sv.sin(RAD);
 
         case COS:
             var cv: float = sym_eval(e.left, var_name, val);
-            return c_cos(cv);
+            return cv.cos(RAD);
 
         case LN:
             var lv: float = sym_eval(e.left, var_name, val);
-            return c_log(lv);
+            return lv.log().real;
 
-        case EXP:
-            var exponent: float = sym_eval(e.left, var_name, val);
-            return c_pow(2.71828182845904523536, exponent);
-        
         case TAN:
             var tv: float = sym_eval(e.left, var_name, val);
-            return c_tan(tv);
+            return tv.tan(RAD);
 
-        case ASIN:
+        case INV_SIN:
             var asv: float = sym_eval(e.left, var_name, val);
-            return c_asin(asv);
+            return asv.inv_sin().real;
 
-        case ACOS:
+        case INV_COS:
             var acv: float = sym_eval(e.left, var_name, val);
-            return c_acos(acv);
+            return acv.inv_cos().real;
 
-        case ATAN:
+        case INV_TAN:
             var atv: float = sym_eval(e.left, var_name, val);
-            return c_atan(atv);
+            return atv.inv_tan();
 
         case SINH:
             var shv: float = sym_eval(e.left, var_name, val);
-            return c_sinh(shv);
+            return shv.sinh();
 
         case COSH:
             var chv: float = sym_eval(e.left, var_name, val);
-            return c_cosh(chv);
+            return chv.cosh();
 
         case TANH:
             var thv: float = sym_eval(e.left, var_name, val);
-            return c_tanh(thv);
+            return thv.tanh();
 
         default: return 0.0;
     };
@@ -1031,12 +1015,14 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
                 if (e.right.kind == SIN || e.right.kind == COS || e.right.kind == EXP || e.right.kind == LN) {
                     ibp_poly = e.left;
                     ibp_func = e.right;
+                    ibp_poly_found = 1;
                 };
             };
             if (e.right.kind == POW && e.right.left.kind == VAR && e.right.left.name == var_name && e.right.right.kind == NUM) {
                 if (e.left.kind == SIN || e.left.kind == COS || e.left.kind == EXP || e.left.kind == LN) {
                     ibp_poly = e.right;
                     ibp_func = e.left;
+                    ibp_poly_found = 1;
                 };
             };
             // x · sin(x), x · cos(x), x · e^x, x · ln(x)
@@ -1211,7 +1197,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
             return mul(e, var_e(var_name));
 
         // ∫asin(x) dx = x·asin(x) + sqrt(1-x²) + C
-        case ASIN:
+        case INV_SIN:
             if (e.left.kind == VAR && e.left.name == var_name) {
                 return add(
                     mul(e.left, asin_e(e.left)),
@@ -1221,7 +1207,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
             return mul(e, var_e(var_name));
 
         // ∫acos(x) dx = x·acos(x) - sqrt(1-x²) + C
-        case ACOS:
+        case INV_COS:
             if (e.left.kind == VAR && e.left.name == var_name) {
                 return sub(
                     mul(e.left, acos_e(e.left)),
@@ -1231,7 +1217,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
             return mul(e, var_e(var_name));
 
         // ∫atan(x) dx = x·atan(x) - ln(1+x²)/2 + C
-        case ATAN:
+        case INV_TAN:
             if (e.left.kind == VAR && e.left.name == var_name) {
                 return sub(
                     mul(e.left, atan_e(e.left)),
@@ -1329,7 +1315,6 @@ function sym_limit(e: Expr, var_name: str, point: float) -> float {
         var nv: float = sym_eval(e.left, var_name, point);
         var dv: float = sym_eval(e.right, var_name, point);
 
-        // ✅ clean substitution
         if (dv != 0.0) {
             return nv / dv;
         };
@@ -1370,9 +1355,13 @@ function sym_limit(e: Expr, var_name: str, point: float) -> float {
 
         // left → 0, check if right → ∞ by seeing if its reciprocal → 0
         if (ml == 0.0) {
-            var recip_r: float = sym_eval(e.right, var_name, point);
-            if (recip_r == 0.0) {
-                // genuine 0*∞ — rewrite f*g = f / (1/g)
+            if (mr == 0.0) {
+                // both sides → 0 — genuine 0*0, not 0*∞
+                return 0.0;
+            };
+            var recip_r: float = 1.0 / mr;
+            if (recip_r == 0.0 || (recip_r < 0.0 && 0.0 - recip_r < 0.000001) || (recip_r > 0.0 && recip_r < 0.0000001)) {
+                // right side's reciprocal is ~0 → right side is huge → genuine 0*∞
                 var rw: Expr = div_e(e.left, div_e(num(1.0), e.right));
                 return sym_limit(rw, var_name, point);
             };
@@ -1381,8 +1370,8 @@ function sym_limit(e: Expr, var_name: str, point: float) -> float {
 
         // right → 0
         if (mr == 0.0) {
-            var recip_l: float = sym_eval(e.left, var_name, point);
-            if (recip_l == 0.0) {
+            var recip_l: float = 1.0 / ml;
+            if (recip_l == 0.0 || (recip_l < 0.0 && 0.0 - recip_l < 0.000001) || (recip_l > 0.0 && recip_l < 0.0000001)) {
                 var rw2: Expr = div_e(e.right, div_e(num(1.0), e.left));
                 return sym_limit(rw2, var_name, point);
             };
@@ -1412,10 +1401,10 @@ function sym_limit_numerical(e: Expr, var_name: str, point: float) -> float {
         var rv: float = sym_eval(e.left, var_name, point + h) / den_right;
         var diff: float = lv - rv;
         if (diff < 0.0) { diff = 0.0 - diff; };
-        if (diff < 0.0001) {
-            return (lv + rv) / 2.0;
+        if (diff >= 0.0001) {
+            c_print_err("MochaLibWarn (mocha-sym): left/right estimates disagree, limit may not exist.");
         };
-        return (lv + rv) / 2.0;  // return average with implicit DNE warning
+        return (lv + rv) / 2.0;
     };
 
     // non-DIV — safe to eval directly at offset points
@@ -1423,8 +1412,8 @@ function sym_limit_numerical(e: Expr, var_name: str, point: float) -> float {
     var rv2: float = sym_eval(e, var_name, point + h);
     var diff2: float = lv2 - rv2;
     if (diff2 < 0.0) { diff2 = 0.0 - diff2; };
-    if (diff2 < 0.0001) {
-        return (lv2 + rv2) / 2.0;
+    if (diff2 >= 0.0001) {
+        c_print_err("MochaLibWarn (mocha-sym): left/right estimates disagree, limit may not exist.");
     };
     return (lv2 + rv2) / 2.0;
 };
@@ -1645,7 +1634,7 @@ function cheby_coeff(e: Expr, var_name: str, n: int, num_points: int) -> float {
     var sum: float = 0.0;
     var k: int = 0;
     while (k < num_points) {
-        var xk: float = c_cos((2.0 * float(k) + 1.0) * pi / (2.0 * float(num_points)));
+        var xk: float = ((2.0 * float(k) + 1.0) * pi / (2.0 * float(num_points))).cos(RAD);
         var fxk: float = sym_eval(e, var_name, xk);
         sum = sum + fxk * cheby_T(n, xk);
         k = k + 1;

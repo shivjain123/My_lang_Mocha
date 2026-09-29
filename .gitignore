@@ -33,3 +33,18 @@ wren/
 
 # ─── Node/VSCode Extension Build Artifacts ───────────────────────────────────
 node_modules/
+
+# ─── Debug / Trace Output ─────────────────────────────────────────────────────
+*.log
+*.map
+trace_output.txt
+
+# ─── Scratch / One-off Debug Test Files ──────────────────────────────────────
+avl_change_test.mch
+caller.mch
+chained_call_test.mch
+extend_private.mch
+lib_a.mch
+postfix_test.mch
+tokenizer_mini_test.mch
+tokenizer_rc.mch

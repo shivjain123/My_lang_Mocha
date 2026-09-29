@@ -2,13 +2,13 @@
 
 """ MOCHA STATS LIB """
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
-function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
-function c_erf(x: float) -> float native mocha_wrap_erf;
-function c_tgamma(x: float) -> float native mocha_wrap_tgamma;
-function c_lgamma(x: float) -> float native mocha_wrap_lgamma;
-function c_exp(x: float) -> float native mocha_wrap_exp;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
+local function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
+local function c_erf(x: float) -> float native mocha_wrap_erf;
+local function c_tgamma(x: float) -> float native mocha_wrap_tgamma;
+local function c_lgamma(x: float) -> float native mocha_wrap_lgamma;
+local function c_exp(x: float) -> float native mocha_wrap_exp;
 
 const EARTH_RADIUS_KM: float = 6371.0;
 
@@ -117,12 +117,15 @@ extend float[] {
         return sum / (this.length - 1);
     };
     function std_popu() -> float {
-        return c_sqrt(this.var_popu());
+        var v: float = this.var_popu();
+        return v.sqrt().real;
     };
 
     function std_sample() -> float {
-        return c_sqrt(this.var_sample());
+        var v: float = this.var_sample();
+        return v.sqrt().real;
     };
+
     function first_quart() -> float {
         if (this.length == 0) {
             c_print_err("MochaLibError (mocha-stats): first_quart() called on empty array.");
@@ -221,7 +224,7 @@ extend float[] {
             c_exit(2);
             return 0.0;
         };
-        return (val - m) / (s / c_sqrt(n));
+        return (val - m) / (s / n.sqrt().real);
     };
 
     // ===========================================================
@@ -462,7 +465,7 @@ function euclidean(a: float[], b: float[]) -> float {
         sum = sum + diff * diff;
         i++;
     };
-    return c_sqrt(sum);
+    return sum.sqrt().real;
 };
 
 function manhattan(a: float[], b: float[]) -> float {
@@ -552,8 +555,8 @@ function cosine(a: float[], b: float[]) -> float {
         mag_b = mag_b + b[i] * b[i];
         i++;
     };
-    mag_a = c_sqrt(mag_a);
-    mag_b = c_sqrt(mag_b);
+    mag_a = (mag_a).sqrt().real;
+    mag_b = (mag_b).sqrt().real;
     if (mag_a == 0.0 || mag_b == 0.0) {
         c_print_err("MochaLibError (mocha-stats): cosine() called with zero magnitude vector.");
         c_exit(2);
@@ -574,7 +577,7 @@ function haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float 
     var a: float = sin_dlat * sin_dlat +
                    sin_dlon * sin_dlon * cos_lat1 * cos_lat2;
 
-    var sqrt_a: float = c_sqrt(a);
+    var sqrt_a: float = a.sqrt().real;
     var c: float = 2.0 * sqrt_a.inv_sin().real;
     return EARTH_RADIUS_KM * c;
 };
@@ -622,7 +625,7 @@ class NormalDist {
     };
 
     function cdf(x: float) -> float {
-        var z: float = (x - this.mean_val) / (this.std_val * c_sqrt(2.0));
+        var z: float = (x - this.mean_val) / (this.std_val * (2.0).sqrt().real);
         return 0.5 * (1.0 + c_erf(z));
     };
 
@@ -929,8 +932,8 @@ class BetaDist {
 
     function skewness() -> float {
         var ab: float = this.alpha + this.beta;
-        var num: float = 2.0 * (this.beta - this.alpha) * c_sqrt(ab + 1.0);
-        var den: float = (ab + 2.0) * c_sqrt(this.alpha * this.beta);
+        var num: float = 2.0 * (this.beta - this.alpha) * (ab + 1.0).sqrt().real;
+        var den: float = (ab + 2.0) * (this.alpha * this.beta).sqrt().real;
         if (den == 0.0) {
             c_print_err("MochaLibError (mocha-stats): BetaDist skewness() undefined for these parameters.");
             c_exit(2);
@@ -938,6 +941,7 @@ class BetaDist {
         };
         return num / den;
     };
+
     function update(successes: int, failures: int) -> BetaDist {
         if (successes < 0 || failures < 0) {
             c_print_err("MochaLibError (mocha-stats): BetaDist update() requires non-negative successes and failures.");
@@ -1013,7 +1017,7 @@ class GaussianMixture {
         var result: float = 0.0;
         var i: int = 0;
         while (i < this.n_components) {
-            var z: float = (x - this.means[i]) / (this.stds[i] * c_sqrt(2.0));
+            var z: float = (x - this.means[i]) / (this.stds[i] * (2.0).sqrt().real);
             result = result + this.weights[i] * 0.5 * (1.0 + c_erf(z));
             i++;
         };
@@ -1086,7 +1090,7 @@ class FDist {
     // ─────────────────────────────────────────
     // log_beta: log B(a,b) = lgamma(a) + lgamma(b) - lgamma(a+b)
     // ─────────────────────────────────────────
-    function log_beta(a: float, b: float) -> float {
+    private function log_beta(a: float, b: float) -> float {
         return c_lgamma(a) + c_lgamma(b) - c_lgamma(a + b);
     };
 
@@ -1094,7 +1098,7 @@ class FDist {
     // reg_incomplete_beta: Iₓ(a,b)
     // Via Numerical recipes formula
     // ─────────────────────────────────────────
-    function beta_cf(x: float, a: float, b: float) -> float {
+    private function beta_cf(x: float, a: float, b: float) -> float {
         // Continued fraction for incomplete beta via Numerical Recipes method
         var tiny: float = 0.0000000001;
         var max_iter: int = 200;
@@ -1144,7 +1148,7 @@ class FDist {
         return h;
     };
 
-    function reg_incomplete_beta(x: float, a: float, b: float) -> float {
+    private function reg_incomplete_beta(x: float, a: float, b: float) -> float {
         if (x <= 0.0) { return 0.0; };
         if (x >= 1.0) { return 1.0; };
 

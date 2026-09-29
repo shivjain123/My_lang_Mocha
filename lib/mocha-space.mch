@@ -12,11 +12,11 @@ from "mocha-math" import *;
 
 //Bypasses fixed-point decimal scaling entirely. Use ONLY for values outside
 //safe fixed-point range (~1e13+). No drift protection — raw IEEE 754.
-function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
-function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
-function unsafe_add(a: float, b: float) -> float native mocha_unsafe_add;
-function unsafe_sub(a: float, b: float) -> float native mocha_unsafe_sub;
-function c_exp(x: float) -> float native mocha_wrap_exp;
+local function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
+local function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
+local function unsafe_add(a: float, b: float) -> float native mocha_unsafe_add;
+local function unsafe_sub(a: float, b: float) -> float native mocha_unsafe_sub;
+local function c_exp(x: float) -> float native mocha_wrap_exp;
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 

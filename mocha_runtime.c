@@ -194,17 +194,18 @@
 #include <ctype.h>
 #include <setjmp.h>
 #include <signal.h>
-#include <unistd.h>
 #include <limits.h>
 
 #ifdef _WIN32
     #include <windows.h>
+    #include <dbghelp.h>
     #include <bcrypt.h>
     #pragma comment(lib, "bcrypt.lib")
 #else
     #include <sys/random.h>   // getrandom (Linux) / getentropy (macOS)
     #include <time.h>         // clock_gettime — already included above but
                               // needed explicitly for CLOCK_MONOTONIC on some distros
+    #include <unistd.h>
 #endif
 
 // ── Crash handler — replaces SIGSEGV with a readable error ────────────────
@@ -241,6 +242,23 @@ static void mocha_crash_handler(int sig) {
     exit(128 + sig);
 }
 
+static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
+    EXCEPTION_RECORD* er = info->ExceptionRecord;
+    if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        uintptr_t base = (uintptr_t)GetModuleHandle(NULL);
+        fprintf(stderr, "[SEH] AV at exe+0x%llx, fault addr %p\n",
+                (unsigned long long)((uintptr_t)er->ExceptionAddress - base),
+                (void*)er->ExceptionInformation[1]);
+        void* st[16];
+        USHORT n = CaptureStackBackTrace(0, 16, st, NULL);
+        for (USHORT i = 0; i < n; i++)
+            fprintf(stderr, "[SEH]  frame %d: exe+0x%llx\n", i,
+                    (unsigned long long)((uintptr_t)st[i] - base));
+        fflush(stderr);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 /* ===============================================================
    Mocha Reference Counting (This is also partially working since \
    full was not possible yet.) \
@@ -249,56 +267,71 @@ static void mocha_crash_handler(int sig) {
    and Ink lib are remaining (Also Bloc scoping)
    =============================================================== */
 
+#define RC_MAGIC_LIVE 0xA11C0FFEEBEEF001ULL
+#define RC_MAGIC_DEAD 0xDEADDEADDEADDEADULL
+
 typedef struct MochaRCNode {
-    size_t                ref_count;
-    size_t                size;
-    struct MochaRCNode*   next;
+    size_t   ref_count;
+    size_t   size;
+    struct MochaRCNode* next;
+    uint64_t magic;
 } MochaRCNode;
 
 #define RC_NODE(ptr)  ((MochaRCNode*)(((uint8_t*)(ptr)) - sizeof(MochaRCNode)))
 #define RC_DATA(node) ((void*)(((uint8_t*)(node)) + sizeof(MochaRCNode)))
+#define RC_CANARY_SIZE 8
+#define RC_CANARY_BYTE 0xAB
 
 static MochaRCNode* rc_head = NULL;
 
+static void rc_die(const char* what, void* ptr) {
+    fprintf(stderr, "\n[RC] FATAL: %s on %p\n", what, ptr);
+    void* st[24];
+    USHORT n = CaptureStackBackTrace(1, 24, st, NULL);
+    uintptr_t base = (uintptr_t)GetModuleHandle(NULL);
+    for (USHORT i = 0; i < n; i++)
+        fprintf(stderr, "    [%2d] %p (exe+0x%llx)\n", i, st[i],
+                (unsigned long long)((uintptr_t)st[i] - base));
+    fflush(stderr);
+    _exit(97);
+}
+
 void* rc_alloc(size_t size) {
-    MochaRCNode* node = (MochaRCNode*)malloc(sizeof(MochaRCNode) + size);
-    if (!node) {
-        fprintf(stderr, "MochaRuntimeError: Out of memory!\n");
-        _exit(2);
-    }
+    MochaRCNode* node = (MochaRCNode*)malloc(sizeof(MochaRCNode) + size + RC_CANARY_SIZE);
+    if (!node) { fprintf(stderr, "MochaRuntimeError: Out of memory!\n"); _exit(2); }
     node->ref_count = 1;
     node->size      = size;
     node->next      = rc_head;
+    node->magic     = RC_MAGIC_LIVE;
     rc_head         = node;
     memset(RC_DATA(node), 0, size);
+    memset((uint8_t*)RC_DATA(node) + size, RC_CANARY_BYTE, RC_CANARY_SIZE);
     return RC_DATA(node);
 }
 
 void rc_retain(void* ptr) {
     if (!ptr) return;
-    RC_NODE(ptr)->ref_count++;
+    MochaRCNode* node = RC_NODE(ptr);
+    if (node->magic == RC_MAGIC_DEAD) rc_die("RETAIN AFTER FREE", ptr);
+    if (node->magic != RC_MAGIC_LIVE) rc_die("retain of non-RC/corrupt ptr", ptr);
+    node->ref_count++;
 }
 
 void rc_release(void* ptr) {
     if (!ptr) return;
     MochaRCNode* node = RC_NODE(ptr);
-    if (node->ref_count == 0) {
-        fprintf(stderr, "MochaRuntimeError: rc_release called on already-freed object!\n");
-        return;
-    }
-    node->ref_count--;
-    if (node->ref_count == 0) {
-        if (rc_head == node) {
-            rc_head = node->next;
-        } else {
-            MochaRCNode* cur = rc_head;
-            while (cur && cur->next != node) {
-                cur = cur->next;
-            }
-            if (cur) cur->next = node->next;
-        }
-        free(node);
-    }
+    if (node->magic == RC_MAGIC_DEAD) rc_die("DOUBLE RELEASE", ptr);
+    if (node->magic != RC_MAGIC_LIVE) rc_die("release of non-RC/corrupt ptr", ptr);
+    uint8_t* back = (uint8_t*)RC_DATA(node) + node->size;
+    for (size_t i = 0; i < RC_CANARY_SIZE; i++)
+        if (back[i] != RC_CANARY_BYTE) rc_die("BACK CANARY smashed", ptr);
+    if (--node->ref_count > 0) return;
+
+    if (rc_head == node) rc_head = node->next;
+    else { MochaRCNode* c = rc_head; while (c && c->next != node) c = c->next; if (c) c->next = node->next; }
+
+    node->magic = RC_MAGIC_DEAD;
+    free(node);
 }
 
 size_t rc_count(void* ptr) {
@@ -314,6 +347,7 @@ static char* rc_strdup(const char* src) {
 }
 
 void mocha_signal_handlers_init() {
+    AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
     signal(SIGSEGV, mocha_crash_handler);
     signal(SIGILL,  mocha_crash_handler); // illegal instruction
 }
@@ -455,6 +489,13 @@ static inline void* mocha_malloc_safe(size_t size) {
     return ptr;
 }
 #define malloc(size) mocha_malloc_safe(size)
+
+static inline char* mocha_strdup_safe(const char* s) {
+    char* ptr = strdup(s);
+    MOCHA_OOM_CHECK(ptr);
+    return ptr;
+}
+#define strdup(s) mocha_strdup_safe(s)
 
 /* ---- Bounds Checking ---- */
 
@@ -599,9 +640,21 @@ int32_t mocha_str_length(char *s) {
 }
 
 char* mocha_str_charat(char *s, int32_t index) {
-    if (index < 0 || index >= (int32_t)strlen(s)) {
-        fprintf(stderr, "MochaRuntimeError: charAt(%d) out of bounds for string of length %zu\n", index, strlen(s));
-        exit(2);
+    if (!s) return rc_alloc_string(0);
+    size_t len = strlen(s);
+    if (index < 0 || index >= (int32_t)len) {
+        // Print the actual string and caller info
+        fprintf(stderr, "\n========== charAt DEBUG ==========\n");
+        fprintf(stderr, "String: '%s'\n", s);
+        fprintf(stderr, "Length: %zu\n", len);
+        fprintf(stderr, "Index: %d\n", index);
+        fprintf(stderr, "===================================\n");
+        
+        // Print Mocha stack trace (if available)
+        mocha_stack_print();
+        
+        // Return empty string instead of crashing
+        return rc_alloc_string(0);
     }
     char *result = rc_alloc_string(1);
     result[0] = s[index]; result[1] = '\0';
@@ -1100,16 +1153,6 @@ double mocha_float_div(double a, double b) {
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to((a_s * (mocha_decimal)MOCHA_DECIMAL_SCALE) / b_s);
-}
-
-double mocha_float_mod(double a, double b) {
-    if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
-    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
-        return fmod(a, b);  // raw IEEE 754 fallback for large numbers
-    }
-    mocha_decimal a_s = decimal_from(a);
-    mocha_decimal b_s = decimal_from(b);
-    return decimal_to(a_s % b_s);
 }
 
 double mocha_float_mod(double a, double b) {
@@ -2295,7 +2338,9 @@ int32_t mocha_rand_int(int32_t min, int32_t max) {
 }
 
 int64_t mocha_rand_vast(int64_t min, int64_t max) {
-    return min + (rand() % (max - min + 1));
+    uint64_t range = (uint64_t)(max - min + 1);
+    uint64_t r = ((uint64_t)rand() << 32) ^ ((uint64_t)rand() << 16) ^ (uint64_t)rand();
+    return min + (int64_t)(r % range);
 }
 
 double mocha_rand_float(double min, double max) {
@@ -2352,22 +2397,33 @@ int mocha_bcrypt_rand_int(int min, int max) {
     return min + (int)(raw % range);
 }
 
+int64_t mocha_bcrypt_rand_vast(int64_t min, int64_t max) {
+    if (min >= max) return min;
+    uint64_t range = (uint64_t)(max - min + 1);
+    uint64_t limit = UINT64_MAX - (UINT64_MAX % range);
+    uint64_t raw;
+    do {
+        crypto_random_bytes(&raw, sizeof(raw));
+    } while (raw >= limit);
+    return min + (int64_t)(raw % range);
+}
+
 double mocha_bcrypt_rand_float(double min, double max) {
-    unsigned int raw = 0;
+    uint64_t raw = 0;
     crypto_random_bytes(&raw, sizeof(raw));
-    double normalized = (double)raw / (double)UINT_MAX;
+    double normalized = (double)(raw >> 11) / (double)(1ULL << 53);
     return min + normalized * (max - min);
 }
 
 double mocha_bcrypt_rand_unit() {
-    unsigned int raw = 0;
+    uint64_t raw = 0;
     crypto_random_bytes(&raw, sizeof(raw));
-    return (double)raw / (double)UINT_MAX;
+    return (double)(raw >> 11) / (double)(1ULL << 53);
 }
 
 const char* mocha_bcrypt_rand_ints(int min, int max, int count) {
     if (count <= 0 || count > 10000) return "";
-    static char buf[131072];
+    static _Thread_local char buf[131072];
     buf[0] = '\0';
     int pos = 0;
     for (int i = 0; i < count; i++) {
@@ -2396,28 +2452,10 @@ int mocha_bcrypt_rand_seed() {
 /* ============================================================
  * MOCHA-SYMCHA / MOCHA-MATVEC STRAGGLER WRAPPERS
  *
- * Plain C math passthroughs — remainder of these libs is
+ * Plain C math passthrough — remainder of these libs is
  * implemented in Mocha itself via dogfooding.
- *
- * These cannot be implemented in Mocha because they map
- * directly to hardware instructions (x86: fsin, fcos, fsqrt)
- * via C's math.h. Calling them through Mocha would add
- * unnecessary indirection over already-optimal CPU ops.
- * Also these are needed when I cannot afford my great Complex Semantices 😂
  * ============================================================ */
 
-double mocha_wrap_sin(double x)  { return sin(x);  }
-double mocha_wrap_cos(double x)  { return cos(x);  }
-double mocha_wrap_log(double x)  { return log(x);  }
-double mocha_wrap_tan(double x)  { return tan(x); }
-double mocha_wrap_asin(double x) { return asin(x); }
-double mocha_wrap_acos(double x) { return acos(x); }
-double mocha_wrap_atan(double x) { return atan(x); }
-double mocha_wrap_sinh(double x) { return sinh(x); }
-double mocha_wrap_cosh(double x) { return cosh(x); }
-double mocha_wrap_tanh(double x) { return tanh(x); }
-double mocha_wrap_asinh(double x) { return asinh(x); }
-double mocha_wrap_atanh(double x) { return atanh(x); }
 double mocha_wrap_sqrt_f(double x) { return sqrt(x); }
 
 /* ============================================================
@@ -2949,14 +2987,29 @@ void mocha_set_retype(MochaSet *s, int32_t new_type) {
 
 void mocha_set_negate(MochaSet *s) {
     if (s->elem_type == MOCHA_SET_INT) {
-        for (int32_t i = 0; i < s->size; i++)
-            *(int32_t *)((char *)s->data + i * s->elem_size) *= -1;
+        for (int32_t i = 0; i < s->size; i++) {
+            int32_t val;
+            char* p = (char*)s->data + i * s->elem_size;
+            memcpy(&val, p, sizeof(int32_t));
+            val *= -1;
+            memcpy(p, &val, sizeof(int32_t));
+        }
     } else if (s->elem_type == MOCHA_SET_FLOAT) {
-        for (int32_t i = 0; i < s->size; i++)
-            *(double *)((char *)s->data + i * s->elem_size) *= -1.0;
+        for (int32_t i = 0; i < s->size; i++) {
+            double val;
+            char* p = (char*)s->data + i * s->elem_size;
+            memcpy(&val, p, sizeof(double));
+            val *= -1.0;
+            memcpy(p, &val, sizeof(double));
+        }
     } else if (s->elem_type == MOCHA_SET_VAST) {
-        for (int32_t i = 0; i < s->size; i++)
-            *(int64_t *)((char *)s->data + i * s->elem_size) *= -1;
+        for (int32_t i = 0; i < s->size; i++) {
+            int64_t val;
+            char* p = (char*)s->data + i * s->elem_size;
+            memcpy(&val, p, sizeof(int64_t));
+            val *= -1;
+            memcpy(p, &val, sizeof(int64_t));
+        }
     } else {
         fprintf(stderr, "MochaRuntimeError: negate() only works on int, float, or vast sets.\n");
         exit(2);
@@ -3390,8 +3443,14 @@ static int mocha_sqlite3_collect_callback(void *unused, int argc,
         }
     }
     /* grow rows array */
-    mocha_sqlite3_result_rows = realloc(mocha_sqlite3_result_rows,
+    char*** tmp_rows = realloc(mocha_sqlite3_result_rows,
         (mocha_sqlite3_result_nrows + 1) * sizeof(char**));
+    if (!tmp_rows) {
+        fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+        return 1;  /* tells sqlite3_exec to abort — mocha_sqlite3_result_rows still valid, untouched */
+    }
+    mocha_sqlite3_result_rows = tmp_rows;
+
     mocha_sqlite3_result_rows[mocha_sqlite3_result_nrows] = malloc(argc * sizeof(char*));
     for (int j = 0; j < argc; j++) {
         mocha_sqlite3_result_rows[mocha_sqlite3_result_nrows][j] =
@@ -4894,10 +4953,6 @@ static double ink_map_y(double val, double min, double max,
 static InkPlot* ink_new(int is_scatter,
                         double* x, double* y, int n) {
     InkPlot* p = (InkPlot*)malloc(sizeof(InkPlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkPlot));
     p->width  = INK_WIDTH;
     p->height = INK_HEIGHT;
@@ -5426,10 +5481,6 @@ typedef InkBarChart BarChart;
 
 static InkBarChart* ink_new_bar(char** labels, double* values, int n) {
     InkBarChart* p = (InkBarChart*)malloc(sizeof(InkBarChart));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkBarChart));
     p->width      = INK_WIDTH;
     p->height     = INK_HEIGHT;
@@ -5866,10 +5917,6 @@ static void ink_heat_color(double t, int scheme, char* out) {
 static InkHeatmap* ink_new_heatmap(double data[][INK_HEAT_MAX_COLS],
                                     int rows, int cols) {
     InkHeatmap* p = (InkHeatmap*)malloc(sizeof(InkHeatmap));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkHeatmap));
     p->width        = INK_WIDTH;
     p->height       = INK_HEIGHT;
@@ -6140,10 +6187,6 @@ typedef InkPieChart PieChart;
 
 static InkPieChart* ink_new_pie(char** labels, double* values, int n) {
     InkPieChart* p = (InkPieChart*)malloc(sizeof(InkPieChart));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkPieChart));
     p->width        = INK_WIDTH;
     p->height       = INK_HEIGHT;
@@ -6418,10 +6461,6 @@ static int ink_sturges(int n) {
 
 static InkHistogram* ink_new_histogram(double* data, int n) {
     InkHistogram* p = (InkHistogram*)malloc(sizeof(InkHistogram));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkHistogram));
     p->width        = INK_WIDTH;
     p->height       = INK_HEIGHT;
@@ -6882,10 +6921,6 @@ static InkBoxStats ink_compute_stats(double* data, int n) {
 
 static InkBoxPlot* ink_new_boxplot(double* data, int n) {
     InkBoxPlot* p = (InkBoxPlot*)malloc(sizeof(InkBoxPlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkBoxPlot));
     p->width      = INK_WIDTH;
     p->height     = INK_HEIGHT;
@@ -7135,13 +7170,11 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
             }
 
             /* x axis label */
-            const char* lbl = p->series[s].label[0]
-                              ? p->series[s].label : p->series[s].label;
             if (p->series[s].label[0]) {
                 fprintf(f,
                     "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
                     "class=\"ink-tick\">%s</text>\n",
-                    cx, mt + ph + 18, lbl
+                    cx, mt + ph + 18, p->series[s].label
                 );
             }
         }
@@ -7400,10 +7433,6 @@ static double ink_silverman(double* data, int n) {
 
 static InkViolinPlot* ink_new_violin(double* data, int n) {
     InkViolinPlot* p = (InkViolinPlot*)malloc(sizeof(InkViolinPlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkViolinPlot));
     p->width     = INK_WIDTH;
     p->height    = INK_HEIGHT;
@@ -7924,10 +7953,6 @@ typedef InkBubbleChart BubbleChart;
 
 static InkBubbleChart* ink_new_bubble(double* x, double* y, double* z, int n) {
     InkBubbleChart* p = (InkBubbleChart*)malloc(sizeof(InkBubbleChart));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkBubbleChart));
     p->width    = INK_WIDTH;
     p->height   = INK_HEIGHT;
@@ -8368,10 +8393,6 @@ typedef InkCurvePlot CurvePlot;
 
 static InkCurvePlot* ink_new_curve(double* data, int n) {
     InkCurvePlot* p = (InkCurvePlot*)malloc(sizeof(InkCurvePlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkCurvePlot));
     p->width     = INK_WIDTH;
     p->height    = INK_HEIGHT;
@@ -8756,10 +8777,6 @@ typedef InkErrorPlot ErrorPlot;
 static InkErrorPlot* ink_new_errorplot(double* x, double* y,
                                         double* err_lo, double* err_hi, int n) {
     InkErrorPlot* p = (InkErrorPlot*)malloc(sizeof(InkErrorPlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkErrorPlot));
     p->width  = INK_WIDTH;
     p->height = INK_HEIGHT;
@@ -9253,10 +9270,6 @@ static double ink_t_value(double ci_level, int df) {
 /* ── Constructor ── */
 static InkLMPlot* ink_lm_new(double* x, double* y, int n) {
     InkLMPlot* p = (InkLMPlot*)malloc(sizeof(InkLMPlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkLMPlot));
     p->width    = INK_WIDTH;
     p->height   = INK_HEIGHT;
@@ -9701,10 +9714,6 @@ typedef struct {
 /* ── Constructor ── */
 static InkNetChart* ink_net_new_internal(void) {
     InkNetChart* p = (InkNetChart*)malloc(sizeof(InkNetChart));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkNetChart));
     p->width       = INK_WIDTH;
     p->height      = INK_HEIGHT;
@@ -10066,10 +10075,6 @@ typedef struct {
 /* ── Constructor ── */
 InkSkChart* ink_new_sankey(void) {
     InkSkChart* p = (InkSkChart*)malloc(sizeof(InkSkChart));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkSkChart));
     p->width  = INK_WIDTH;
     p->height = INK_HEIGHT;
@@ -10512,10 +10517,6 @@ static InkSTPlot* ink_st_new(
     double* wind_speed, double* wind_dir, int n)
 {
     InkSTPlot* p = (InkSTPlot*)malloc(sizeof(InkSTPlot));
-    if (!p) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): out of memory\n");
-        exit(2);
-    }
     memset(p, 0, sizeof(InkSTPlot));
     p->width              = ST_WIDTH;
     p->height             = ST_HEIGHT;
@@ -12610,27 +12611,6 @@ int32_t metero_imd_category(double wind_kmh) {
     return 5; /* Super Cyclonic Storm */
 }
 
-/* ENSO phase from ONI value */
-int32_t metero_enso_phase(double oni) {
-    if (oni >= 0.5)   return 1;  /* El Niño */
-    if (oni <= -0.5)  return -1; /* La Niña */
-    return 0; /* Neutral */
-}
-
-/* IOD phase from DMI value */
-int32_t metero_iod_phase(double dmi) {
-    if (dmi >= 0.4)   return 1;  /* Positive IOD */
-    if (dmi <= -0.4)  return -1; /* Negative IOD */
-    return 0; /* Neutral */
-}
-
-/* NAO/SAM phase */
-int32_t metero_ao_phase(double ao_index) {
-    if (ao_index >= 0.5)   return 1;  /* Positive */
-    if (ao_index <= -0.5)  return -1; /* Negative */
-    return 0; /* Neutral */
-}
-
 //Stragglers from Section 3. Got left out
 /* ISA pressure at altitude */
 double metero_isa_pressure(double altitude_m) {
@@ -12681,15 +12661,53 @@ double metero_thickness(double p_upper_mb, double p_lower_mb, double mean_temp_c
         mocha_ext_float_log(DIV(p_lower_mb, p_upper_mb))->real);
 }
 
-/* For Mocha-space */
-//Bypasses fixed-point decimal scaling entirely. Use ONLY for values outside
-//safe fixed-point range (~1e13+). No drift protection — raw IEEE 754.
+/* For Mocha-space (gravity constant, distance of sun etc. only) */
+// Bypasses fixed-point decimal scaling entirely. Use ONLY for values outside
+// safe fixed-point range (< 1e-9 or >= 1e13 in magnitude). No drift protection
+// — raw IEEE 754. Validated: at least one operand must be outside that range,
+// or this call errors loudly instead of silently misbehaving.
 
-double mocha_unsafe_mul(double a, double b) { return a * b; }
+#define MOCHA_UNSAFE_LOW  1e-9
+#define MOCHA_UNSAFE_HIGH 1e13
+
+static inline int mocha_in_unsafe_range(double v) {
+    if (v == 0.0) return 1; /* zero always allowed through */
+    double m = fabs(v);
+    return (m < MOCHA_UNSAFE_LOW) || (m >= MOCHA_UNSAFE_HIGH);
+}
+
+static inline void mocha_unsafe_guard(const char* fn, double a, double b) {
+    if (!mocha_in_unsafe_range(a) && !mocha_in_unsafe_range(b)) {
+        fprintf(stderr,
+            "MochaRuntimeError: %s called with both operands (%.17g, %.17g) "
+            "inside safe fixed-point range [1e-9, 1e13). Use fixed-point "
+            "arithmetic\n by using normal +-*/ operators instead of unsafe_* here.\n", fn, a, b);
+        exit(2);
+    }
+}
+
+double mocha_unsafe_mul(double a, double b) {
+    mocha_unsafe_guard("mocha_unsafe_mul", a, b);
+    return a * b;
+}
+
 double mocha_unsafe_div(double a, double b) {
+    mocha_unsafe_guard("mocha_unsafe_div", a, b);
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
     return a / b;
 }
-double mocha_unsafe_add(double a, double b) { return a + b; }
-double mocha_unsafe_sub(double a, double b) { return a - b; }
-double mocha_unsafe_mod(double a, double b) { return fmod(a, b); }
+
+double mocha_unsafe_add(double a, double b) {
+    mocha_unsafe_guard("mocha_unsafe_add", a, b);
+    return a + b;
+}
+
+double mocha_unsafe_sub(double a, double b) {
+    mocha_unsafe_guard("mocha_unsafe_sub", a, b);
+    return a - b;
+}
+
+double mocha_unsafe_mod(double a, double b) {
+    mocha_unsafe_guard("mocha_unsafe_mod", a, b);
+    return fmod(a, b);
+}

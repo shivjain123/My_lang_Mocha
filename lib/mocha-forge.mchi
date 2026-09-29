@@ -3,12 +3,9 @@
 
 // mocha-lib-type: compiled
 
-// mocha-lib-deps: mocha-stats, mocha-string
-
-// mocha-lib-deps: mocha-sqlite
+// mocha-lib-deps: mocha-stats, mocha-string, mocha-sqlite
 
 const RAND: int = -999999;
-function forge_db_open(path: str) -> null;
 function forge_db_setup(db: null) -> null;
 function forge_db_write_meta(db: null, key: str, value: str) -> null;
 function forge_db_read_meta(db: null, key: str) -> str;

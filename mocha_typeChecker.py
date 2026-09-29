@@ -99,6 +99,7 @@
 # ============================================================
 
 from mocha_ast import *
+import sys
 
 # ============================================================
 # TYPE CHECKER ERROR
@@ -146,7 +147,7 @@ class SymbolTable:
 
     def declare(self, name: str, type_: str,
                 is_const=False, is_function=False,
-                is_class=False, visibility="public"):
+                is_class=False, visibility="public", file=None):
         """
         Declare a new name in the CURRENT scope.
         Raises error if already declared in this scope.
@@ -163,6 +164,7 @@ class SymbolTable:
             "is_function": is_function,
             "is_class":    is_class,
             "visibility":  visibility,
+            "file":        file,
         }
 
     def lookup(self, name: str) -> dict:
@@ -202,6 +204,7 @@ class TypeChecker:
 
     def __init__(self):
         self.symbols        = SymbolTable()
+        self.current_file   = None
         self.current_class  = None
         self.current_return = None
         self.errors         = []
@@ -1082,12 +1085,6 @@ class TypeChecker:
         # push on 2D array — row by default, col=true for column push
         if func_name == "push":
             if obj_type and ("[][]" in obj_type or obj_type.endswith("[][]")):
-                has_col_kwarg = any(
-                    isinstance(arg, Assignment) and
-                    isinstance(arg.target, Identifier) and
-                    arg.target.name == "col"
-                    for arg in node.args
-                )
                 positional_args = [
                     arg for arg in node.args
                     if not (isinstance(arg, Assignment) and isinstance(arg.target, Identifier))
@@ -1159,13 +1156,48 @@ class TypeChecker:
 
         #Lookup!
         if obj_type and obj_type != "unknown":
-            symbol = self.symbols.lookup_safe(f"{obj_type}.{func_name}")
+            symbol, found_in = self.lookup_member(obj_type, func_name)
             if symbol:
+                visibility = symbol.get("visibility", "public")
+
+                if visibility == "private":
+                    if self.current_class != found_in:
+                        self.error(
+                            f"'{func_name}' is private to '{found_in}' "
+                            f"and cannot be called from outside", node
+                        )
+
+                elif visibility == "protected":
+                    if self.current_class is None or \
+                    found_in is None or               \
+                    (self.current_class != found_in and \
+                        not self.is_subclass_of(self.current_class, found_in)):
+                        self.error(
+                            f"'{func_name}' is protected in '{found_in}' "
+                            f"and cannot be called from '{self.current_class or 'global scope'}'", node
+                        )
+
+                elif visibility == "local":
+                    if self.current_file != symbol.get("file"):
+                        self.error(
+                            f"'{func_name}' is local to its file "
+                            f"and cannot be called from outside", node
+                        )
+
                 return symbol["type"]
 
         symbol = self.symbols.lookup_safe(func_name)
         if symbol is None:
             return "unknown"
+
+        visibility = symbol.get("visibility", "public")
+        if visibility == "local":
+            if self.current_file != symbol.get("file"):
+                self.error(
+                    f"'{func_name}' is local to its file "
+                    f"and cannot be called from outside", node
+                )
+
         return symbol["type"]
 
     # -------------------------------------------------------
@@ -1764,7 +1796,11 @@ class TypeChecker:
     
     def check_function(self, node):
         if not self.symbols.lookup_safe(node.name):
-            self.symbols.declare(node.name, node.return_type, is_function=True)
+            visibility = "local" if getattr(node, 'is_local', False) else "public"
+            self.symbols.declare(
+                node.name, node.return_type, is_function=True,
+                visibility=visibility, file=self.current_file
+            )
 
         prev_return = self.current_return
         self.current_return = node.return_type
@@ -1797,6 +1833,8 @@ class TypeChecker:
     def check_extend(self, node: ExtendDecl):
         prev_class = self.current_class
         self.current_class = node.type_name
+        prev_file = self.current_file
+        self.current_file = getattr(node, 'source_file', None)
 
         for func in node.body:
             # Register 'this' as the extended type
@@ -1806,6 +1844,7 @@ class TypeChecker:
             self.symbols.pop_scope()
 
         self.current_class = prev_class
+        self.current_file = prev_file
     
     def is_subclass_of(self, cls: str, parent: str) -> bool:
         """Walk up the inheritance chain to see if cls descends from parent"""
@@ -2069,7 +2108,11 @@ class TypeChecker:
                         node=node
                     )
                 else:
-                    self.symbols.declare(node.name, node.return_type, is_function=True)
+                    visibility = "local" if getattr(node, 'is_local', False) else "public"
+                    self.symbols.declare(
+                        node.name, node.return_type, is_function=True,
+                        visibility=visibility, file=getattr(node, 'source_file', None)
+                    )
             elif isinstance(node, ClassDecl):
                 self.class_nodes[node.name] = node
                 if not self.symbols.lookup_safe(node.name):
@@ -2083,7 +2126,11 @@ class TypeChecker:
                 # Register extension methods as "type_name.method_name"
                 for func in node.body:
                     key = f"{node.type_name}.{func.name}"
-                    self.symbols.declare(key, func.return_type, is_function=True)
+                    visibility = "local" if getattr(func, 'is_local', False) else "public"
+                    self.symbols.declare(
+                        key, func.return_type, is_function=True,
+                        visibility=visibility, file=getattr(node, 'source_file', None)
+                    )
             elif isinstance(node, TagDecl):
                 self.tag_types.add(node.name)
                 # Register tag type itself
@@ -2112,6 +2159,7 @@ class TypeChecker:
                 pass  # already handled in pre-pass
 
             elif isinstance(node, FunctionDecl):
+                self.current_file = getattr(node, 'source_file', None)
                 self.check_function(node)
 
             elif isinstance(node, MethodDecl):

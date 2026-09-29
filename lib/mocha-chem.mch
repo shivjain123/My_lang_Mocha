@@ -5,9 +5,9 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_exp(x: float) -> float native mocha_wrap_exp;
-function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
-function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
+local function c_exp(x: float) -> float native mocha_wrap_exp;
+local function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
+local function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
 const R_GAS: float = 0.082057;
 
 ~~ moles_from_mass: grams to moles given molar mass (g/mol)

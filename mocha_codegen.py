@@ -3,8 +3,8 @@
 # ============================================================
 
 from mocha_ast import *
-from typing import Optional, cast
-import os, platform
+from typing import Optional, cast as typing_cast
+import os, platform, sys
 
 class MochaCodeGenError(Exception):
     def __init__(self, message, line=0, col=0):
@@ -205,6 +205,20 @@ class CodeGen:
 
         #Built-in Format for strings
         self.method_return_types["mocha_ext_str_format"] = "i8*"
+
+        self.owned_str_locals = []         # tracks which locals are var-decl'd strings (not params)
+        self.owned_arr_locals = []         # tracks which locals are var-decl'd 1D arrays (not params)
+        self.owned_tuple_locals = []
+        self.owned_set_locals = []
+        self.owned_dict_locals = []
+        self.owned_arr2d_locals = []
+        self.owned_complex_locals = []
+
+        # === FUNCTION CONTEXT ===
+        # Track current function's return type for RC cleanup
+        self.current_mocha_return_type = None
+        self.current_function_name = None
+        self.current_param_names = []
 
     # -------------------------------------------------------
     # Helpers
@@ -501,7 +515,7 @@ class CodeGen:
 
         fields = self.class_fields.get(class_name, [])
         size = 0
-        for field_name, llvm_type in fields:
+        for _, llvm_type in fields:
             if llvm_type in LLVM_SIZES:
                 size += LLVM_SIZES[llvm_type]
             elif llvm_type.startswith("%struct."):
@@ -540,63 +554,65 @@ class CodeGen:
             self.emit(f"  {tmp} = trunc i8 {reg} to i1")
         return tmp
     
-    def alloca_at_entry(self, llvm_type: str, name: Optional[str] = None) -> str:
+    def alloca_at_entry(self, llvm_type: str, name: Optional[str] = None, init_null: bool = False) -> str:
         if name is None:
             name = self.fresh_temp()
         if not any(a.startswith(f"  {name} = alloca") for a in self.entry_allocas):
             self.entry_allocas.append(f"  {name} = alloca {llvm_type}")
+            if init_null:
+                zero = "null" if llvm_type.endswith("*") else "0"
+                self.entry_allocas.append(f"  store {llvm_type} {zero}, {llvm_type}* {name}")
         return name
     
     def emit_release_owned_str_locals(self):
-        for name in self.owned_str_locals:
-            ptr, llvm_type = self.locals[name]
+        for ptr in self.owned_str_locals:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = load i8*, i8** {ptr}")
             self.emit(f"  call void @rc_release(i8* {tmp})")
     
     def emit_release_owned_arr_locals(self):
-        for name in self.owned_arr_locals:
-            ptr, llvm_type = self.locals[name]
+        for ptr, elem_is_str in self.owned_arr_locals:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = load %MochaArray*, %MochaArray** {ptr}")
-            mocha_type = self.local_mocha_types.get(name, "")
-            elem_is_str = 1 if self.is_str_array_type(mocha_type) else 0
             self.emit(f"  call void @mocha_array_release(%MochaArray* {tmp}, i32 {elem_is_str})")
-    
-    def emit_release_owned_tuple_locals(self):
-        for name in self.owned_tuple_locals:
-            ptr, llvm_type = self.locals[name]
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = load %MochaTuple*, %MochaTuple** {ptr}")
-            self.emit(f"  call void @mocha_tuple_release(%MochaTuple* {tmp})")
-    
-    def emit_release_owned_set_locals(self):
-        for name in self.owned_set_locals:
-            ptr, llvm_type = self.locals[name]
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = load %MochaSet*, %MochaSet** {ptr}")
-            self.emit(f"  call void @mocha_set_release(%MochaSet* {tmp})")
-    
-    def emit_release_owned_dict_locals(self):
-        for name in self.owned_dict_locals:
-            ptr, llvm_type = self.locals[name]
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = load %MochaDict*, %MochaDict** {ptr}")
-            self.emit(f"  call void @mocha_dict_release(%MochaDict* {tmp})")
-    
+
     def emit_release_owned_arr2d_locals(self):
-        for name in self.owned_arr2d_locals:
-            ptr, llvm_type = self.locals[name]
+        for ptr in self.owned_arr2d_locals:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = load %MochaArray2D*, %MochaArray2D** {ptr}")
             self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {tmp})")
 
+    def emit_release_owned_tuple_locals(self):
+        for name in self.owned_tuple_locals:
+            if name in self.locals:
+                ptr, _ = self.locals[name]
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = load %MochaTuple*, %MochaTuple** {ptr}")
+                self.emit(f"  call void @mocha_tuple_release(%MochaTuple* {tmp})")
+    
+    def emit_release_owned_set_locals(self):
+        for name in self.owned_set_locals:
+            if name in self.locals:
+                ptr, _ = self.locals[name]
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = load %MochaSet*, %MochaSet** {ptr}")
+                self.emit(f"  call void @mocha_set_release(%MochaSet* {tmp})")
+    
+    def emit_release_owned_dict_locals(self):
+        for name in self.owned_dict_locals:
+            if name in self.locals:
+                ptr, _ = self.locals[name]
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = load %MochaDict*, %MochaDict** {ptr}")
+                self.emit(f"  call void @mocha_dict_release(%MochaDict* {tmp})")
+
     def emit_release_owned_complex_locals(self):
         for name in self.owned_complex_locals:
-            ptr, llvm_type = self.locals[name]
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = load %struct.MochaComplex*, %struct.MochaComplex** {ptr}")
-            self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {tmp})")
+            if name in self.locals:
+                ptr, _ = self.locals[name]
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = load %struct.MochaComplex*, %struct.MochaComplex** {ptr}")
+                self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {tmp})")
     
     def is_str_array_type(self, mocha_type: str) -> bool:
         return mocha_type == "str[]"
@@ -1366,6 +1382,15 @@ class CodeGen:
         if op_kind in ("str_eq", "str_ne"):
             cmp = self.fresh_temp()
             self.emit(f"  {cmp} = call i32 @mocha_str_eq(i8* {left_reg}, i8* {right_reg})")
+
+            # RC: release any fresh (non-variable) operand right after the comparison —
+            # mocha_str_eq only reads the strings, never takes ownership, and a fresh
+            # operand (e.g. an array index-read) is orphaned after this call.
+            if not isinstance(node.left, Identifier):
+                self.emit(f"  call void @rc_release(i8* {left_reg})")
+            if not isinstance(node.right, Identifier):
+                self.emit(f"  call void @rc_release(i8* {right_reg})")
+
             result = self.fresh_temp()
             if op_kind == "str_eq":
                 self.emit(f"  {result} = icmp ne i32 {cmp}, 0")
@@ -1618,6 +1643,12 @@ class CodeGen:
             if val_arg is None:
                 raise MochaCodeGenError(f"'{member}' requires a value argument", node.line, node.col)
             val_reg, val_type = self.gen_expr(val_arg)
+
+            # RC: array now co-owns this value — retain the actual string pointer
+            # BEFORE boxing (box_value's returned address is a plain malloc'd box,
+            # not an RC'd pointer — retaining that would corrupt unrelated memory).
+            if val_type == "i8*":
+                self.emit(f"  call void @rc_retain(i8* {val_reg})")
 
             cast = self.box_value(val_reg, val_type)
 
@@ -1917,7 +1948,7 @@ class CodeGen:
 
                 for arg in named:
                     # key → i8*
-                    key_str = cast(Identifier, arg.target).name
+                    key_str = typing_cast(Identifier, arg.target).name
                     key_global = self.fresh_str_global(key_str)
                     key_len = len(key_str.encode('utf-8')) + 1
                     key_reg = self.fresh_temp()
@@ -2037,6 +2068,13 @@ class CodeGen:
             arg_str = ", ".join(args)
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call {ret_llvm} @{func_name}({arg_str})")
+
+            # RC: release the receiver if it was fresh (not a plain variable) —
+            # this method reads it but doesn't own it, so nothing else releases
+            # it if we don't. Fixes leak on chained calls like a.trimLeft().trimRight()
+            if not isinstance(node.name.obj, Identifier):
+                self.emit(f"  call void @rc_release(i8* {s_reg})")
+                
             return (tmp, ret_llvm)
 
     def gen_struct_method_call(self, obj_ptr, obj_llvm_type, member, node):
@@ -2236,6 +2274,40 @@ class CodeGen:
             if obj_type == "i8*":
                 return self.gen_str_method_call(obj_reg, member, node)
 
+            elif obj_type == "double":
+                method_key  = f"mocha_ext_float_{member}"
+                actual_name = self.ext_native_names.get(method_key, method_key)
+                args = []
+                for arg in node.args:
+                    if isinstance(arg, Assignment):
+                        if isinstance(arg.target, Identifier):
+                            reg, typ = self.gen_expr(arg.value)
+                            args.append((reg, typ))
+                    else:
+                        reg, typ = self.gen_expr(arg)
+                        args.append((reg, typ))
+                if method_key in self.method_return_types:
+                    ret_type = self.method_return_types[method_key]
+                    all_args = [(obj_reg, "double")] + args
+                    return self._emit_call(ret_type, actual_name, all_args)
+
+            elif obj_type == "i32":
+                method_key  = f"mocha_ext_int_{member}"
+                actual_name = self.ext_native_names.get(method_key, method_key)
+                args = []
+                for arg in node.args:
+                    if isinstance(arg, Assignment):
+                        if isinstance(arg.target, Identifier):
+                            reg, typ = self.gen_expr(arg.value)
+                            args.append((reg, typ))
+                    else:
+                        reg, typ = self.gen_expr(arg)
+                        args.append((reg, typ))
+                if method_key in self.method_return_types:
+                    ret_type = self.method_return_types[method_key]
+                    all_args = [(obj_reg, "i32")] + args
+                    return self._emit_call(ret_type, actual_name, all_args)
+
             elif obj_type == "%MochaArray*":
                 tmp_ptr = self.fresh_temp()
                 self.emit(f"  {tmp_ptr} = alloca %MochaArray*")
@@ -2257,6 +2329,52 @@ class CodeGen:
 
             elif obj_type == "%struct.MochaComplex*":
                 return self._dispatch_struct_method(obj_reg, "%struct.MochaComplex*", COMPLEX_METHOD_MAP, "Complex", member, node)
+
+            elif obj_type.startswith("%struct.") and obj_type.endswith("*"):
+                tmp_ptr = self.fresh_temp()
+                self.emit(f"  {tmp_ptr} = alloca {obj_type}")
+                self.emit(f"  store {obj_type} {obj_reg}, {obj_type}* {tmp_ptr}")
+                return self.gen_struct_method_call(tmp_ptr, obj_type, member, node)
+
+        elif isinstance(obj, TypeCast):
+            obj_reg, obj_type = self.gen_type_cast(obj)
+
+            if obj_type == "i8*":
+                return self.gen_str_method_call(obj_reg, member, node)
+
+            elif obj_type == "double":
+                method_key  = f"mocha_ext_float_{member}"
+                actual_name = self.ext_native_names.get(method_key, method_key)
+                args = []
+                for arg in node.args:
+                    if isinstance(arg, Assignment):
+                        if isinstance(arg.target, Identifier):
+                            reg, typ = self.gen_expr(arg.value)
+                            args.append((reg, typ))
+                    else:
+                        reg, typ = self.gen_expr(arg)
+                        args.append((reg, typ))
+                if method_key in self.method_return_types:
+                    ret_type = self.method_return_types[method_key]
+                    all_args = [(obj_reg, "double")] + args
+                    return self._emit_call(ret_type, actual_name, all_args)
+
+            elif obj_type == "i32":
+                method_key  = f"mocha_ext_int_{member}"
+                actual_name = self.ext_native_names.get(method_key, method_key)
+                args = []
+                for arg in node.args:
+                    if isinstance(arg, Assignment):
+                        if isinstance(arg.target, Identifier):
+                            reg, typ = self.gen_expr(arg.value)
+                            args.append((reg, typ))
+                    else:
+                        reg, typ = self.gen_expr(arg)
+                        args.append((reg, typ))
+                if method_key in self.method_return_types:
+                    ret_type = self.method_return_types[method_key]
+                    all_args = [(obj_reg, "i32")] + args
+                    return self._emit_call(ret_type, actual_name, all_args)
 
             elif obj_type.startswith("%struct.") and obj_type.endswith("*"):
                 tmp_ptr = self.fresh_temp()
@@ -2507,7 +2625,7 @@ class CodeGen:
         if func_name == "tell":
             tmp = self.fresh_temp()
             if args:
-                prompt_reg, prompt_type = args[0]
+                prompt_reg, _ = args[0]
                 # ensure it's a loaded i8*, not a double pointer
                 self.emit(f"  {tmp} = call i8* @mocha_tell(i8* {prompt_reg})")
             else:
@@ -2583,7 +2701,7 @@ class CodeGen:
             computed = self.compute_struct_size(func_name) # type: ignore
             self.emit(f"  {size} = add i64 0, {computed}  ; sizeof {func_name}")
             self.emit(f"  {raw} = call i8* @malloc(i64 {size})")
-            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 64, i1 false)")
+            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 {computed}, i1 false)")
             self.emit(f"  {obj} = bitcast i8* {raw} to {struct_ptr_type}")
 
             # ← always call constructor, args or not
@@ -3025,7 +3143,7 @@ class CodeGen:
             self.gen_expr(node)
 
     def gen_var_decl(self, node):
-        #Tuples!
+        # Tuples!
         if node.type.startswith("("):
             val_reg, val_type = self.gen_expr(node.value)
 
@@ -3035,7 +3153,7 @@ class CodeGen:
                 self.emit(f"  call void @mocha_tuple_retain(%MochaTuple* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
-            self.alloca_at_entry("%MochaTuple*", ptr)
+            self.alloca_at_entry("%MochaTuple*", ptr, init_null=True)
             self.emit(f"  store %MochaTuple* {val_reg}, %MochaTuple** {ptr}")
             self.locals[node.name] = (ptr, "%MochaTuple*")
             self.local_mocha_types[node.name] = node.type
@@ -3056,14 +3174,14 @@ class CodeGen:
                 self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
-            self.alloca_at_entry("%MochaDict*", ptr)
+            self.alloca_at_entry("%MochaDict*", ptr, init_null=True)
             self.emit(f"  store %MochaDict* {val_reg}, %MochaDict** {ptr}")
             self.locals[node.name] = (ptr, "%MochaDict*")
             self.local_mocha_types[node.name] = "dict"
             self.owned_dict_locals.append(node.name)
             return
         
-        #Arrays!
+        # Arrays!
         if "[" in node.type:
             # Check if it's a 2D array type e.g. "int[3][3]" or "int[][]"
             elem_type = node.type
@@ -3079,21 +3197,19 @@ class CodeGen:
                 if isinstance(node.value, Identifier):
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
-                self.alloca_at_entry("%MochaArray2D*", ptr)
+                self.alloca_at_entry("%MochaArray2D*", ptr, init_null=True)
                 self.emit(f"  store %MochaArray2D* {val_reg}, %MochaArray2D** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaArray2D*")
-                self.owned_arr2d_locals.append(node.name)
+                self.owned_arr2d_locals.append(ptr)   # was: node.name
             else:
-                # RC: retain if borrowed from an existing variable; fresh values
-                # (array literals, function calls returning arrays) already have
-                # ref_count=1 from mocha_array_new and don't need an extra retain.
                 if isinstance(node.value, Identifier):
                     self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
 
-                self.alloca_at_entry("%MochaArray*", ptr)
+                self.alloca_at_entry("%MochaArray*", ptr, init_null=True)
                 self.emit(f"  store %MochaArray* {val_reg}, %MochaArray** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaArray*")
-                self.owned_arr_locals.append(node.name)
+                elem_is_str = 1 if self.is_str_array_type(node.type) else 0
+                self.owned_arr_locals.append((ptr, elem_is_str))   # was: node.name
             self.local_mocha_types[node.name] = node.type
             return
         
@@ -3106,7 +3222,7 @@ class CodeGen:
                 s = self.fresh_temp()
                 self.emit(f"  {s} = call %MochaSet* @mocha_set_new(i32 {tag})")
                 ptr = self.unique_ptr_name(node.name)
-                self.alloca_at_entry("%MochaSet*", ptr)
+                self.alloca_at_entry("%MochaSet*", ptr, init_null=True)
                 self.emit(f"  store %MochaSet* {s}, %MochaSet** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaSet*")
                 self.local_mocha_types[node.name] = node.type
@@ -3121,7 +3237,7 @@ class CodeGen:
                 self.emit(f"  call void @mocha_set_retain(%MochaSet* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
-            self.alloca_at_entry("%MochaSet*", ptr)
+            self.alloca_at_entry("%MochaSet*", ptr, init_null=True)
             self.emit(f"  store %MochaSet* {val_reg}, %MochaSet** {ptr}")
             self.locals[node.name] = (ptr, "%MochaSet*")
             self.local_mocha_types[node.name] = node.type
@@ -3139,7 +3255,7 @@ class CodeGen:
                 self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
-            self.alloca_at_entry("%struct.MochaComplex*", ptr)
+            self.alloca_at_entry("%struct.MochaComplex*", ptr, init_null=True)
             self.emit(f"  store %struct.MochaComplex* {val_reg}, %struct.MochaComplex** {ptr}")
             self.locals[node.name] = (ptr, "%struct.MochaComplex*")
             self.local_mocha_types[node.name] = node.type
@@ -3162,7 +3278,12 @@ class CodeGen:
         # General ← for int/str/float/bool/vast
         llvm_type = to_llvm_type(node.type)
         ptr = self.unique_ptr_name(node.name)
-        self.alloca_at_entry(llvm_type, ptr)
+        self.alloca_at_entry(llvm_type, ptr, init_null=(node.type == "str"))
+
+        if node.type == "str":
+            old_reg = self.fresh_temp()
+            self.emit(f"  {old_reg} = load i8*, i8** {ptr}")
+            self.emit(f"  call void @rc_release(i8* {old_reg})")
 
         # If expression returned void, store a null/zero default instead
         if val_type == "void" or val_reg == "void":
@@ -3210,7 +3331,7 @@ class CodeGen:
         self.local_mocha_types[node.name] = node.type
 
         if node.type == "str":
-            self.owned_str_locals.append(node.name)
+            self.owned_str_locals.append(ptr)
 
     def gen_const_decl(self, node):
         if isinstance(node.value, IntLiteral):
@@ -3814,7 +3935,7 @@ class CodeGen:
         self.emit(f"  store %MochaArray* {result_arr}, %MochaArray** {arr_ptr}")
 
         # Generate iterable
-        iter_reg, iter_type = self.gen_expr(node.iterable)
+        iter_reg, _ = self.gen_expr(node.iterable)
 
         # Get length
         len_tmp = self.fresh_temp()
@@ -4006,7 +4127,7 @@ class CodeGen:
                 if isinstance(case.pattern, Identifier):
                     name = case.pattern.name
                     if name in self.lib_constants:
-                        const_val, const_type = self.lib_constants[name]
+                        const_val, _ = self.lib_constants[name]
                         pat_reg = const_val
                     elif name in self.globals:
                         ptr, llvm_type = self.globals[name]
@@ -4204,6 +4325,7 @@ class CodeGen:
             "vast[]":   "%MochaArray*",
             "int[][]":  "%MochaArray2D*",
             "float[][]":"%MochaArray2D*",
+            "str[][]":"%MochaArray2D*",
         }
 
         this_llvm = type_to_llvm.get(node.type_name, f"%struct.{node.type_name}*")
@@ -4224,14 +4346,23 @@ class CodeGen:
             param_str = ", ".join(params)
 
             prev_return              = self.current_return_type
+            prev_mocha_return         = getattr(self, 'current_mocha_return_type', None)
             prev_locals              = self.locals.copy()
             self.current_return_type = ret_llvm
+            self.current_mocha_return_type = func.return_type
             self.in_function         = True
 
             # ── TWO-PASS ──
-            main_output        = self.output
-            self.output        = []
+            main_output = self.output
+            self.output = []
             self.entry_allocas = []
+            self.owned_str_locals = []
+            self.owned_arr_locals = []
+            self.owned_tuple_locals = []
+            self.owned_set_locals = []
+            self.owned_dict_locals = []
+            self.owned_arr2d_locals = []
+            self.owned_complex_locals = []
 
             # Store 'this'
             this_ptr = "%this.ptr"
@@ -4276,8 +4407,16 @@ class CodeGen:
             self.emit_blank()
 
             self.current_return_type = prev_return
+            self.current_mocha_return_type = prev_mocha_return
             self.locals              = prev_locals
-            self.local_name_counts = {}  # tracks how many times a name has been used
+            self.owned_str_locals = []
+            self.owned_arr_locals = []
+            self.owned_tuple_locals = []
+            self.owned_set_locals = []
+            self.owned_dict_locals = []
+            self.owned_arr2d_locals = []
+            self.owned_complex_locals = []
+            self.local_name_counts = {}
             self.in_function         = False
             self.entry_allocas       = []
 
@@ -4788,9 +4927,10 @@ class CodeGen:
             slot = self.alloca_at_entry(elem_llvm)
             result = self.fresh_temp()
             if elem_llvm == "i8*":
-                # str: slot is i8** — pass directly, then load i8* from i8**
                 self.emit(f"  call void @mocha_array_get(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {slot})")
                 self.emit(f"  {result} = load i8*, i8** {slot}")
+                # RC: shared ownership, same pattern as dict get / set min-max / array2d get_row
+                self.emit(f"  call void @rc_retain(i8* {result})")
             else:
                 cast = self.fresh_temp()
                 self.emit(f"  {cast} = bitcast {elem_llvm}* {slot} to i8*")
@@ -5013,7 +5153,7 @@ class CodeGen:
         self.emit(f"  {d} = call %MochaDict* @mocha_dict_new()")
 
         for key_node, val_node in node.pairs:
-            key_reg, key_type = self.gen_expr(key_node)
+            key_reg, _ = self.gen_expr(key_node)
             val_reg, val_type = self.gen_expr(val_node)
 
             if val_type == "i32":
@@ -5675,7 +5815,7 @@ class CodeGen:
             self.emit_blank()
 
         # ============================================================
-        # Generate main() entry point
+        # Generate main() entry point (Finally!)
         # ============================================================
         if not self.is_lib:
             self.emit("define i32 @main(i32 %argc, i8** %argv) uwtable {")

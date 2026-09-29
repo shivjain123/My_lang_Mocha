@@ -1,87 +1,76 @@
-// mocha-lib-deps: mocha-stats, mocha-string
+// mocha-lib-deps: mocha-stats, mocha-string, mocha-sqlite
 
 //Const
 const RAND: int = -999999;
 
 // =============================================
-// NATIVE WRAPPERS FOR SQLite3
-// =============================================
-
-from "mocha-sqlite" import *;
-
-// =============================================
 // Helpers for .save()/.load()
 // =============================================
 
-function forge_db_open(path: str) -> null {
-    var db: null = sqlite3_open(path);
-    return db;
-};
-
-function forge_db_setup(db: null) -> null {
+local function forge_db_setup(db: null) -> null {
     sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);");
     sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS arrays (name TEXT, idx INT, value TEXT);");
     sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS trees (name TEXT, node_id INT, is_leaf INT, value REAL, feature INT, threshold REAL, left_id INT, right_id INT);");
 };
 
-function forge_db_write_meta(db: null, key: str, value: str) -> null {
+local function forge_db_write_meta(db: null, key: str, value: str) -> null {
     sqlite3_exec(db, "INSERT OR REPLACE INTO meta (key, value) VALUES ('" + key + "', '" + value + "');");
 };
 
-function forge_db_read_meta(db: null, key: str) -> str {
+local function forge_db_read_meta(db: null, key: str) -> str {
     sqlite3_query_run(db, "SELECT value FROM meta WHERE key = '" + key + "';");
     return sqlite3_query_cell(db, 0, 0);
 };
 
-function forge_db_write_array(db: null, name: str, idx: int, value: str) -> null {
+local function forge_db_write_array(db: null, name: str, idx: int, value: str) -> null {
     sqlite3_exec(db, "INSERT INTO arrays (name, idx, value) VALUES ('" + name + "', " + str(idx) + ", '" + value + "');");
 };
 
-function forge_db_read_array_len(db: null, name: str) -> int {
+local function forge_db_read_array_len(db: null, name: str) -> int {
     sqlite3_query_run(db, "SELECT COUNT(*) FROM arrays WHERE name = '" + name + "';");
     return sqlite3_query_cell(db, 0, 0).toInt();
 };
 
-function forge_db_read_array_cell(db: null, name: str, idx: int) -> str {
+local function forge_db_read_array_cell(db: null, name: str, idx: int) -> str {
     sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' AND idx = " + str(idx) + ";");
     return sqlite3_query_cell(db, 0, 0);
 };
 
-function forge_db_write_tree_node(db: null, name: str, node_id: int, is_leaf: int, value: float, feature: int, threshold: float, left_id: int, right_id: int) -> null {
+local function forge_db_write_tree_node(db: null, name: str, node_id: int, is_leaf: int, value: float, feature: int, threshold: float, left_id: int, right_id: int) -> null {
     sqlite3_exec(db, "INSERT INTO trees (name, node_id, is_leaf, value, feature, threshold, left_id, right_id) VALUES ('" + name + "', " + str(node_id) + ", " + str(is_leaf) + ", " + str(value) + ", " + str(feature) + ", " + str(threshold) + ", " + str(left_id) + ", " + str(right_id) + ");");
 };
 
-function forge_db_read_tree_node_isleaf(db: null, name: str, node_id: int) -> int {
+local function forge_db_read_tree_node_isleaf(db: null, name: str, node_id: int) -> int {
     sqlite3_query_run(db, "SELECT is_leaf FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
     return sqlite3_query_cell(db, 0, 0).toInt();
 };
 
-function forge_db_read_tree_node_value(db: null, name: str, node_id: int) -> float {
+local function forge_db_read_tree_node_value(db: null, name: str, node_id: int) -> float {
     sqlite3_query_run(db, "SELECT value FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
     return sqlite3_query_cell(db, 0, 0).toFloat();
 };
 
-function forge_db_read_tree_node_feature(db: null, name: str, node_id: int) -> int {
+local function forge_db_read_tree_node_feature(db: null, name: str, node_id: int) -> int {
     sqlite3_query_run(db, "SELECT feature FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
     return sqlite3_query_cell(db, 0, 0).toInt();
 };
 
-function forge_db_read_tree_node_threshold(db: null, name: str, node_id: int) -> float {
+local function forge_db_read_tree_node_threshold(db: null, name: str, node_id: int) -> float {
     sqlite3_query_run(db, "SELECT threshold FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
     return sqlite3_query_cell(db, 0, 0).toFloat();
 };
 
-function forge_db_read_tree_node_leftid(db: null, name: str, node_id: int) -> int {
+local function forge_db_read_tree_node_leftid(db: null, name: str, node_id: int) -> int {
     sqlite3_query_run(db, "SELECT left_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
     return sqlite3_query_cell(db, 0, 0).toInt();
 };
 
-function forge_db_read_tree_node_rightid(db: null, name: str, node_id: int) -> int {
+local function forge_db_read_tree_node_rightid(db: null, name: str, node_id: int) -> int {
     sqlite3_query_run(db, "SELECT right_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
     return sqlite3_query_cell(db, 0, 0).toInt();
 };
 
-function forge_serialize_dtnode(db: null, name: str, node: DTNode, node_id: int, counter: int[]) -> null {
+local function forge_serialize_dtnode(db: null, name: str, node: DTNode, node_id: int, counter: int[]) -> null {
     if (node.is_leaf == 1) {
         forge_db_write_tree_node(db, name, node_id, 1, float(node.label), 0, 0.0, -1, -1);
         return;
@@ -95,7 +84,7 @@ function forge_serialize_dtnode(db: null, name: str, node: DTNode, node_id: int,
     forge_serialize_dtnode(db, name, node.right, right_id, counter);
 };
 
-function forge_serialize_surrogatenode(db: null, name: str, node: SurrogateNode, node_id: int, counter: int[]) -> null {
+local function forge_serialize_surrogatenode(db: null, name: str, node: SurrogateNode, node_id: int, counter: int[]) -> null {
     if (node.is_leaf == 1) {
         forge_db_write_tree_node(db, name, node_id, 1, node.value, 0, 0.0, -1, -1);
         return;
@@ -109,7 +98,7 @@ function forge_serialize_surrogatenode(db: null, name: str, node: SurrogateNode,
     forge_serialize_surrogatenode(db, name, node.right, right_id, counter);
 };
 
-function forge_deserialize_dtnode(db: null, name: str, node_id: int) -> DTNode {
+local function forge_deserialize_dtnode(db: null, name: str, node_id: int) -> DTNode {
     var is_leaf: int = forge_db_read_tree_node_isleaf(db, name, node_id);
     if (is_leaf == 1) {
         var label: int = int(forge_db_read_tree_node_value(db, name, node_id));
@@ -124,7 +113,7 @@ function forge_deserialize_dtnode(db: null, name: str, node_id: int) -> DTNode {
     return dt_node(feature, threshold, left_node, right_node);
 };
 
-function forge_deserialize_surrogatenode(db: null, name: str, node_id: int) -> SurrogateNode {
+local function forge_deserialize_surrogatenode(db: null, name: str, node_id: int) -> SurrogateNode {
     var is_leaf: int = forge_db_read_tree_node_isleaf(db, name, node_id);
     if (is_leaf == 1) {
         var value: float = forge_db_read_tree_node_value(db, name, node_id);
@@ -691,7 +680,8 @@ class LinearRegression {
             c_print_err("MochaForgeError (LinearRegression): rmse called before fit.");
             c_exit(2);
         };
-        return c_sqrt(this.mse(x, y));
+        var m: float = this.mse(x, y);
+        return m.sqrt().real;
     };
 
     // ─────────────────────────────────────────
@@ -832,7 +822,7 @@ class LogisticClassification {
     };
 
     //Helper function
-    function confusion(x: float[][], y: int[]) -> int[] {
+    private function confusion(x: float[][], y: int[]) -> int[] {
         var preds: int[] = this.predict(x);
         var n: int = y.length;
         var tp: int = 0;
@@ -1136,7 +1126,7 @@ class KNNClassifier {
     };
 
     //Helper function
-    function confusion(x: float[][], y: int[]) -> int[] {
+    private function confusion(x: float[][], y: int[]) -> int[] {
         var preds: int[] = this.predict(x);
         var n: int = y.length;
         var tp: int = 0;
@@ -1711,11 +1701,11 @@ class DTNode {
     };
 };
 
-function dt_leaf(label: int) -> DTNode {
+local function dt_leaf(label: int) -> DTNode {
     return DTNode(-1, 0.0, null, null, 1, label);
 };
 
-function dt_node(feature_idx: int, threshold: float, left: DTNode, right: DTNode) -> DTNode {
+local function dt_node(feature_idx: int, threshold: float, left: DTNode, right: DTNode) -> DTNode {
     return DTNode(feature_idx, threshold, left, right, 0, -1);
 };
 
@@ -1979,7 +1969,7 @@ class DecisionTree {
     // ─────────────────────────────────────────
     // confusion helper
     // ─────────────────────────────────────────
-    function confusion(x: float[][], y: int[]) -> int[] {
+    private function confusion(x: float[][], y: int[]) -> int[] {
         var preds: int[] = this.predict(x);
         var n: int = y.length;
         var tp: int = 0;
@@ -2156,137 +2146,138 @@ class RandomForest {
     // build_tree: like DT build but with feature subsampling
     // ─────────────────────────────────────────
     function build_tree(x: float[][], y: int[], n: int, depth: int) -> DTNode {
-    var n_features: int = x.cols;
+        var n_features: int = x.cols;
 
-    // stop conditions
-    var n0: int = 0;
-    var si: int = 0;
-    while (si < n) {
-        if (y[si] == 0) { n0++; };
-        si++;
-    };
-    if (n0 == 0) { return dt_leaf(1); };
-    if (n0 == n) { return dt_leaf(0); };
-    if (depth >= this.max_depth) {
-        return dt_leaf(this.majority(y, n));
-    };
-
-    // ── feature subsampling: pick sqrt(n_features) features ──
-    var k: int = int(c_sqrt(float(n_features)));
-    if (k < 1) { k = 1; };
-
-    var feature_mask: int[] = alloc int[n_features];
-    var mi: int = 0;
-    while (mi < n_features) { feature_mask[mi] = 0; mi++; };
-
-    var selected: int = 0;
-    while (selected < k) {
-        var fi: int = rand_int(0, n_features - 1);
-        if (feature_mask[fi] == 0) {
-            feature_mask[fi] = 1;
-            selected++;
+        // stop conditions
+        var n0: int = 0;
+        var si: int = 0;
+        while (si < n) {
+            if (y[si] == 0) { n0++; };
+            si++;
         };
-    };
+        if (n0 == 0) { return dt_leaf(1); };
+        if (n0 == n) { return dt_leaf(0); };
+        if (depth >= this.max_depth) {
+            return dt_leaf(this.majority(y, n));
+        };
 
-    // ── find best split among selected features ──
-    var best_impurity: float = -1.0;
-    var best_feature: int = 0;
-    var best_threshold: float = 0.0;
+        // ── feature subsampling: pick sqrt(n_features) features ──
+        var nf: float = float(n_features);
+        var k: int = int(nf.sqrt().real);
+        if (k < 1) { k = 1; };
 
-    var fii: int = 0;
-    while (fii < n_features) {
-        if (feature_mask[fii] == 0) { fii++; continue; };
-        var ti: int = 0;
-        while (ti < n) {
-            var threshold: float = x[ti][fii];
+        var feature_mask: int[] = alloc int[n_features];
+        var mi: int = 0;
+        while (mi < n_features) { feature_mask[mi] = 0; mi++; };
 
-            var left_y: int[] = alloc int[n];
-            var right_y: int[] = alloc int[n];
-            var nl: int = 0;
-            var nr: int = 0;
-            var li: int = 0;
-            while (li < n) {
-                if (x[li][fii] < threshold) {
-                    left_y[nl] = y[li];
-                    nl++;
-                };
-                if (x[li][fii] >= threshold) {
-                    right_y[nr] = y[li];
-                    nr++;
-                };
-                li++;
+        var selected: int = 0;
+        while (selected < k) {
+            var fi: int = rand_int(0, n_features - 1);
+            if (feature_mask[fi] == 0) {
+                feature_mask[fi] = 1;
+                selected++;
             };
+        };
 
-            if (nl == 0 || nr == 0) { ti++; continue; };
+        // ── find best split among selected features ──
+        var best_impurity: float = -1.0;
+        var best_feature: int = 0;
+        var best_threshold: float = 0.0;
 
-            var weighted: float = float(nl) / float(n) * this.impurity(left_y, nl) +
-                                  float(nr) / float(n) * this.impurity(right_y, nr);
-            if (best_impurity < 0.0 || weighted < best_impurity) {
-                best_impurity = weighted;
-                best_feature = fii;
-                best_threshold = threshold;
+        var fii: int = 0;
+        while (fii < n_features) {
+            if (feature_mask[fii] == 0) { fii++; continue; };
+            var ti: int = 0;
+            while (ti < n) {
+                var threshold: float = x[ti][fii];
+
+                var left_y: int[] = alloc int[n];
+                var right_y: int[] = alloc int[n];
+                var nl: int = 0;
+                var nr: int = 0;
+                var li: int = 0;
+                while (li < n) {
+                    if (x[li][fii] < threshold) {
+                        left_y[nl] = y[li];
+                        nl++;
+                    };
+                    if (x[li][fii] >= threshold) {
+                        right_y[nr] = y[li];
+                        nr++;
+                    };
+                    li++;
+                };
+
+                if (nl == 0 || nr == 0) { ti++; continue; };
+
+                var weighted: float = float(nl) / float(n) * this.impurity(left_y, nl) +
+                                    float(nr) / float(n) * this.impurity(right_y, nr);
+                if (best_impurity < 0.0 || weighted < best_impurity) {
+                    best_impurity = weighted;
+                    best_feature = fii;
+                    best_threshold = threshold;
+                };
+                ti++;
             };
-            ti++;
+            fii++;
         };
-        fii++;
-    };
 
-    if (best_impurity < 0.0) {
-        return dt_leaf(this.majority(y, n));
-    };
-
-    // ── split data ──
-    var left_x_list: int[] = alloc int[n];
-    var right_x_list: int[] = alloc int[n];
-    var left_y2: int[] = alloc int[n];
-    var right_y2: int[] = alloc int[n];
-    var nl2: int = 0;
-    var nr2: int = 0;
-
-    var si2: int = 0;
-    while (si2 < n) {
-        if (x[si2][best_feature] < best_threshold) {
-            left_x_list[nl2] = si2;
-            left_y2[nl2] = y[si2];
-            nl2++;
+        if (best_impurity < 0.0) {
+            return dt_leaf(this.majority(y, n));
         };
-        if (x[si2][best_feature] >= best_threshold) {
-            right_x_list[nr2] = si2;
-            right_y2[nr2] = y[si2];
-            nr2++;
+
+        // ── split data ──
+        var left_x_list: int[] = alloc int[n];
+        var right_x_list: int[] = alloc int[n];
+        var left_y2: int[] = alloc int[n];
+        var right_y2: int[] = alloc int[n];
+        var nl2: int = 0;
+        var nr2: int = 0;
+
+        var si2: int = 0;
+        while (si2 < n) {
+            if (x[si2][best_feature] < best_threshold) {
+                left_x_list[nl2] = si2;
+                left_y2[nl2] = y[si2];
+                nl2++;
+            };
+            if (x[si2][best_feature] >= best_threshold) {
+                right_x_list[nr2] = si2;
+                right_y2[nr2] = y[si2];
+                nr2++;
+            };
+            si2++;
         };
-        si2++;
-    };
 
-    var left_x: float[][] = alloc float[nl2][n_features];
-    var right_x: float[][] = alloc float[nr2][n_features];
+        var left_x: float[][] = alloc float[nl2][n_features];
+        var right_x: float[][] = alloc float[nr2][n_features];
 
-    var lxi: int = 0;
-    while (lxi < nl2) {
-        var orig_idx: int = left_x_list[lxi];
-        var fj: int = 0;
-        while (fj < n_features) {
-            left_x[lxi][fj] = x[orig_idx][fj];
-            fj++;
+        var lxi: int = 0;
+        while (lxi < nl2) {
+            var orig_idx: int = left_x_list[lxi];
+            var fj: int = 0;
+            while (fj < n_features) {
+                left_x[lxi][fj] = x[orig_idx][fj];
+                fj++;
+            };
+            lxi++;
         };
-        lxi++;
-    };
 
-    var rxi: int = 0;
-    while (rxi < nr2) {
-        var orig_idx2: int = right_x_list[rxi];
-        var fk: int = 0;
-        while (fk < n_features) {
-            right_x[rxi][fk] = x[orig_idx2][fk];
-            fk++;
+        var rxi: int = 0;
+        while (rxi < nr2) {
+            var orig_idx2: int = right_x_list[rxi];
+            var fk: int = 0;
+            while (fk < n_features) {
+                right_x[rxi][fk] = x[orig_idx2][fk];
+                fk++;
+            };
+            rxi++;
         };
-        rxi++;
-    };
 
-    var left_node: DTNode = this.build_tree(left_x, left_y2, nl2, depth + 1);
-    var right_node: DTNode = this.build_tree(right_x, right_y2, nr2, depth + 1);
-    return dt_node(best_feature, best_threshold, left_node, right_node);
-};
+        var left_node: DTNode = this.build_tree(left_x, left_y2, nl2, depth + 1);
+        var right_node: DTNode = this.build_tree(right_x, right_y2, nr2, depth + 1);
+        return dt_node(best_feature, best_threshold, left_node, right_node);
+    };
 
     // ─────────────────────────────────────────
     // fit: bootstrap + build one tree per iteration
@@ -2380,7 +2371,7 @@ class RandomForest {
     // ─────────────────────────────────────────
     // confusion helper
     // ─────────────────────────────────────────
-    function confusion(x: float[][], y: int[]) -> int[] {
+    private function confusion(x: float[][], y: int[]) -> int[] {
         var preds: int[] = this.predict(x);
         var n: int = y.length;
         var tp: int = 0;
@@ -2899,7 +2890,7 @@ class Svm {
     // ─────────────────────────────────────────
     // confusion helper
     // ─────────────────────────────────────────
-    function confusion(x: float[][], y: int[]) -> int[] {
+    private function confusion(x: float[][], y: int[]) -> int[] {
         var preds: int[] = this.predict(x);
         var n: int = y.length;
         var tp: int = 0;
@@ -3518,11 +3509,11 @@ class SurrogateNode {
     };
 };
 
-function surrogate_leaf(value: float) -> SurrogateNode {
+local function surrogate_leaf(value: float) -> SurrogateNode {
     return SurrogateNode(1, value, 0, 0.0, null, null);
 };
 
-function surrogate_node(feature_idx: int, threshold: float, left: SurrogateNode, right: SurrogateNode) -> SurrogateNode {
+local function surrogate_node(feature_idx: int, threshold: float, left: SurrogateNode, right: SurrogateNode) -> SurrogateNode {
     return SurrogateNode(0, 0.0, feature_idx, threshold, left, right);
 };
 
@@ -3556,7 +3547,7 @@ class SurrogateRF {
         };
 
         // feature subsampling
-        var k: int = int(c_sqrt(float(n_features)));
+        var k: int = int(float(n_features).sqrt().real);
         if (k < 1) { k = 1; };
         var feature_mask: int[] = alloc int[n_features];
         var mi: int = 0;
@@ -3838,7 +3829,7 @@ class BayesianSearch {
 
     function ei(mean: float, variance: float, best: float) -> float {
         if (variance <= 0.0) { return 0.0; };
-        var std: float = c_sqrt(variance);
+        var std: float = variance.sqrt().real;
         var z: float = (mean - best) / std;
         var phi_z: float = 1.0 / (1.0 + c_exp(0.0 - 1.7 * z));
         var pdf_z: float = c_exp(0.0 - 0.5 * z * z) / 2.506628;
@@ -4033,7 +4024,7 @@ function subsample_indices(n: int, k: int) -> int[] {
     return result;
 };
 
-function gb_build_tree(x: float[][], y: float[], n: int, max_depth: int, depth: int) -> SurrogateNode {
+local function gb_build_tree(x: float[][], y: float[], n: int, max_depth: int, depth: int) -> SurrogateNode {
     var n_features: int = x.cols;
 
     if (n <= 1 || depth >= max_depth) {
@@ -4141,7 +4132,7 @@ function gb_build_tree(x: float[][], y: float[], n: int, max_depth: int, depth: 
     return surrogate_node(best_feature, best_threshold, left_node, right_node);
 };
 
-function gb_predict_one(sample: float[], node: SurrogateNode) -> float {
+local function gb_predict_one(sample: float[], node: SurrogateNode) -> float {
     if (node.is_leaf == 1) { return node.value; };
     if (node.left == null || node.right == null) { return node.value; };
     if (sample[node.feature_idx] < node.threshold) {
@@ -4150,7 +4141,7 @@ function gb_predict_one(sample: float[], node: SurrogateNode) -> float {
     return gb_predict_one(sample, node.right);
 };
 
-function gb_sigmoid(z: float) -> float {
+local function gb_sigmoid(z: float) -> float {
     return 1.0 / (1.0 + c_exp(0.0 - z));
 };
 
@@ -4283,7 +4274,8 @@ class GradientBoosting {
     };
 
     function rmse(x: float[][], y: float[]) -> float {
-        return c_sqrt(this.mse(x, y));
+        var m: float = this.mse(x, y);
+        return m.sqrt().real;
     };
 
     function r2(x: float[][], y: float[]) -> float {
