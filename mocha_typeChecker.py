@@ -93,8 +93,9 @@
 #   - Diamond-conflict calls flagged at the call site with both
 #     candidate parents named in the error
 #   - Per-type method return inference for dict / HashTable /
-#     set<T> / str before falling through to general symbol
-#     lookup (qualified "Type.method" then bare name)
+#     set<T> / str / tag (.name() only) before falling through
+#     to general symbol lookup (qualified "Type.method" then
+#     bare name)
 #
 # ============================================================
 
@@ -764,6 +765,17 @@ class TypeChecker:
             if node.member in ("keys", "values"):
                 return "str[]"
             return "unknown"
+
+        # Tag built-ins
+        if obj_type in self.tag_types:
+            if node.member == "name":
+                return "str"
+            self.error(
+                f"'.{node.member}' is not a method on tag type '{obj_type}'. "
+                f"Available: .name()",
+                node
+            )
+            return "unknown"
         
         #Lookup
         symbol, found_in = self.lookup_member(obj_type, node.member)
@@ -1019,6 +1031,17 @@ class TypeChecker:
                     return symbol["type"]
             return "unknown"
         
+        # Tag built-ins
+        if obj_type in self.tag_types:
+            if func_name == "name":
+                return "str"
+            self.error(
+                f"'.{func_name}()' is not a method on tag type '{obj_type}'. "
+                f"Available: .name()",
+                node
+            )
+            return "unknown"
+
         # Dict method return types
         if obj_type == "dict":
             if func_name == "has":
@@ -1304,6 +1327,19 @@ class TypeChecker:
             )
 
         self.symbols.declare(node.name, node.type)
+
+        #print(f"[ALIAS_DBG] name={node.name!r} type={node.type!r} in_class_nodes={node.type in self.class_nodes!r} value_is_identifier={isinstance(node.value, Identifier)!r} value_node={type(node.value).__name__}", file=sys.stderr)
+
+        # Class instances are move-only, not aliasable — reject
+        # `var p2: SomeClass = p;` where p is an existing variable
+        if node.type in self.class_nodes and isinstance(node.value, Identifier):
+            self.error(
+                f"Cannot alias class instance '{node.value.name}' into '{node.name}': "
+                f"class instances in Mocha are move-only, not copyable. "
+                f"This prevents security issues and accidental mutations. "
+                f"Construct a new instance instead.",
+                node
+            )
 
     def check_const_decl(self, node: ConstDecl):
         """

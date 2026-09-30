@@ -26,10 +26,7 @@ mocha_cuda_runtime.obj
 __pycache__/
 
 # ─── Third-Party Source Dumps ────────────────────────────────────────────────
-lua-5.5.0_Win64_dllw6_lib/
-sqlite-amalgamation-3510300/
 zig-lib/
-wren/
 
 # ─── Node/VSCode Extension Build Artifacts ───────────────────────────────────
 node_modules/
@@ -48,3 +45,8 @@ lib_a.mch
 postfix_test.mch
 tokenizer_mini_test.mch
 tokenizer_rc.mch
+
+# ─── Keep bundled Lua libs (they'd match *.a / *.lib / *_msvc.* above) ───────
+!lua-5.5.0_Win64_dllw6_lib/liblua55.a
+!lua-5.5.0_Win64_dllw6_lib/lua55_msvc.lib
+!lua-5.5.0_unix/**/*.a

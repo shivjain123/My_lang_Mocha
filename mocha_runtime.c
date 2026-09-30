@@ -1,34 +1,61 @@
 /*
  * ============================================================
  * Mocha Language Runtime
- * mocha_runtime.c
+ * mocha_runtime.c                      (Mocha v1.1 — 29 Sep 2026)
  * ============================================================
  *
  * PLATFORM SUPPORT
  * ──────────────────────────────────────────────────────────
- *   Mocha has 15 stdlibs
- * 
  *   Windows / macOS / Linux, branched via #ifdef at:
  *     - top-level includes
- *     - Cryptographic RNG          (Windows: BCrypt | else: /dev/urandom or arc4random)
- *     - Lua 5.5 + Wren FFI          (entire section gated; Windows | macOS | Linux)
- *     - mocha-ink show()            (Windows: start | macOS: open | Linux: xdg-open)
- *     - ctype wrapper: hypot
- *     - stopwatch: wall_ms, wait    (Windows: QueryPerformanceCounter | macOS/Linux: clock_gettime)
+ *     - Cryptographic RNG          (Windows: BCrypt | else: getrandom/getentropy)
+ *     - Exception handling         (Windows: RtlCaptureContext | else: setjmp)
+ *     - mocha-ink show()           (Windows: start | macOS: open | Linux: xdg-open)
+ *     - stopwatch: wait            (Windows: QueryPerformanceCounter | else: clock_gettime)
+ *     - math wrapper: hypot
  *   Pattern: #ifdef _WIN32 → #elif defined(__APPLE__) → #else (Linux)
  *
+ * BUILD-TIME FEATURE FLAGS
+ * ──────────────────────────────────────────────────────────
+ *   MOCHA_WITH_LUA   — compiles the Lua 5.5 FFI section
+ *   MOCHA_WITH_WREN  — compiles the Wren FFI section
+ *
+ * NOT IN THIS FILE
+ * ──────────────────────────────────────────────────────────
+ *   CUDA runtime (used by mocha-neuron) lives elsewhere.
+ *
  * ── MEMORY MANAGEMENT ──────────────────────────────────────
- *   - Reference Counting (MochaRCHeader, rc_alloc/retain/release)
- *     Active for all heap allocations; replaces GC for strings.
+ *   Reference counting (partial — masks GC where it is wired in)
+ *   - rc_alloc / rc_retain / rc_release / rc_count
+ *   - Every RC block carries a MochaRCNode header (ref count,
+ *     size, live-list links, magic) plus an 8-byte back canary
+ *   - Integrity checks abort with rc_die (exit code 97) on:
+ *     retain/release after free, double release, non-RC or
+ *     corrupt pointer, smashed back canary
+ *   - mocha_rc_stats() prints live object count and bytes;
+ *     mocha_rc_shutdown() frees every remaining node
+ *   RC-managed:     strings, complex, 1D arrays, 2D arrays,
+ *                   tuples, dicts, sets, StringBuilder output
+ *   Caller-managed BY DESIGN (manual free/dispose, never RC):
+ *                   HashTable, File, StringBuilder buffer
+ *   Still to come:  Classes, block scoping, CUDA objects,
+ *                   mocha-ink charts
+ *
+ * ── CRASH DIAGNOSTICS ──────────────────────────────────────
+ *   - mocha_signal_handlers_init(): SIGSEGV / SIGILL handler
+ *     prints a readable "Mocha Runtime Error" box with likely
+ *     causes instead of a bare crash
+ *   - Windows only: vectored SEH handler prints the faulting
+ *     address as exe+offset plus a 16-frame backtrace
  *
  * ── CORE TYPES ─────────────────────────────────────────────
- *   - String operations (alloc via RC arena, concat, compare,
- *     case, charAt, length, isalpha/isdigit)
+ *   - String operations (alloc via RC, concat, compare, case,
+ *     charAt, length, isalpha/isdigit)
  *   - String formatting (.format — positional $0/$1 and named
  *     $name placeholders, |Nf pipe specifier, escape handling)
- *   - Complex number arithmetic (MochaComplex — add, sub, mul,
- *     div, abs, conjugate, toString; returned by domain-unsafe
- *     math ops instead of crashing)
+ *   - Complex number arithmetic (MochaComplex — RC'd; add, sub,
+ *     mul, div, abs, conjugate, toString; returned by
+ *     domain-unsafe math ops instead of crashing)
  *   - Print functions (int, float, str, bool, vast;
  *     newline variants; Inf/NaN-aware float printing)
  *   - Type conversions (int↔float↔str↔vast↔bool)
@@ -36,23 +63,26 @@
  *     overflow guard — add, sub, mul, div, mod)
  *
  * ── COLLECTIONS ────────────────────────────────────────────
- *   - 1D Array runtime (MochaArray — dynamic and fixed/alloc
- *     modes, push/pop/push_front, min/max, occs, copy, sort
- *     bridge, map_float straggler)
- *   - 2D Array runtime (MochaArray2D — row/col access, occs
- *     with range variants, resize-grow, drop_row/drop_col)
- *   - Tuple runtime (MochaTuple)
- *   - Dict runtime (MochaDict — string keys, typed values,
- *     Levenshtein fuzzy key suggestions, merge with override,
- *     allkeys/allvalues, typed getter with mismatch error)
- *   - Set runtime (MochaSet — unique ordered values,
- *     union/intersect/xor/rel_diff, negate, retype, min/max)
+ *   - 1D Array runtime (MochaArray — RC'd; dynamic and fixed/
+ *     alloc modes, push/pop/push_front, min/max, occs, copy,
+ *     sort bridge, map_float straggler)
+ *   - 2D Array runtime (MochaArray2D — RC'd; row/col access,
+ *     occs with range variants, resize-grow, drop_row/drop_col)
+ *   - Tuple runtime (MochaTuple — RC'd)
+ *   - Dict runtime (MochaDict — RC'd; string keys, typed
+ *     values, Levenshtein fuzzy key suggestions, merge with
+ *     override, allkeys/allvalues, typed getter with mismatch
+ *     error)
+ *   - Set runtime (MochaSet — RC'd; unique ordered values,
+ *     union/intersect/xor/rel_diff, negate, retype, min/max,
+ *     similarity metrics)
  *   - HashTable runtime (MochaHashTable — open-addressed,
  *     FNV-1a hash, quadratic probing, tombstone deletion,
- *     Levenshtein fuzzy suggestions, keys/values arrays)
+ *     Levenshtein fuzzy suggestions, keys/values arrays;
+ *     not RC'd yet)
  *   - StringBuilder runtime (MochaStringBuilder — append,
- *     toString, reverse with UTF-8 codepoint awareness,
- *     clear, length, free)
+ *     toString (RC'd result), reverse with UTF-8 codepoint
+ *     awareness, clear, length / length_chars, free)
  *
  * ── SORTING ────────────────────────────────────────────────
  *   - Hybrid sort: selection sort (≤16 elems) + merge sort
@@ -84,7 +114,7 @@
  *     (C names unchanged: bcrypt_rand_int, bcrypt_rand_float,
  *     bcrypt_rand_unit, bcrypt_rand_bool, bcrypt_rand_ints,
  *     bcrypt_rand_seed; Windows: BCryptGenRandom |
- *     macOS/Linux: platform-native secure source)
+ *     macOS/Linux: getrandom() / getentropy())
  *
  * ── I/O ────────────────────────────────────────────────────
  *   - File I/O (MochaFile — read/write/append, readline,
@@ -96,6 +126,7 @@
  *     RtlCaptureContext/RtlRestoreContext (Windows)
  *   - Nested exception frames (MochaExFrame stack)
  *   - mocha_ex_throw, mocha_ex_rethrow, mocha_ex_push/pop
+ *   - Windows only: mocha_ex_reset_landed, mocha_ex_did_land
  *
  * ── RUNTIME STACK TRACKING ─────────────────────────────────
  *   - Call stack of 256 frames (func name, file, line)
@@ -106,11 +137,13 @@
  *   - SQLite3 (open/exec/query/close; result cache API —
  *     query_run, query_rows/cols/cell/colname; table_exists,
  *     last_rowid, changes, errmsg)
- *   - Lua 5.5 (new/close, dostring/dofile, safe_dostring;
- *     get/set for number/string/bool/int; call variants:
- *     call_number/string/int, call1n, call1s, call2n, call2s)
- *   - Wren (new/free, dostring/dofile, safe_dostring;
- *     eval_number/string/bool/int; call variants matching Lua)
+ *   - Lua 5.5 [MOCHA_WITH_LUA] (new/close, dostring/dofile,
+ *     safe_dostring; get/set for number/string/bool/int; call
+ *     variants: call_number/string/int, call1n, call1s, call2n,
+ *     call2s)
+ *   - Wren [MOCHA_WITH_WREN] (new/free, dostring/dofile,
+ *     safe_dostring; eval_number/string/bool/int; call variants
+ *     with 0/1/2 args; legacy global getters)
  *   - ctype (isalpha, isdigit, toupper, tolower)
  *   - math (hypot, fmod, erf, tgamma, lgamma, exp)
  *   - system (system call wrapper)
@@ -157,29 +190,51 @@
  *   - ViolinPlot  — KDE via Gaussian kernel, Silverman
  *                   auto-bandwidth, optional inner box plot,
  *                   horizontal variant
- *   - AreaChart
+ *   - AreaChart   — line-plot based filled area
  *   - BubbleChart
- *   - CurvePlot
- *   - ErrorPlot
- *   - LMPlot
- *   - NetworkGraph
- *   - SankeyChart
+ *   - CurvePlot   — KDE density curve
+ *   - ErrorPlot   — error bars
+ *   - LMPlot      — regression plot (OLS fit)
+ *   - NetworkGraph — nodes/edges, directed option, weights,
+ *                   per-node/edge colors, auto layout
+ *   - SankeyChart — flows between nodes, auto column layout
+ *   - SkewT       — Skew-T log-P sounding plot (dry/moist
+ *                   adiabats, mixing-ratio lines, wind barbs)
  *   All charts: ink_*_save(path) and ink_*_show() (opens in
  *   default browser; cross-platform: start/open/xdg-open)
+ *   RC planned (see MEMORY MANAGEMENT)
  *
  * ── MOCHA-METEORO v0.1 ─────────────────────────────────────
- *   Professional meteorology library. Default units: Celsius,
- *   km/h, mb, meters. Depends on mocha-math.
- *     1. Thermodynamics
- *     2. Humidity
- *     3. Pressure & Altitude
- *     4. Wind
- *     5. Precipitation
- *     6. Severe Weather Indices
- *     7. Visibility, Fog & AQI
- *     8. Solar & Radiation
- *     9. Climate Statistics
- *    10. Large-Scale Climate Indices
+ *   Professional meteorology library (C helpers are prefixed
+ *   metero_*). Default units: Celsius, km/h, mb, meters.
+ *   Depends on mocha-math; arithmetic goes through the
+ *   fixed-point ADD/SUB/MUL/DIV helpers for precision.
+ *     1. Thermodynamics (Buck sat. vapour pressure, dewpoint,
+ *        wet bulb, heat index, wind chill, potential/virtual/
+ *        equivalent potential temp, LCL)
+ *     2. Humidity (absolute/specific, mixing ratio, VPD,
+ *        precipitable water, humidex, WBGT)
+ *     3. Pressure & Altitude (pressure/density altitude,
+ *        QNH/QFE, ISA temperature)
+ *     4. Wind (u/v components, crosswind/headwind, power
+ *        density, gust factor, Beaufort, shear)
+ *     5. Precipitation (dBZ↔rain rate, SWE, snow density,
+ *        hail size, API, SCS-CN runoff, Hargreaves ET)
+ *     6. Severe Weather Indices (parcel theory CAPE/CIN with
+ *        sounding arrays, K-index, Showalter, lifted index,
+ *        Total Totals, SWEAT, SRH, EHI, SCP, BRN)
+ *     7. Visibility, Fog & AQI (extinction, fog probability,
+ *        FFWI, RVR, cloud base, mixing depth; Indian AQI
+ *        sub-indices)
+ *     8. Solar & Radiation (declination, equation of time,
+ *        elevation/azimuth, sunrise/sunset, daylight hours,
+ *        clear-sky radiation, UV index, PAR, net radiation)
+ *     9. Climate Statistics (HDD/CDD/GDD, anomalies,
+ *        percentile rank, frost/summer days, tropical nights,
+ *        dry/wet spells, SPI, Thornthwaite PET)
+ *    10. Large-Scale Climate Indices & Cyclones
+ *        (Saffir-Simpson, JMA and IMD categories, ISA
+ *        pressure/density, altimeter setting, thickness)
  *
  * ============================================================
  */
@@ -206,6 +261,7 @@
     #include <time.h>         // clock_gettime — already included above but
                               // needed explicitly for CLOCK_MONOTONIC on some distros
     #include <unistd.h>
+    #include <execinfo.h>
 #endif
 
 // ── Crash handler — replaces SIGSEGV with a readable error ────────────────
@@ -242,6 +298,7 @@ static void mocha_crash_handler(int sig) {
     exit(128 + sig);
 }
 
+#ifdef _WIN32
 static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
     EXCEPTION_RECORD* er = info->ExceptionRecord;
     if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
@@ -258,13 +315,29 @@ static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
+#endif
+static void mocha_print_backtrace(int skip) {
+    skip += 1;
+#ifdef _WIN32
+    void* st[24];
+    USHORT n = CaptureStackBackTrace(skip, 24, st, NULL);
+    uintptr_t base = (uintptr_t)GetModuleHandle(NULL);
+    for (USHORT i = 0; i < n; i++)
+        fprintf(stderr, "    [%2d] %p (exe+0x%llx)\n", i, st[i],
+                (unsigned long long)((uintptr_t)st[i] - base));
+#else
+    void* st[24];
+    int n = backtrace(st, 24);
+    if (skip < n) backtrace_symbols_fd(st + skip, n - skip, 2);
+#endif
+}
 
 /* ===============================================================
    Mocha Reference Counting (This is also partially working since \
    full was not possible yet.) \
    For now, it masks gc, and is working for strings, 1D and 2D arrays, \
    tuples, sets, and dicts; Classes,\
-   and Ink lib are remaining (Also Bloc scoping)
+   and Ink lib are remaining (Also Block scoping)
    =============================================================== */
 
 #define RC_MAGIC_LIVE 0xA11C0FFEEBEEF001ULL
@@ -274,7 +347,9 @@ typedef struct MochaRCNode {
     size_t   ref_count;
     size_t   size;
     struct MochaRCNode* next;
+    struct MochaRCNode* prev;
     uint64_t magic;
+    uint64_t _pad;
 } MochaRCNode;
 
 #define RC_NODE(ptr)  ((MochaRCNode*)(((uint8_t*)(ptr)) - sizeof(MochaRCNode)))
@@ -286,12 +361,7 @@ static MochaRCNode* rc_head = NULL;
 
 static void rc_die(const char* what, void* ptr) {
     fprintf(stderr, "\n[RC] FATAL: %s on %p\n", what, ptr);
-    void* st[24];
-    USHORT n = CaptureStackBackTrace(1, 24, st, NULL);
-    uintptr_t base = (uintptr_t)GetModuleHandle(NULL);
-    for (USHORT i = 0; i < n; i++)
-        fprintf(stderr, "    [%2d] %p (exe+0x%llx)\n", i, st[i],
-                (unsigned long long)((uintptr_t)st[i] - base));
+    mocha_print_backtrace(1);
     fflush(stderr);
     _exit(97);
 }
@@ -301,7 +371,9 @@ void* rc_alloc(size_t size) {
     if (!node) { fprintf(stderr, "MochaRuntimeError: Out of memory!\n"); _exit(2); }
     node->ref_count = 1;
     node->size      = size;
+    node->prev      = NULL;
     node->next      = rc_head;
+    if (rc_head) rc_head->prev = node;
     node->magic     = RC_MAGIC_LIVE;
     rc_head         = node;
     memset(RC_DATA(node), 0, size);
@@ -327,10 +399,11 @@ void rc_release(void* ptr) {
         if (back[i] != RC_CANARY_BYTE) rc_die("BACK CANARY smashed", ptr);
     if (--node->ref_count > 0) return;
 
-    if (rc_head == node) rc_head = node->next;
-    else { MochaRCNode* c = rc_head; while (c && c->next != node) c = c->next; if (c) c->next = node->next; }
-
+    if (node->prev) node->prev->next = node->next;
+    else            rc_head          = node->next;
+    if (node->next) node->next->prev = node->prev;
     node->magic = RC_MAGIC_DEAD;
+
     free(node);
 }
 
@@ -347,11 +420,12 @@ static char* rc_strdup(const char* src) {
 }
 
 void mocha_signal_handlers_init() {
+#ifdef _WIN32
     AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
+#endif
     signal(SIGSEGV, mocha_crash_handler);
-    signal(SIGILL,  mocha_crash_handler); // illegal instruction
+    signal(SIGILL,  mocha_crash_handler);
 }
-
 void mocha_rc_shutdown() {
     MochaRCNode *node = rc_head;
     while (node) {
@@ -3174,56 +3248,29 @@ double mocha_wrap_unix_time() {
     return (double)time(NULL);
 }
 
-static char mocha_time_buf[64];
-
-char* mocha_wrap_datetime_now() {
+static char* mocha_time_fmt(const char* fmt) {
     time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%Y-%m-%d %H:%M:%S", tm_info);
-    return mocha_time_buf;
+    struct tm tmv;
+#ifdef _WIN32
+    localtime_s(&tmv, &t);
+#else
+    localtime_r(&t, &tmv);
+#endif
+    char buf[64];
+    size_t n = strftime(buf, sizeof(buf), fmt, &tmv);
+    if (n == 0) buf[0] = '\0';
+    char* out = rc_alloc_string(n);
+    memcpy(out, buf, n + 1);
+    return out;
 }
 
-char* mocha_wrap_date_now() {
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%Y-%m-%d", tm_info);
-    return mocha_time_buf;
-}
-
-char* mocha_wrap_time_now() {
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%H:%M:%S", tm_info);
-    return mocha_time_buf;
-}
-
-char* mocha_wrap_ampm_now() {
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%I:%M:%S %p", tm_info);
-    return mocha_time_buf;
-}
-
-char* mocha_wrap_day_now() {
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%A", tm_info);
-    return mocha_time_buf;
-}
-
-char* mocha_wrap_month_now() {
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%B", tm_info);
-    return mocha_time_buf;
-}
-
-char* mocha_wrap_year_now() {
-    time_t t = time(NULL);
-    struct tm *tm_info = localtime(&t);
-    strftime(mocha_time_buf, sizeof(mocha_time_buf), "%Y", tm_info);
-    return mocha_time_buf;
-}
+char* mocha_wrap_datetime_now() { return mocha_time_fmt("%Y-%m-%d %H:%M:%S"); }
+char* mocha_wrap_date_now()     { return mocha_time_fmt("%Y-%m-%d"); }
+char* mocha_wrap_time_now()     { return mocha_time_fmt("%H:%M:%S"); }
+char* mocha_wrap_ampm_now()     { return mocha_time_fmt("%I:%M:%S %p"); }
+char* mocha_wrap_day_now()      { return mocha_time_fmt("%A"); }
+char* mocha_wrap_month_now()    { return mocha_time_fmt("%B"); }
+char* mocha_wrap_year_now()     { return mocha_time_fmt("%Y"); }
 
 static double mocha_wall_start = 0.0;
 
@@ -3498,8 +3545,8 @@ const char* mocha_sqlite3_query_colname(void *db, int col) {
 
 /* Error message */
 const char* mocha_sqlite3_errmsg(void *db) {
-    if (!db) return "no database";
-    return sqlite3_errmsg((sqlite3*)db);
+    if (!db) return rc_strdup("no database");
+    return rc_strdup(sqlite3_errmsg((sqlite3*)db));
 }
 
 /* Last inserted rowid */
@@ -4792,9 +4839,10 @@ typedef struct {
 
 static MochaStackFrame mocha_call_stack[256];
 static int             mocha_call_stack_top = 0;
+static int             mocha_call_stack_overflow = 0;   /* frames dropped past 256 */
 
 void mocha_stack_push(const char* func_name, const char* file_name, int line) {
-    if (mocha_call_stack_top >= 256) return;
+    if (mocha_call_stack_top >= 256) { mocha_call_stack_overflow++; return; }
     mocha_call_stack[mocha_call_stack_top].func_name = func_name;
     mocha_call_stack[mocha_call_stack_top].file_name = file_name;
     mocha_call_stack[mocha_call_stack_top].line      = line;
@@ -4802,11 +4850,12 @@ void mocha_stack_push(const char* func_name, const char* file_name, int line) {
 }
 
 void mocha_stack_pop(void) {
-    if (mocha_call_stack_top > 0)
-        mocha_call_stack_top--;
+    if (mocha_call_stack_overflow > 0) { mocha_call_stack_overflow--; return; }
+    if (mocha_call_stack_top > 0) mocha_call_stack_top--;
 }
 
 void mocha_stack_update_line(int line) {
+    if (mocha_call_stack_overflow > 0) return;
     if (mocha_call_stack_top > 0)
         mocha_call_stack[mocha_call_stack_top - 1].line = line;
 }
@@ -4819,6 +4868,8 @@ void mocha_stack_print(void) {
             mocha_call_stack[i].file_name,
             mocha_call_stack[i].line);
     }
+    if (mocha_call_stack_overflow > 0)
+        fprintf(stderr, "  ... and %d deeper frames not shown\n", mocha_call_stack_overflow);
 }
 
 /* ============================================================

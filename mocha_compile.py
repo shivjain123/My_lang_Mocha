@@ -218,6 +218,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
                 type_checker.symbols.declare(class_name, class_name, is_class=True)
             except MochaTypeError:
                 pass
+            type_checker.class_nodes[class_name] = True
             
         elif line.startswith("class ") and " field " in line and " function " not in line:
             parts = line.split(" field ")
@@ -1176,6 +1177,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     # ── FFI detection (source or lib level, for compile-time flags) ──
     needs_lua  = 'mocha_lua_'  in source or '"mocha-lua"'  in source
     needs_wren = 'mocha_wren_' in source or '"mocha-wren"' in source
+    needs_zig  = 'mocha_zig_'  in source or '"mocha-zig"'  in source
 
     print("Step 1: Lexing...")
     try:
@@ -1374,7 +1376,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     # Compile Zig
     zig_src = os.path.join(SCRIPT_DIR, "zig_ffi.zig")
     zig_out = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "zig_ffi.a")
-    if needs_recompile(zig_src, zig_out):
+    if needs_zig and needs_recompile(zig_src, zig_out):
         zig_target = "x86_64-windows-gnu" if IS_WINDOWS else \
                      "x86_64-macos-none"   if IS_MACOS  else \
                      "x86_64-linux-gnu"
@@ -1389,7 +1391,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
         if result.returncode != 0:
             print(f"  ❌ zig compile failed:\n{result.stderr}")
             return False
-    else:
+    elif needs_zig:
         print("  ⚡ zig cached", flush=True)
 
     # Compile IR to object file
@@ -1594,7 +1596,21 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
 
         result = subprocess.run(link_cmd, capture_output=True, text=True, encoding='utf-8')
         if result.returncode != 0:
-            print(f"  ❌ linking failed:\n{result.stderr}\n{result.stdout}")
+            import re
+            link_out = result.stderr + result.stdout
+            missing = [n for n in re.findall(r'native\s+(\w+)\s*;', source)
+                       if n in link_out and not n.startswith('mocha_zig_')]
+            if missing:
+                print("  ❌ Linking failed: Mocha couldn't find the code for these native functions:")
+                for n in missing:
+                    print(f"       • {n}")
+                print()
+                print("  💡 If these are Zig functions, the name after 'native' must start with")
+                print("     'mocha_zig_' (that prefix is how Mocha knows to link Zig).")
+                print("     Example:  function zig_add(a: int, b: int) -> int native mocha_zig_add;")
+                print("     The Zig function needs the same name:  export fn mocha_zig_add(...)")
+            else:
+                print(f"  ❌ linking failed:\n{result.stderr}\n{result.stdout}")
             return False
         else:
             print(f"✅ Linking succeeded!")

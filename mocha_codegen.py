@@ -352,12 +352,12 @@ class CodeGen:
             return self._type_default(llvm_type)
         return self._type_default(llvm_type)
     
-    def emit_field_zero_inits(self, node_name: str):
+    def emit_field_zero_inits(self, node_name: str, self_name: str):
         all_fields = self.class_fields.get(node_name, [])
         for idx, (fname, ftype) in enumerate(all_fields):
             zero = self.get_zero_value(ftype)  # ftype is already LLVM type
             ptr = self.fresh_temp()
-            self.emit(f"  {ptr} = getelementptr %struct.{node_name}, %struct.{node_name}* %this, i32 0, i32 {idx}")
+            self.emit(f"  {ptr} = getelementptr %struct.{node_name}, %struct.{node_name}* {self_name}, i32 0, i32 {idx}")
             self.emit(f"  store {zero}, {ftype}* {ptr}")
     
     def get_zero_value(self, lt: str) -> str:
@@ -2074,7 +2074,7 @@ class CodeGen:
             # it if we don't. Fixes leak on chained calls like a.trimLeft().trimRight()
             if not isinstance(node.name.obj, Identifier):
                 self.emit(f"  call void @rc_release(i8* {s_reg})")
-                
+
             return (tmp, ret_llvm)
 
     def gen_struct_method_call(self, obj_ptr, obj_llvm_type, member, node):
@@ -4237,7 +4237,7 @@ class CodeGen:
         
         is_constructor = node.name.endswith("_constructor")
         if is_constructor:
-            self.emit_field_zero_inits(self.current_class) # type: ignore
+            self.emit_field_zero_inits(self.current_class, "%this") # type: ignore
 
         # Generate body — allocas will go to entry_allocas, rest to self.output
         for stmt in node.body:
@@ -4552,7 +4552,7 @@ class CodeGen:
 
                 self.emit(f"define void @{child_func}(%struct.{node.name}* %self) {{")
                 self.emit("entry:")
-                self.emit_field_zero_inits(node.name)
+                self.emit_field_zero_inits(node.name, "%self")
 
                 all_fields = self.class_fields.get(node.name, [])
                 for m in fields_with_defaults:
@@ -4617,7 +4617,7 @@ class CodeGen:
                     self.classes_with_constructors.add(node.name)
                     self.emit(f"define void @{child_func}(%struct.{node.name}* %self) {{")
                     self.emit("entry:")
-                    self.emit_field_zero_inits(node.name)
+                    self.emit_field_zero_inits(node.name, "%self")
                     self.emit("  ret void")
                     self.emit("}")
                     self.emit_blank()
@@ -5487,12 +5487,18 @@ class CodeGen:
             str_name = self.fresh_str_global(member)
             length   = len(member.encode('utf-8')) + 1
             self.emit(f"tag_case{i}:")
-            self.emit(f"  ret i8* getelementptr inbounds "
-                f"([{length} x i8], ptr {str_name}, i32 0, i32 0)")
+            ptr = self.fresh_temp()
+            wrapped = self.fresh_temp()
+            self.emit(f"  {ptr} = getelementptr [{length} x i8], ptr {str_name}, i32 0, i32 0")
+            self.emit(f"  {wrapped} = call i8* @mocha_str_literal(i8* {ptr})")
+            self.emit(f"  ret i8* {wrapped}")
         unk_name = self.fresh_str_global("unknown")
         self.emit(f"tag_default:")
-        self.emit(f"  ret i8* getelementptr inbounds "
-            f"([8 x i8], ptr {unk_name}, i32 0, i32 0)")
+        ptr2 = self.fresh_temp()
+        wrapped2 = self.fresh_temp()
+        self.emit(f"  {ptr2} = getelementptr [8 x i8], ptr {unk_name}, i32 0, i32 0")
+        self.emit(f"  {wrapped2} = call i8* @mocha_str_literal(i8* {ptr2})")
+        self.emit(f"  ret i8* {wrapped2}")
         self.emit(f"}}")
         self.emit_blank()
 

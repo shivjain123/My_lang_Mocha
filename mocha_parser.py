@@ -31,7 +31,10 @@
 #     - Arrays: T[], T[N], T[][N], etc. (1D/2D max; 3D+ rejected)
 #     - Sets: set<T> (type-parameterized)
 #     - Dicts: dict (untyped at parse time)
-#     - Custom: any IDENTIFIER (class/interface names)
+#     - Custom: any IDENTIFIER or CONST_IDENT (class/interface
+#       names — SCREAMING_CASE class names like `class T {}`
+#       are valid, distinguished from const declarations by
+#       context, not spelling)
 #   Postfix dimension syntax (int[5][]) parsed left-to-right.
 #   No generic syntax e.g. List<T>; parameterized types are
 #   library-level abstractions, not parser-level generics.
@@ -308,6 +311,15 @@ class Parser:
         prev_token = self.tokens[self.pos - 1] if self.pos > 0 else self.current()
         raise MochaParseError(message, self.current(), prev_token)
 
+    def expect_name(self, what: str) -> str:
+        """Like expect(TokenType.IDENTIFIER, ...), but also accepts
+        CONST_IDENT so all-caps class/interface names are allowed."""
+        tok = self.current()
+        if tok.type not in (TokenType.IDENTIFIER, TokenType.CONST_IDENT):
+            raise MochaParseError(f"Expected {what}", tok)
+        self.advance()
+        return tok.value
+
     def is_at_end(self) -> bool:
         return self.current().type == TokenType.EOF
 
@@ -375,7 +387,7 @@ class Parser:
             elif tok.type == TokenType.LAMBDA:
                 self.advance()
                 return "lambda"
-            elif tok.type == TokenType.IDENTIFIER:
+            elif tok.type in (TokenType.IDENTIFIER, TokenType.CONST_IDENT):
                 self.advance()
                 base = tok.value
             else:
@@ -960,7 +972,7 @@ class Parser:
             if self.check(*self.TYPE_TOKENS.keys()):
                 elem_type = self.TYPE_TOKENS[self.current().type]
                 self.advance()
-            elif self.check(TokenType.IDENTIFIER):
+            elif self.check(TokenType.IDENTIFIER, TokenType.CONST_IDENT):
                 elem_type = self.advance().value
             else:
                 raise MochaParseError("Expected type after 'alloc'", self.current())
@@ -1804,31 +1816,29 @@ class Parser:
         tok = self.current()  # capture 'var' token before consuming
         #doc = self.collect_doc()
         self.expect(TokenType.CLASS, "Expected 'class'")
-        name = self.expect(TokenType.IDENTIFIER,
-                           "Expected class name").value
+
+        # --- CHANGED: class name may be IDENTIFIER or CONST_IDENT ---
+        name_tok = self.current()
+        if name_tok.type not in (TokenType.IDENTIFIER, TokenType.CONST_IDENT):
+            raise MochaParseError("Expected class name", name_tok)
+        name = name_tok.value
+        self.advance()
+        # --- end change ---
 
         parents    = []
         interfaces = []
 
         # extends Parent1, Parent2, ...
         if self.match(TokenType.EXTENDS):
-            parents.append(self.expect(TokenType.IDENTIFIER,
-                                 "Expected parent class name").value)
+            parents.append(self.expect_name("parent class name"))
             while self.match(TokenType.COMMA):
-                parents.append(self.expect(TokenType.IDENTIFIER,
-                                 "Expected parent class name").value)
+                parents.append(self.expect_name("parent class name"))
 
         # implements Interface1, Interface2
         if self.match(TokenType.IMPLEMENTS):
-            interfaces.append(
-                self.expect(TokenType.IDENTIFIER,
-                            "Expected interface name").value
-            )
+            interfaces.append(self.expect_name("interface name"))
             while self.match(TokenType.COMMA):
-                interfaces.append(
-                    self.expect(TokenType.IDENTIFIER,
-                                "Expected interface name").value
-                )
+                interfaces.append(self.expect_name("interface name"))
 
         self.expect(TokenType.LBRACE, "Expected '{' to open class body")
         body = []
@@ -1838,7 +1848,7 @@ class Parser:
         self.expect(TokenType.SEMICOLON, "Expected ';' after class")
 
         node = ClassDecl(name=name, parents=parents,
-                         interfaces=interfaces, body=body, doc=doc) # type: ignore
+                        interfaces=interfaces, body=body, doc=doc) # type: ignore
         node.line = tok.line
         node.col  = tok.column
         return node
