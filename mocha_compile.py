@@ -77,6 +77,61 @@ MSVC_CL       = r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Too
 CLANG_RT_LIB  = r"C:\Program Files\LLVM\lib\clang\21\lib\windows\clang_rt.builtins-x86_64.lib"
 LUA_MSVC_LIB  = os.path.join(SCRIPT_DIR, "lua-5.5.0_Win64_dllw6_lib", "lua55_msvc.lib")
 
+import urllib.request, zipfile, tarfile, tempfile
+
+ZIG_VERSION = "0.17.0-dev.313+27be3b069"
+ZIG_DOWNLOADS = {
+    "windows": "https://github.com/shivjain123/My_lang_Mocha/releases/download/zig-toolchain/zig-windows-x86_64.zip",
+    "linux":   "https://github.com/YOUR_NAME/YOUR_REPO/releases/download/zig-toolchain/zig-linux-x86_64.tar.xz",
+}
+
+def ensure_zig():
+    zig_lib_dir = os.path.join(SCRIPT_DIR, "zig-lib")
+    if os.path.exists(ZIG_PATH) and os.path.isdir(zig_lib_dir):
+        return True
+    key = "windows" if IS_WINDOWS else "linux"
+    url = ZIG_DOWNLOADS.get(key)
+    if not url or "YOUR_NAME" in url:
+        print(f"  ❌ This program uses Zig FFI (mocha_zig_ functions), but Zig was not found at:\n     {ZIG_PATH}")
+        print(f"     Install Zig {ZIG_VERSION} there, or set the download link in mocha_compile.py.")
+        return False
+    print(f"  ⬇  Zig not found. Downloading Zig {ZIG_VERSION} (one-time, may take a minute)...", flush=True)
+    tmp = tempfile.mkdtemp()
+    try:
+        archive = os.path.join(tmp, "zig_archive")
+        urllib.request.urlretrieve(url, archive)
+        out = os.path.join(tmp, "out")
+        if url.endswith(".zip"):
+            with zipfile.ZipFile(archive) as z:
+                z.extractall(out)
+        else:
+            with tarfile.open(archive, "r:xz") as t:
+                t.extractall(out)
+        zig_name = os.path.basename(ZIG_PATH)
+        root = next((d for d, _, files in os.walk(out) if zig_name in files), None)
+        if root is None:
+            print("  ❌ Downloaded archive did not contain a Zig executable.")
+            return False
+        shutil.copy2(os.path.join(root, zig_name), ZIG_PATH)
+        lib_src = next((os.path.join(root, n) for n in ("zig-lib", "lib")
+                        if os.path.isdir(os.path.join(root, n))), None)
+        if lib_src is None:
+            print("  ❌ Downloaded archive did not contain Zig's lib folder.")
+            return False
+        if os.path.isdir(zig_lib_dir):
+            shutil.rmtree(zig_lib_dir)
+        shutil.copytree(lib_src, zig_lib_dir)
+        if not IS_WINDOWS:
+            os.chmod(ZIG_PATH, 0o755)
+        print("  ✅ Zig installed", flush=True)
+        return True
+    except Exception as e:
+        print(f"  ❌ Could not download Zig: {e}")
+        print(f"     You can download it manually from: {url}")
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
 if not CLANG_PATH:
     print("❌ clang not found! Please install LLVM from https://llvm.org/releases/")
     sys.exit(1)
@@ -1376,6 +1431,8 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     # Compile Zig
     zig_src = os.path.join(SCRIPT_DIR, "zig_ffi.zig")
     zig_out = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "zig_ffi.a")
+    if needs_zig and not ensure_zig():
+        return False
     if needs_zig and needs_recompile(zig_src, zig_out):
         zig_target = "x86_64-windows-gnu" if IS_WINDOWS else \
                      "x86_64-macos-none"   if IS_MACOS  else \

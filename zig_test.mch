@@ -1,5 +1,5 @@
 //Zig Test
-function zig_add(a: int, b: int) -> int native zig_add;
+function zig_add(a: int, b: int) -> int native mocha_zig_add;
 function zig_multiply(a: int, b: int) -> int native mocha_zig_multiply;
 function zig_fibonacci(n: int) -> int native mocha_zig_fibonacci;
 function zig_factorial(n: int) -> int native mocha_zig_factorial;
