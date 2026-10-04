@@ -766,8 +766,9 @@ class TypeChecker:
                 return "str[]"
             return "unknown"
 
-        # Tag built-ins
-        if obj_type in self.tag_types:
+        # Tag built-ins (values only: Tag.MEMBER access on the type itself falls through to lookup)
+        is_tag_type_access = isinstance(node.obj, Identifier) and node.obj.name == obj_type
+        if obj_type in self.tag_types and not is_tag_type_access:
             if node.member == "name":
                 return "str"
             self.error(

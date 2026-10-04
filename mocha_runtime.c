@@ -336,8 +336,7 @@ static void mocha_print_backtrace(int skip) {
    Mocha Reference Counting (This is also partially working since \
    full was not possible yet.) \
    For now, it masks gc, and is working for strings, 1D and 2D arrays, \
-   tuples, sets, and dicts; Classes,\
-   and Ink lib are remaining (Also Block scoping)
+   tuples, sets, and dicts; Classes are remaining (Also Block scoping)
    =============================================================== */
 
 #define RC_MAGIC_LIVE 0xA11C0FFEEBEEF001ULL
@@ -450,6 +449,10 @@ void mocha_rc_stats() {
     printf("[RC] live objects: %zu | total bytes: %zu\n", count, total_bytes);
 }
 
+void mocha_rc_stats_if_enabled(void) {
+    const char* e = getenv("MOCHA_RC_STATS");
+    if (e && e[0] && e[0] != '0') mocha_rc_stats();
+}
 
 /* ===============================================================
    Override exit to always print stack trace first
@@ -707,6 +710,11 @@ int mocha_str_eq(char *a, char *b) {
 
 int mocha_wrap_isalpha_str(const char *s) { return isalpha((unsigned char)s[0]); }
 int mocha_wrap_isdigit_str(const char *s) { return isdigit((unsigned char)s[0]); }
+
+int mocha_wrap_char_code(const char *c) {
+    if (!c || !c[0]) return 0;
+    return (unsigned char)c[0];
+}
 
 /* ---- Inspection ---- */
 int32_t mocha_str_length(char *s) { 
@@ -11204,6 +11212,24 @@ void ink_st_show(InkSTPlot* p) {
 
 void ink_st_save_mocha(InkSTPlot* p, const char* path) { ink_st_save(p, path); }
 void ink_st_show_mocha(InkSTPlot* p)                   { ink_st_show(p); }
+
+//Freeing wrappers
+void ink_lp_free(LinePlot* p)       { free(p); }
+void ink_sp_free(ScatterPlot* p)    { free(p); }
+void ink_bc_free(BarChart* p)       { free(p); }
+void ink_hm_free(Heatmap* p)        { free(p); }
+void ink_pc_free(PieChart* p)       { free(p); }
+void ink_hg_free(Histogram* p)      { free(p); }
+void ink_bp_free(BoxPlot* p)        { free(p); }
+void ink_vn_free(ViolinPlot* p)     { free(p); }
+void ink_ac_free(AreaChart* p)      { free(p); }
+void ink_bc2_free(BubbleChart* p)   { free(p); }
+void ink_cp_free(CurvePlot* p)      { free(p); }
+void ink_ep_free(ErrorPlot* p)      { free(p); }
+void ink_lm_free(InkLMPlot* p)  { free(p); }
+void ink_net_free(InkNetChart* p) { free(p); }
+void ink_sk_free(InkSkChart* p) { free(p); }
+void ink_st_free(InkSTPlot* p)  { free(p); }
 
 
 /*!!MOCHA - INK END!!*/

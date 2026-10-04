@@ -706,8 +706,50 @@ class Parser {
     };
 
     function parse_and() -> ASTNode {
-        var left: ASTNode = this.parse_equality();
+        var left: ASTNode = this.parse_bit_or();
         while (this.check(TokenType.AND)) {
+            var op_tok: Token = this.advance();
+            var right: ASTNode = this.parse_bit_or();
+            var node: ASTNode = this.make_node("BinaryOp");
+            node.left = left;
+            node.value = op_tok.value;
+            node.right = right;
+            left = node;
+        };
+        return left;
+    };
+
+    function parse_bit_or() -> ASTNode {
+        var left: ASTNode = this.parse_bit_xor();
+        while (this.check(TokenType.BIT_OR)) {
+            var op_tok: Token = this.advance();
+            var right: ASTNode = this.parse_bit_xor();
+            var node: ASTNode = this.make_node("BinaryOp");
+            node.left = left;
+            node.value = op_tok.value;
+            node.right = right;
+            left = node;
+        };
+        return left;
+    };
+
+    function parse_bit_xor() -> ASTNode {
+        var left: ASTNode = this.parse_bit_and();
+        while (this.check(TokenType.BIT_XOR)) {
+            var op_tok: Token = this.advance();
+            var right: ASTNode = this.parse_bit_and();
+            var node: ASTNode = this.make_node("BinaryOp");
+            node.left = left;
+            node.value = op_tok.value;
+            node.right = right;
+            left = node;
+        };
+        return left;
+    };
+
+    function parse_bit_and() -> ASTNode {
+        var left: ASTNode = this.parse_equality();
+        while (this.check(TokenType.BIT_AND)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_equality();
             var node: ASTNode = this.make_node("BinaryOp");
@@ -734,11 +776,11 @@ class Parser {
     };
 
     function parse_comparison() -> ASTNode {
-        var left: ASTNode = this.parse_range();
+        var left: ASTNode = this.parse_shift();
         while (this.check(TokenType.LT) || this.check(TokenType.GT) ||
             this.check(TokenType.LTE) || this.check(TokenType.GTE)) {
             var op_tok: Token = this.advance();
-            var right: ASTNode = this.parse_range();
+            var right: ASTNode = this.parse_shift();
             var node: ASTNode = this.make_node("BinaryOp");
             node.left = left;
             node.value = op_tok.value;
@@ -748,15 +790,16 @@ class Parser {
         return left;
     };
 
-    function parse_range() -> ASTNode {
+    function parse_shift() -> ASTNode {
         var left: ASTNode = this.parse_addition();
-        if (this.check(TokenType.RANGE)) {
-            this.advance();
+        while (this.check(TokenType.BIT_SHL) || this.check(TokenType.BIT_SHR)) {
+            var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_addition();
-            var node: ASTNode = this.make_node("RangeNode");
+            var node: ASTNode = this.make_node("BinaryOp");
             node.left = left;
+            node.value = op_tok.value;
             node.right = right;
-            return node;
+            left = node;
         };
         return left;
     };

@@ -1,5 +1,8 @@
 from "./token.mch" import *;
 from "./utils.mch" import *;
+from "mocha-string" import *;
+
+local function mocha_char_code(c: str) -> int native mocha_wrap_char_code;
 
 // ============================================================
 // lexer.mch — Mocha Self-Hosted Lexer
@@ -124,7 +127,7 @@ class Lexer {
             };
             this.advance();
         };
-        mocha_error("MochaLexError: Unterminated multiline comment");
+        mocha_error("MochaLexError", "Unterminated multiline comment");
     };
 
     // --------------------------------------------------------
@@ -135,22 +138,23 @@ class Lexer {
         var result: str = "";
         while (this.current() != "\0" && this.current() != "\"") {
             if (this.current() == "\n") {
-                mocha_error("MochaLexError: Unterminated string literal");
+                mocha_error("MochaLexError", "Unterminated string literal");
                 return this.make_token(TokenType.UNKNOWN, "", l, c);
             };
             if (this.current() == "\\") {
                 this.advance();
                 var esc: str = this.advance();
-                if (esc == "n")  { result = result + "\n"; };
-                if (esc == "t")  { result = result + "\t"; };
-                if (esc == "\"") { result = result + "\""; };
-                if (esc == "\\") { result = result + "\\"; };
+                if (esc == "n")  { result = result + "\n"; }
+                else if (esc == "t")  { result = result + "\t"; }
+                else if (esc == "\"") { result = result + "\""; }
+                else if (esc == "\\") { result = result + "\\"; }
+                else { result = result + "\\" + esc; };
             } else {
                 result = result + this.advance();
             };
         };
         if (this.current() == "\0") {
-            mocha_error("MochaLexError: Unterminated string literal");
+            mocha_error("MochaLexError", "Unterminated string literal");
             return this.make_token(TokenType.UNKNOWN, "", l, c);
         };
         this.advance(); // closing "
@@ -165,8 +169,14 @@ class Lexer {
         var num: str = first;
         var is_float: bool = false;
 
-        while (this.current() != "\0" && this.current() >= "0" && this.current() <= "9") {
-            num = num + this.advance();
+        while (this.current() != "\0" && (
+                (this.current() >= "0" && this.current() <= "9") ||
+                this._is_valid_underscore())) {
+            if (this.current() == "_") {
+                this.advance(); // skip underscore, don't store it
+            } else {
+                num = num + this.advance();
+            };
         };
 
         // Float: digit.digit (not ..)
@@ -174,8 +184,46 @@ class Lexer {
             this.peek(1) >= "0" && this.peek(1) <= "9") {
             is_float = true;
             num = num + this.advance(); // consume .
-            while (this.current() != "\0" && this.current() >= "0" && this.current() <= "9") {
-                num = num + this.advance();
+            while (this.current() != "\0" && (
+                    (this.current() >= "0" && this.current() <= "9") ||
+                    this._is_valid_underscore())) {
+                if (this.current() == "_") {
+                    this.advance();
+                } else {
+                    num = num + this.advance();
+                };
+            };
+        };
+
+        // Lowercase e — explicit error guiding user to uppercase E
+        if (this.current() == "e") {
+            mocha_error("MochaLexError", "Mocha enforces uppercase 'E' for scientific notation (e.g. 1.5E10, not 1.5e10)");
+        };
+
+        // Scientific notation: 1.5E10, 2E-3, 3.14E+6 — uppercase E only
+        if (this.current() == "E") {
+            var next_ch: str = this.peek(1);
+            if (next_ch != "\0" && ((next_ch >= "0" && next_ch <= "9") || next_ch == "+" || next_ch == "-")) {
+                is_float = true;
+                num = num + this.advance(); // consume 'E'
+                if (this.current() == "+" || this.current() == "-") {
+                    num = num + this.advance();
+                };
+                if (this.current() != "\0" && this.current() >= "0" && this.current() <= "9") {
+                    while (this.current() != "\0" && this.current() >= "0" && this.current() <= "9") {
+                        num = num + this.advance();
+                    };
+                } else {
+                    // E with no digits after — back off, not scientific notation
+                    var keep_len: int = num.length - 2;
+                    if (keep_len < 0) {
+                        num = "";
+                    } else {
+                        num = num.substring(0, keep_len);
+                    };
+                    this.pos = this.pos - 1;
+                    this.col = this.col - 1;
+                };
             };
         };
 
@@ -190,6 +238,20 @@ class Lexer {
             return this.make_token(TokenType.FLOAT_LIT, num, l, c);
         };
         return this.make_token(TokenType.INT_LIT, num, l, c);
+    };
+
+    function _is_valid_underscore() -> bool {
+        if (this.current() != "_") {
+            return false;
+        };
+        var prev: str = "\0";
+        if (this.pos > 0) {
+            prev = this.source.charAt(this.pos - 1);
+        };
+        var nxt: str = this.peek(1);
+        var prev_digit: bool = (prev >= "0" && prev <= "9");
+        var next_digit: bool = (nxt != "\0" && nxt >= "0" && nxt <= "9");
+        return prev_digit && next_digit;
     };
 
     // --------------------------------------------------------
@@ -222,6 +284,11 @@ class Lexer {
         if (word == "shared")     { return this.make_token(TokenType.SHARED,     word, l, c); };
         if (word == "private")    { return this.make_token(TokenType.PRIVATE,    word, l, c); };
         if (word == "protected")  { return this.make_token(TokenType.PROTECTED,  word, l, c); };
+        if (word == "local")      { return this.make_token(TokenType.LOCAL,      word, l, c); };
+        if (word == "try")        { return this.make_token(TokenType.TRY,        word, l, c); };
+        if (word == "rescue")     { return this.make_token(TokenType.RESCUE,     word, l, c); };
+        if (word == "fail")       { return this.make_token(TokenType.FAIL,       word, l, c); };
+        if (word == "rethrow")    { return this.make_token(TokenType.RETHROW,    word, l, c); };
         if (word == "this")       { return this.make_token(TokenType.THIS,       word, l, c); };
         if (word == "alloc")      { return this.make_token(TokenType.ALLOC,      word, l, c); };
         if (word == "if")         { return this.make_token(TokenType.IF,         word, l, c); };
@@ -281,6 +348,18 @@ class Lexer {
         return this.make_token(TokenType.IDENTIFIER, word, l, c);
     };
 
+    function lex_doc_comment(l: int, c: int) -> Token {
+        if (this.current() == " ") {
+            this.advance();
+        };
+        var begin: int = this.pos;
+        while (this.current() != "\0" && this.current() != "\n") {
+            this.advance();
+        };
+        var text: str = this.source.substring(begin, this.pos - 1);
+        return this.make_token(TokenType.DOC_COMMENT, text, l, c);
+    };
+
     // --------------------------------------------------------
     // Main tokenise loop
     // --------------------------------------------------------
@@ -305,6 +384,13 @@ class Lexer {
                 continue;
             };
 
+            // Doc comment
+            if (ch == "~" && this.current() == "~") {
+                this.advance(); // consume second ~
+                this.tokens.push(this.lex_doc_comment(l, c));
+                continue;
+            };
+
             // String or multiline comment
             if (ch == "\"") {
                 if (this.current() == "\"" && this.peek(1) == "\"") {
@@ -319,7 +405,7 @@ class Lexer {
 
             // Char literal — not supported
             if (ch == "'") {
-                mocha_error("MochaLexError: Single-quoted char literals are not supported; use double-quoted strings");
+                mocha_error("MochaLexError","Single-quoted char literals are not supported; use double-quoted strings");
                 continue;
             };
 
@@ -371,23 +457,33 @@ class Lexer {
                 continue;
             };
             if (ch == "<") {
-                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.LTE,    "<=", l, c)); }
+                if (this.match_char("<")) { this.tokens.push(this.make_token(TokenType.BIT_SHL, "<<", l, c)); }
+                else if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.LTE, "<=", l, c)); }
                 else { this.tokens.push(this.make_token(TokenType.LT, "<", l, c)); };
                 continue;
             };
             if (ch == ">") {
-                if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.GTE,    ">=", l, c)); }
+                if (this.match_char(">")) { this.tokens.push(this.make_token(TokenType.BIT_SHR, ">>", l, c)); }
+                else if (this.match_char("=")) { this.tokens.push(this.make_token(TokenType.GTE, ">=", l, c)); }
                 else { this.tokens.push(this.make_token(TokenType.GT, ">", l, c)); };
                 continue;
             };
             if (ch == "&") {
-                if (this.match_char("&")) { this.tokens.push(this.make_token(TokenType.AND,    "&&", l, c)); }
-                else { mocha_error("MochaLexError: Single '&' is not valid in Mocha. Use '&&'"); };
+                if (this.match_char("&")) { this.tokens.push(this.make_token(TokenType.AND,     "&&", l, c)); }
+                else { this.tokens.push(this.make_token(TokenType.BIT_AND, "&", l, c)); };
                 continue;
             };
             if (ch == "|") {
-                if (this.match_char("|")) { this.tokens.push(this.make_token(TokenType.OR,     "||", l, c)); }
-                else { mocha_error("MochaLexError: Single '|' is not valid in Mocha. Use '||'"); };
+                if (this.match_char("|")) { this.tokens.push(this.make_token(TokenType.OR,      "||", l, c)); }
+                else { this.tokens.push(this.make_token(TokenType.BIT_OR,  "|", l, c)); };
+                continue;
+            };
+            if (ch == "^") {
+                this.tokens.push(this.make_token(TokenType.BIT_XOR, "^", l, c));
+                continue;
+            };
+            if (ch == "~") {
+                this.tokens.push(this.make_token(TokenType.BIT_NOT, "~", l, c));
                 continue;
             };
             if (ch == ".") {
@@ -406,8 +502,11 @@ class Lexer {
             if (ch == ";") { this.tokens.push(this.make_token(TokenType.SEMICOLON, ";", l, c)); continue; };
             if (ch == "#") { this.tokens.push(this.make_token(TokenType.HASH,      "#", l, c)); continue; };
 
-            // Unknown character — skip silently if unicode for superscripts and emojis
-            // else emit UNKNOWN
+            // Unknown character — silently skip non-ASCII bytes (emoji, etc.
+            // in comments), emit UNKNOWN for anything else
+            if (mocha_char_code(ch) > 127) {
+                continue;
+            };
             this.tokens.push(this.make_token(TokenType.UNKNOWN, ch, l, c));
         };
         return this.tokens;

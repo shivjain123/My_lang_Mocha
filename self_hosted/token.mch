@@ -139,6 +139,26 @@ tag TokenType {
     LANGLE,
     RANGLE,
 
+    // --- Visibility (local) ---
+    LOCAL,
+
+    // --- Exception Handling ---
+    TRY,
+    RESCUE,
+    FAIL,
+    RETHROW,
+
+    // --- Bitwise ---
+    BIT_AND,
+    BIT_OR,
+    BIT_XOR,
+    BIT_NOT,
+    BIT_SHL,
+    BIT_SHR,
+
+    // --- Doc Comments ---
+    DOC_COMMENT,
+
     // --- Special ---
     EOF,
     UNKNOWN,
@@ -155,7 +175,7 @@ class Token {
     var line:   int;
     var col:    int;
 
-    function init(t: TokenType, v: str, l: int, c: int) -> null {
+    function constructor(t: TokenType, v: str, l: int, c: int) -> null {
         this.type  = t;
         this.value = v;
         this.line  = l;

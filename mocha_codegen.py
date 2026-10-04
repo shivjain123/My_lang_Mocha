@@ -148,6 +148,7 @@ class CodeGen:
         self.local_name_counts = {}  # tracks how many times a name has been used
         self.lib_tag_names = set()  # tags imported from libs, don't re-emit
         self.target_os = platform.system()  # "Windows", "Linux", "Darwin"
+        self.rc_classes = set()  # classes with a body in THIS compilation unit: RC-allocated, safe to drop
 
         # Built-in StringBuilder type
         self.class_fields["StringBuilder"] = [
@@ -213,6 +214,7 @@ class CodeGen:
         self.owned_dict_locals = []
         self.owned_arr2d_locals = []
         self.owned_complex_locals = []
+        self.owned_class_locals = []   # list of (ptr, class_name)
 
         # === FUNCTION CONTEXT ===
         # Track current function's return type for RC cleanup
@@ -614,6 +616,52 @@ class CodeGen:
                 self.emit(f"  {tmp} = load %struct.MochaComplex*, %struct.MochaComplex** {ptr}")
                 self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {tmp})")
     
+    def emit_class_drop(self, class_name):
+        """Name_drop releases owned fields; Name_release is the refcount-aware entry point."""
+        mfields = self.class_mocha_fields.get(class_name, [])
+        lfields = self.class_fields.get(class_name, [])
+        if len(mfields) != len(lfields):
+            raise RuntimeError(f"field table mismatch for {class_name}: {len(mfields)} vs {len(lfields)}")
+        T = f"%struct.{class_name}*"
+        self.emit(f"define void @{class_name}_drop({T} %self) {{")
+        self.emit("entry:")
+        for idx, (fname, mtype) in enumerate(mfields):
+            if mtype == "str":
+                gep, val = self.fresh_temp(), self.fresh_temp()
+                self.emit(f"  {gep} = getelementptr %struct.{class_name}, {T} %self, i32 0, i32 {idx}")
+                self.emit(f"  {val} = load i8*, i8** {gep}")
+                self.emit(f"  call void @rc_release(i8* {val})")
+        self.emit("  ret void")
+        self.emit("}")
+        self.emit_blank()
+
+        self.emit(f"define void @{class_name}_release({T} %obj) {{")
+        self.emit("entry:")
+        self.emit(f"  %raw = bitcast {T} %obj to i8*")
+        self.emit("  %isnull = icmp eq i8* %raw, null")
+        self.emit("  br i1 %isnull, label %done, label %chk")
+        self.emit("chk:")
+        self.emit("  %cnt = call i64 @rc_count(i8* %raw)")
+        self.emit("  %last = icmp eq i64 %cnt, 1")
+        self.emit("  br i1 %last, label %dropit, label %rel")
+        self.emit("dropit:")
+        self.emit(f"  call void @{class_name}_drop({T} %obj)")
+        self.emit("  br label %rel")
+        self.emit("rel:")
+        self.emit("  call void @rc_release(i8* %raw)")
+        self.emit("  br label %done")
+        self.emit("done:")
+        self.emit("  ret void")
+        self.emit("}")
+        self.emit_blank()
+
+    def emit_release_owned_class_locals(self):
+        for ptr, cls in self.owned_class_locals:
+            T = f"%struct.{cls}*"
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = load {T}, {T}* {ptr}")
+            self.emit(f"  call void @{cls}_release({T} {tmp})")
+    
     def is_str_array_type(self, mocha_type: str) -> bool:
         return mocha_type == "str[]"
     
@@ -624,6 +672,7 @@ class CodeGen:
             "RC Runtime": [
                 "declare void @mocha_signal_handlers_init()",
                 "declare void @mocha_rc_stats()",
+                "declare void @mocha_rc_stats_if_enabled()",
                 "declare void @mocha_rc_shutdown()",
                 "declare void @rc_retain(i8*) nounwind",
                 "declare void @rc_release(i8*) nounwind",
@@ -2120,6 +2169,17 @@ class CodeGen:
         obj    = node.name.obj
         member = node.name.member
 
+        # Tag .name() on any expression — chained, indexed, or a plain
+        # variable — checked generically via infer_mocha_type, so this
+        # isn't limited to simple identifiers.
+        if member == "name":
+            mocha_type = self.infer_mocha_type(obj)
+            if mocha_type in _tag_types_registry:
+                obj_reg, _ = self.gen_expr(obj)
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = call i8* @{mocha_type}__name(i32 {obj_reg})")
+                return (tmp, "i8*")
+
         if isinstance(obj, Identifier):
             obj_name = obj.name
 
@@ -2452,6 +2512,16 @@ class CodeGen:
             obj_reg, obj_type = self.gen_expr(obj)
             return self.gen_str_method_call(obj_reg, member, node)
 
+    def emit_class_alloc(self, class_name):
+        """Allocate a zeroed, RC-tracked instance of class_name. Single source of truth for class allocation."""
+        computed = self.compute_struct_size(class_name)  # type: ignore
+        raw = self.fresh_temp()
+        obj = self.fresh_temp()
+        ptr_type = f"%struct.{class_name}*"
+        self.emit(f"  {raw} = call i8* @rc_alloc(i64 {computed})  ; sizeof {class_name}")
+        self.emit(f"  {obj} = bitcast i8* {raw} to {ptr_type}")
+        return obj, ptr_type
+
     def gen_function_call(self, node):
         # -------------------------------------------------------
         # Step 1: Determine function name and any implicit first arg
@@ -2679,32 +2749,15 @@ class CodeGen:
         if is_constructor_candidate and func_name in self.classes_with_constructors:
             class_name      = func_name
             func_name       = f"{func_name}_constructor"
-            struct_ptr_type = f"%struct.{class_name}*"
-            raw  = self.fresh_temp()
-            obj  = self.fresh_temp()
-            size = self.fresh_temp()
-            computed = self.compute_struct_size(class_name) # type: ignore
-            self.emit(f"  {size} = add i64 0, {computed}  ; sizeof {class_name}")
-            self.emit(f"  {raw} = call i8* @malloc(i64 {size})")
-            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 {computed}, i1 false)")
-            self.emit(f"  {obj} = bitcast i8* {raw} to {struct_ptr_type}")
+            obj, struct_ptr_type = self.emit_class_alloc(class_name)
             args.insert(0, (obj, struct_ptr_type))
             arg_str = ", ".join(f"{t} {r}" for r, t in args)
             self.emit(f"  call void @{func_name}({arg_str})")
             return (obj, struct_ptr_type)
 
         elif is_constructor_candidate:
-            struct_ptr_type = f"%struct.{func_name}*"
-            raw  = self.fresh_temp()
-            obj  = self.fresh_temp()
-            size = self.fresh_temp()
-            computed = self.compute_struct_size(func_name) # type: ignore
-            self.emit(f"  {size} = add i64 0, {computed}  ; sizeof {func_name}")
-            self.emit(f"  {raw} = call i8* @malloc(i64 {size})")
-            self.emit(f"  call void @llvm.memset.p0i8.i64(i8* {raw}, i8 0, i64 {computed}, i1 false)")
-            self.emit(f"  {obj} = bitcast i8* {raw} to {struct_ptr_type}")
+            obj, struct_ptr_type = self.emit_class_alloc(func_name)
 
-            # ← always call constructor, args or not
             constructor_name = f"{func_name}_constructor"
             if node.args:
                 arg_vals = []
@@ -3261,6 +3314,24 @@ class CodeGen:
             self.local_mocha_types[node.name] = node.type
             self.owned_complex_locals.append(node.name)
             return
+
+        # Mocha-defined classes: RC-allocated, released at scope exit
+        if node.type in self.rc_classes:
+            T = f"%struct.{node.type}*"
+            if val_type != T and val_reg != "null":
+                cast = self.fresh_temp()
+                self.emit(f"  {cast} = bitcast {val_type} {val_reg} to {T}")
+                val_reg = cast
+            ptr = self.unique_ptr_name(node.name)
+            self.alloca_at_entry(T, ptr, init_null=True)
+            old = self.fresh_temp()
+            self.emit(f"  {old} = load {T}, {T}* {ptr}")
+            self.emit(f"  call void @{node.type}_release({T} {old})")
+            self.emit(f"  store {T} {val_reg}, {T}* {ptr}")
+            self.locals[node.name] = (ptr, T)
+            self.local_mocha_types[node.name] = node.type
+            self.owned_class_locals.append((ptr, node.type))
+            return
         
         # null as opaque pointer (FFI handle)
         if node.type == "null":
@@ -3492,6 +3563,14 @@ class CodeGen:
                         self.emit(f"  {p} = sitofp i32 {val_reg} to double")
                         val_reg = p
 
+                    if field_mocha_type == "str" and val_type == "i8*":
+                        # retain the new value first (self-assignment safe), then release the old one
+                        if isinstance(node.value, (Identifier, MemberAccess)):
+                            self.emit(f"  call void @rc_retain(i8* {val_reg})")
+                        old = self.fresh_temp()
+                        self.emit(f"  {old} = load i8*, i8** {ptr}")
+                        self.emit(f"  call void @rc_release(i8* {old})")
+
                     self.emit(f"  store {llvm_ftype} {val_reg}, {llvm_ftype}* {ptr}")
                     break
 
@@ -3572,6 +3651,7 @@ class CodeGen:
             self.emit_release_owned_dict_locals()
             self.emit_release_owned_arr2d_locals()
             self.emit_release_owned_complex_locals()
+            self.emit_release_owned_class_locals()
             self.emit("  call void @mocha_stack_pop()")
             self.emit("  ret void")
             return
@@ -3586,6 +3666,7 @@ class CodeGen:
             self.emit_release_owned_dict_locals()
             self.emit_release_owned_arr2d_locals()
             self.emit_release_owned_complex_locals()
+            self.emit_release_owned_class_locals()
             self.emit("  call void @mocha_stack_pop()")
             if self.current_return_type == "i8*":
                 self.emit("  ret i8* null")
@@ -3643,6 +3724,11 @@ class CodeGen:
             if isinstance(node.value, Identifier):
                 self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
 
+        # RC: same protection for a returned Mocha class instance
+        if self.current_mocha_return_type in self.rc_classes and isinstance(node.value, Identifier):
+            raw = self.fresh_temp()
+            self.emit(f"  {raw} = bitcast {val_type} {val_reg} to i8*")
+            self.emit(f"  call void @rc_retain(i8* {raw})")
         self.emit_release_owned_str_locals()
         self.emit_release_owned_arr_locals()
         self.emit_release_owned_tuple_locals()
@@ -3650,6 +3736,7 @@ class CodeGen:
         self.emit_release_owned_dict_locals()
         self.emit_release_owned_arr2d_locals()
         self.emit_release_owned_complex_locals()
+        self.emit_release_owned_class_locals()
 
         self.emit("  call void @mocha_stack_pop()")
 
@@ -4217,6 +4304,7 @@ class CodeGen:
         self.owned_dict_locals = []
         self.owned_arr2d_locals = []
         self.owned_complex_locals = []
+        self.owned_class_locals = []   # list of (ptr, class_name)
 
         # Store 'this'
         if self.current_class and not getattr(node, 'is_shared', False):
@@ -4251,6 +4339,8 @@ class CodeGen:
             self.emit_release_owned_set_locals()
             self.emit_release_owned_dict_locals()
             self.emit_release_owned_arr2d_locals()
+            self.emit_release_owned_complex_locals()
+            self.emit_release_owned_class_locals()
             if ret_llvm == "void":
                 self.emit("  call void @mocha_stack_pop()")
                 self.emit("  ret void")
@@ -4298,6 +4388,7 @@ class CodeGen:
         self.owned_dict_locals = []
         self.owned_arr2d_locals = []
         self.owned_complex_locals = []
+        self.owned_class_locals = []   # list of (ptr, class_name)
         self.local_name_counts = {}  # tracks how many times a name has been used
         self.in_function         = False
         self.entry_allocas       = []
@@ -4363,6 +4454,7 @@ class CodeGen:
             self.owned_dict_locals = []
             self.owned_arr2d_locals = []
             self.owned_complex_locals = []
+            self.owned_class_locals = []   # list of (ptr, class_name)
 
             # Store 'this'
             this_ptr = "%this.ptr"
@@ -4416,6 +4508,7 @@ class CodeGen:
             self.owned_dict_locals = []
             self.owned_arr2d_locals = []
             self.owned_complex_locals = []
+            self.owned_class_locals = []   # list of (ptr, class_name)
             self.local_name_counts = {}
             self.in_function         = False
             self.entry_allocas       = []
@@ -4621,6 +4714,9 @@ class CodeGen:
                     self.emit("  ret void")
                     self.emit("}")
                     self.emit_blank()
+
+        if node.name in self.rc_classes:
+            self.emit_class_drop(node.name)
 
     #=========== For Virtual Inheritance ===========#
     def gen_qualified_method_call(self, node):
@@ -5753,6 +5849,7 @@ class CodeGen:
 
         for node in program.statements:
             if isinstance(node, ClassDecl):
+                self.rc_classes.add(node.name)
                 all_fields = self.get_all_fields_for_class(node.name)
                 self.class_fields[node.name] = all_fields
                 field_types = [lt for _, lt in all_fields]
@@ -5926,6 +6023,7 @@ class CodeGen:
                 if top_level:
                     self.emit("  call void @mocha_main()")
 
+            self.emit("  call void @mocha_rc_stats_if_enabled()")
             self.emit("  call void @mocha_rc_shutdown()")
             self.emit("  ret i32 0")
             self.emit("}")

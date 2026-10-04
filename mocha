@@ -6,11 +6,30 @@ COMPILER="$SCRIPT_DIR/mocha_compile.py"
 REPL="$SCRIPT_DIR/mocha_repl.py"
 DOC="$SCRIPT_DIR/mocha_doc.py"
 
+show_help() {
+    echo "Mocha Compiler CLI"
+    echo ""
+    echo "Usage:"
+    echo "  mocha <file.mch>                 Compile a file"
+    echo "  mocha <file.mch> --debug         Compile with debug output"
+    echo "  mocha execute <file.mch>         Compile and run immediately"
+    echo "  mocha --lib <libfile.mch>        Compile a library"
+    echo "  mocha doc <file.mch>             Generate documentation"
+    echo "  mocha repl                       Launch interactive REPL"
+    echo "  mocha help                       Show this message"
+    echo ""
+    echo "Coming soon:"
+    echo "  mocha update                     Pull latest compiler + libraries"
+}
+
 if [ $# -eq 0 ]; then
-    echo "Usage: mocha <file.mch>"
-    echo "       mocha --lib <libfile.mch>"
-    echo "       mocha repl"
+    show_help
     exit 1
+fi
+
+if [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    show_help
+    exit 0
 fi
 
 if [ "$1" = "repl" ]; then

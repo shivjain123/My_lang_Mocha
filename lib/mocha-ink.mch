@@ -59,6 +59,7 @@ extend LinePlot {
     function add_scatter(x: float[], y: float[]) -> null native ink_lp_add_scatter;
     function save(path: str) -> null native ink_lp_save;
     function show() -> null native ink_lp_show;
+    function dispose() -> null native ink_lp_free;
 };
 
 // =============================================
@@ -76,6 +77,7 @@ extend ScatterPlot {
     function add_scatter(x: float[], y: float[]) -> null native ink_sp_add_scatter;
     function save(path: str) -> null native ink_sp_save;
     function show() -> null native ink_sp_show;
+    function dispose() -> null native ink_sp_free;
 };
 
 // =============================================
@@ -93,6 +95,7 @@ extend BarChart {
     function add_series(values: float[]) -> null native ink_bc_add_series;
     function save(path: str) -> null native ink_bc_save;
     function show() -> null native ink_bc_show;
+    function dispose() -> null native ink_bc_free;
 };
 
 // =============================================
@@ -110,6 +113,7 @@ extend Heatmap {
     function black_yellow() -> null native ink_hm_set_scheme_black_yellow;
     function save(path: str) -> null native ink_hm_save;
     function show() -> null native ink_hm_show;
+    function dispose() -> null native ink_hm_free;
 };
 
 // =============================================
@@ -123,6 +127,7 @@ extend PieChart {
     function color(i: int, c: str) -> null native ink_pc_set_color;
     function save(path: str) -> null native ink_pc_save;
     function show() -> null native ink_pc_show;
+    function dispose() -> null native ink_pc_free;
 };
 
 // =============================================
@@ -142,6 +147,7 @@ extend Histogram {
     function add(data: float[]) -> null native ink_hg_add;
     function save(path: str) -> null native ink_hg_save;
     function show() -> null native ink_hg_show;
+    function dispose() -> null native ink_hg_free;
 };
 
 // =============================================
@@ -160,6 +166,7 @@ extend BoxPlot {
     function add(data: float[]) -> null native ink_bp_add;
     function save(path: str) -> null native ink_bp_save;
     function show() -> null native ink_bp_show;
+    function dispose() -> null native ink_bp_free;
 };
 
 // =============================================
@@ -179,6 +186,7 @@ extend ViolinPlot {
     function add(data: float[]) -> null native ink_vn_add;
     function save(path: str) -> null native ink_vn_save;
     function show() -> null native ink_vn_show;
+    function dispose() -> null native ink_vn_free;
 };
 
 // =============================================
@@ -195,6 +203,7 @@ extend AreaChart {
     function add_area(x: float[], y: float[]) -> null native ink_ac_add_area;
     function save(path: str) -> null native ink_ac_save;
     function show() -> null native ink_ac_show;
+    function dispose() -> null native ink_ac_free;
 };
 
 // =============================================
@@ -213,6 +222,7 @@ extend BubbleChart {
     function add(x: float[], y: float[], z: float[]) -> null native ink_bc2_add;
     function save(path: str) -> null native ink_bc2_save;
     function show() -> null native ink_bc2_show;
+    function dispose() -> null native ink_bc2_free;
 };
 
 // =============================================
@@ -231,6 +241,7 @@ extend CurvePlot {
     function add(data: float[]) -> null native ink_cp_add;
     function save(path: str) -> null native ink_cp_save;
     function show() -> null native ink_cp_show;
+    function dispose() -> null native ink_cp_free;
 };
 
 // =============================================
@@ -249,6 +260,7 @@ extend ErrorPlot {
     function add(x: float[], y: float[], err: float[]) -> null native ink_ep_add;
     function save(path: str) -> null native ink_ep_save;
     function show() -> null native ink_ep_show;
+    function dispose() -> null native ink_ep_free;
 };
 
 // =============================================
@@ -268,6 +280,7 @@ extend LMPlot {
     function add(x: float[], y: float[]) -> null native ink_lm_add_mocha;
     function save(path: str) -> null native ink_lm_save_mocha;
     function show() -> null native ink_lm_show_mocha;
+    function dispose() -> null native ink_lm_free;
 };
 
 // =============================================
@@ -286,6 +299,7 @@ extend NetworkChart {
     function directed(on: bool) -> null native ink_net_set_directed_mocha;
     function save(path: str) -> null native ink_net_save_mocha;
     function show() -> null native ink_net_show_mocha;
+    function dispose() -> null native ink_net_free;
 };
 
 // =============================================
@@ -298,6 +312,7 @@ extend SankeyChart {
     function title(t: str) -> null native ink_sk_set_title_mocha;
     function save(path: str) -> null native ink_sk_save_mocha;
     function show() -> null native ink_sk_show_mocha;
+    function dispose() -> null native ink_sk_free;
 };
 
 // =============================================
@@ -311,4 +326,5 @@ extend SkewTPlot {
     function show_mixing_ratios() -> null native ink_st_show_mixing_ratios;
     function save(path: str) -> null native ink_st_save;
     function show() -> null native ink_st_show;
+    function dispose() -> null native ink_st_free;
 };
