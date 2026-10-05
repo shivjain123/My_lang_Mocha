@@ -28,6 +28,8 @@ __pycache__/
 # ─── Third-Party Source Dumps ────────────────────────────────────────────────
 zig-lib/
 
+/zig
+
 # ─── Node/VSCode Extension Build Artifacts ───────────────────────────────────
 node_modules/
 

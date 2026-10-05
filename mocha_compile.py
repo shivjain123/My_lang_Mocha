@@ -61,7 +61,7 @@ CPP_FILE    = os.path.join(SCRIPT_DIR, "hello_cpp.cpp")
 CPP_OBJ     = os.path.join(SCRIPT_DIR, "hello_cpp.o")
 RUST_LIB    = os.path.join(SCRIPT_DIR, "rust_ffi.a")
 ZIG_PATH    = os.path.join(SCRIPT_DIR, "zig.exe" if IS_WINDOWS else "zig")
-ZIG_LIB     = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "zig_ffi.a")
+ZIG_LIB     = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "libzig_ffi.a")
 LUA_DIR     = os.path.join(SCRIPT_DIR, "lua-5.5.0_Win64_dllw6_lib" if IS_WINDOWS else "lua-5.5.0_unix")
 LUA_LIB     = os.path.join(LUA_DIR, "liblua55.a")
 LUA_INCLUDE = os.path.join(LUA_DIR, "include")
@@ -79,10 +79,10 @@ LUA_MSVC_LIB  = os.path.join(SCRIPT_DIR, "lua-5.5.0_Win64_dllw6_lib", "lua55_msv
 
 import urllib.request, zipfile, tarfile, tempfile
 
-ZIG_VERSION = "0.17.0-dev.313+27be3b069"
+ZIG_VERSION = "0.17.0-dev.313+27be3b069" if IS_WINDOWS else "0.16.0"
 ZIG_DOWNLOADS = {
     "windows": "https://github.com/shivjain123/My_lang_Mocha/releases/download/zig-toolchain/zig-windows-x86_64.zip",
-    "linux":   "https://github.com/YOUR_NAME/YOUR_REPO/releases/download/zig-toolchain/zig-linux-x86_64.tar.xz",
+    "linux":   "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz",
 }
 
 def ensure_zig():
@@ -1430,7 +1430,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
 
     # Compile Zig
     zig_src = os.path.join(SCRIPT_DIR, "zig_ffi.zig")
-    zig_out = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "zig_ffi.a")
+    zig_out = os.path.join(SCRIPT_DIR, "zig_ffi.lib" if IS_WINDOWS else "libzig_ffi.a")
     if needs_zig and not ensure_zig():
         return False
     if needs_zig and needs_recompile(zig_src, zig_out):
