@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Mocha dew point ☕🌡️</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #1e1410; color: #f3e6d8; padding: 2rem; max-width: 30rem; }
+    label { display: block; margin-top: 1.2rem; }
+    input[type=range] { width: 100%; }
+    .result { margin-top: 2rem; font-size: 2.4rem; color: #e8b27d; }
+    small { color: #a58c76; }
+  </style>
+</head>
+<body>
+  <h1>☕ Dew point, computed by Mocha</h1>
+  <small>Compiled from a .mch file to WebAssembly. No JavaScript math here!</small>
+
+  <label>Temperature: <b id="tv">25</b> °C
+    <input id="t" type="range" min="-20" max="45" value="25">
+  </label>
+  <label>Relative humidity: <b id="hv">60</b> %
+    <input id="h" type="range" min="1" max="100" value="60">
+  </label>
+
+  <div class="result">Dew point: <span id="r">...</span> °C</div>
+
+<script>
+(async () => {
+  const wasi = new Proxy({}, { get: () => () => 0 });   // this program never prints, so stubs are enough
+  const bytes = await (await fetch('dewpoint.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: wasi });
+  if (instance.exports._initialize) instance.exports._initialize();
+
+  const t = document.getElementById('t'), h = document.getElementById('h');
+  function update() {
+    document.getElementById('tv').textContent = t.value;
+    document.getElementById('hv').textContent = h.value;
+    const td = instance.exports.dew_point(+t.value, +h.value);   // <- Mocha runs here
+    document.getElementById('r').textContent = td.toFixed(1);
+  }
+  t.oninput = h.oninput = update;
+  update();
+})();
+</script>
+</body>
+</html>

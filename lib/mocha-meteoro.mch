@@ -271,7 +271,7 @@ function frost_point(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
     var dp: float = c_dewpoint(t_c, rh);
-    ~~ Frost point slightly higher than dew point below 0C
+    //Frost point slightly higher than dew point below 0C
     if (dp >= 0.0) { return dp; };
     return dp + 0.15 * (0.0 - dp) * 0.01;
 };
@@ -945,7 +945,6 @@ function dbz_category(dbz: float) -> str {
 };
 
 ~~ ── Snow ──
-
 ~~ Snow water equivalent (mm) from depth and density
 function snow_water_equivalent(snow_depth_cm: float, snow_density_kgm3: float) -> float {
     if (snow_depth_cm < 0.0) {
@@ -1157,11 +1156,11 @@ function cape_cin(pressure_mb: float[], temp_c: float[], dewpoint_c: float[]) ->
         var t_parcel: float = 0.0;
 
         if (p_lev >= p_lcl) {
-            ~~ ── Dry adiabatic (below LCL) ──
+            // ── Dry adiabatic (below LCL) ──
             var dz_m: float = 29.271 * (t_sfc + 273.15) * (p_sfc / p_lev).log().real;
             t_parcel = t_sfc - 9.8 * (dz_m / 1000.0);
         } else {
-            ~~ ── Moist adiabatic (above LCL) ──
+            // ── Moist adiabatic (above LCL) ──
             var theta_e_k: float = c_equiv_potential_temp(t_sfc, td_sfc, p_sfc);
             t_parcel = theta_e_k * c_pow((p_lev / 1000.0), 0.286) - 273.15;
         };
@@ -1277,7 +1276,7 @@ function lifted_index(t_sfc_c: float, td_sfc_c: float,
     validate_temp_c(td_sfc_c);
     validate_pressure_mb(p_sfc_mb);
     var li_raw: float = c_lifted_index(t_sfc_c, td_sfc_c, p_sfc_mb, t500_c);
-    return li_raw * -1.0;  ~~ FLIP SIGN — should be negative for instability
+    return li_raw * -1.0;  // FLIP SIGN — should be negative for instability
 };
 
 function lifted_index_severity(li: float) -> SevereWeatherRisk {
@@ -1570,9 +1569,9 @@ function radiation_fog_risk(t_c: float, td_c: float,
         c_print_err("MeteroError: Cloud cover must be 0-8 oktas.");
         c_exit(2);
     };
-    ~~ Clear sky required for radiative cooling
+    // Clear sky required for radiative cooling
     if (cloud_cover_oktas > 3) { return FogRisk.NONE; };
-    ~~ Calm wind required
+    // Calm wind required
     if (wind_kmh > 15.0) { return FogRisk.NONE; };
     return fog_risk(t_c, td_c, wind_kmh);
 };
@@ -1612,7 +1611,7 @@ function ceiling_category(height_m: float) -> str {
 function icing_risk(t_c: float, rh: float, liquid_water_content: float) -> IcingRisk {
     validate_temp_c(t_c);
     validate_rh(rh);
-    ~~ Icing only occurs in specific temp range
+    // Icing only occurs in specific temp range
     if (t_c > 0.0 || t_c < -40.0) { return IcingRisk.NONE; };
     if (rh < 70.0) { return IcingRisk.NONE; };
     if (liquid_water_content < 0.01) { return IcingRisk.TRACE; };
@@ -1632,7 +1631,7 @@ function freezing_level(temp_c_arr: float[], altitude_m_arr: float[]) -> float {
     var i: int = 0;
     while (i < n - 1) {
         if (temp_c_arr[i] >= 0.0 && temp_c_arr[i+1] < 0.0) {
-            ~~ Linear interpolation
+            // Linear interpolation
             var dt: float = temp_c_arr[i] - temp_c_arr[i+1];
             var frac: float = temp_c_arr[i] / dt;
             return altitude_m_arr[i] + frac *
@@ -1640,7 +1639,7 @@ function freezing_level(temp_c_arr: float[], altitude_m_arr: float[]) -> float {
         };
         i++;
     };
-    return -1.0; ~~ not found
+    return -1.0; // not found
 };
 
 ~~ ── Fire weather ──
@@ -1758,7 +1757,7 @@ function aqi_indian(pm25_ugm3: float, pm10_ugm3: float,
     var s5: float = c_aqi_o3(o3_ugm3);
     var s6: float = c_aqi_co(co_mgm3);
     
-    ~~ Return max of all sub-indices
+    // Return max of all sub-indices
     var max_val: float = s1;
     if (s2 > max_val) { max_val = s2; };
     if (s3 > max_val) { max_val = s3; };
@@ -1824,8 +1823,8 @@ function visibility_impairment_pm25(pm25_ugm3: float) -> float {
         c_print_err("MeteroError: PM2.5 cannot be negative.");
         c_exit(2);
     };
-    ~~ Empirical: reduction_km = sqrt(PM2.5 / 10)
-    ~~ 15µg→0.39km, 250µg→1.58km
+    // Empirical: reduction_km = sqrt(PM2.5 / 10)
+    // 15µg→0.39km, 250µg→1.58km
     var sqrt_term: float = (pm25_ugm3 / 10.0).sqrt().real;
     return sqrt_term;
 };
@@ -1980,7 +1979,7 @@ function sunset_utc(latitude_deg: float, longitude_deg: float,
 function decimal_hours_to_time(decimal_hours: float) -> str {
     var total_seconds: int = int(decimal_hours * 3600.0);
     if (total_seconds < 0) {
-        total_seconds = total_seconds + 86400;  ~~ add 24 hours if negative
+        total_seconds = total_seconds + 86400;  // added 24 hours if negative
     };
     var hours: int = total_seconds / 3600;
     var minutes: int = (total_seconds % 3600) / 60;
@@ -2127,7 +2126,7 @@ function solar_panel_output(panel_area_m2: float, efficiency: float,
         c_exit(2);
     };
     var ra: float = c_clear_sky_rad(latitude_deg, day_of_year, elevation_m);
-    ~~ Convert MJ/m²/day to kWh/m²/day (1 MJ = 0.2778 kWh)
+    // Convert MJ/m²/day to kWh/m²/day (1 MJ = 0.2778 kWh)
     var irradiance_kwh: float = ra * 0.2778;
     return panel_area_m2 * efficiency * irradiance_kwh;
 };
@@ -2500,23 +2499,23 @@ function koppen_class(t_mean_annual_c: float,
                        precip_annual_mm: float,
                        t_coldest_month_c: float,
                        t_hottest_month_c: float) -> str {
-    ~~ A: Tropical
+    // A: Tropical
     if (t_coldest_month_c >= 18.0) { return "A_tropical"; };
-    ~~ E: Polar
+    // E: Polar
     if (t_hottest_month_c < 10.0) {
         if (t_hottest_month_c < 0.0) { return "EF_ice_cap"; };
         return "ET_tundra";
     };
-    ~~ B: Arid — threshold depends on seasonality (simplified)
+    // B: Arid — threshold depends on seasonality (simplified)
     var p_thresh: float = t_mean_annual_c * 20.0 + 280.0;
     if (precip_annual_mm < p_thresh / 2.0) { return "BWh_hot_desert"; };
     if (precip_annual_mm < p_thresh) { return "BSh_hot_steppe"; };
-    ~~ C: Temperate
+    // C: Temperate
     if (t_coldest_month_c >= 0.0) {
         if (t_hottest_month_c >= 22.0) { return "Cfa_humid_subtropical"; };
         return "Cfb_oceanic";
     };
-    ~~ D: Continental
+    // D: Continental
     if (t_hottest_month_c >= 22.0) { return "Dfa_humid_continental_hot"; };
     return "Dfb_humid_continental_warm";
 };

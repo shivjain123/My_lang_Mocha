@@ -261,6 +261,8 @@
     #include <dbghelp.h>
     #include <bcrypt.h>
     #pragma comment(lib, "bcrypt.lib")
+#elif defined(MOCHA_WASM)
+    #include <unistd.h>
 #else
     #include <sys/random.h>   // getrandom (Linux) / getentropy (macOS)
     #include <time.h>         // clock_gettime — already included above but
@@ -270,6 +272,7 @@
 #endif
 
 // ── Crash handler — replaces SIGSEGV with a readable error ────────────────
+#ifndef MOCHA_WASM
 static void mocha_crash_handler(int sig) {
     const char* sig_name;
     switch (sig) {
@@ -302,6 +305,7 @@ static void mocha_crash_handler(int sig) {
     fflush(stderr);
     exit(128 + sig);
 }
+#endif
 
 #ifdef _WIN32
 static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
@@ -321,6 +325,7 @@ static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
+
 static void mocha_print_backtrace(int skip) {
     skip += 1;
 #ifdef _WIN32
@@ -330,6 +335,9 @@ static void mocha_print_backtrace(int skip) {
     for (USHORT i = 0; i < n; i++)
         fprintf(stderr, "    [%2d] %p (exe+0x%llx)\n", i, st[i],
                 (unsigned long long)((uintptr_t)st[i] - base));
+#elif defined(MOCHA_WASM)
+    (void)skip;
+    fprintf(stderr, "    (backtrace not available on wasm)\n");
 #else
     void* st[24];
     int n = backtrace(st, 24);
@@ -427,8 +435,10 @@ void mocha_signal_handlers_init() {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
 #endif
+#ifndef MOCHA_WASM
     signal(SIGSEGV, mocha_crash_handler);
     signal(SIGILL,  mocha_crash_handler);
+#endif
 }
 void mocha_rc_shutdown() {
     MochaRCNode *node = rc_head;
@@ -1323,6 +1333,18 @@ void mocha_array_release(MochaArray *arr, int32_t elem_is_str) {
             for (int32_t i = 0; i < arr->length; i++) {
                 rc_release(items[i]);
             }
+        }
+        free(arr->data);
+    }
+    rc_release(arr);
+}
+
+void mocha_array_release_objs(MochaArray *arr, void (*rel)(void *)) {
+    if (!arr) return;
+    if (rc_count(arr) == 1) {
+        void **items = (void **)arr->data;
+        for (int32_t i = 0; i < arr->length; i++) {
+            if (items[i]) rel(items[i]);
         }
         free(arr->data);
     }
@@ -2458,6 +2480,17 @@ void* mocha_rand_seed(int32_t seed) {
 
     static void crypto_random_bytes(void* buf, size_t n) {
         getentropy(buf, n);   // blocks until entropy available, never fails on macOS 10.12+
+    }
+
+#elif defined(MOCHA_WASM)
+    static void crypto_random_bytes(void* buf, size_t n) {
+        unsigned char* p = (unsigned char*)buf;
+        while (n > 0) {
+            size_t chunk = n > 256 ? 256 : n;   // getentropy allows 256 bytes max per call
+            getentropy(p, chunk);
+            p += chunk;
+            n -= chunk;
+        }
     }
 
 #else
@@ -4768,6 +4801,31 @@ MochaExFrame* mocha_ex_push(void) {
     mocha_ex_top   = frame;
     return frame;
 }
+
+#elif defined(MOCHA_WASM)
+// ── WebAssembly: try/rescue not supported yet ──────────────
+typedef struct MochaExFrame {
+    const char*          message;
+    int                  active;
+    struct MochaExFrame* prev;
+} MochaExFrame;
+
+static MochaExFrame mocha_ex_dummy_frame;
+
+static void mocha_ex_unsupported(const char* msg) {
+    fflush(stdout);
+    fprintf(stderr, "\nMochaRuntimeError: try/rescue is not supported on WebAssembly yet. Error was: %s\n",
+            msg ? msg : "(none)");
+    exit(2);
+}
+
+MochaExFrame* mocha_ex_push(void)                  { return &mocha_ex_dummy_frame; }
+void* mocha_ex_env_ptr(MochaExFrame* frame)        { return (void*)frame; }
+int mocha_ex_did_land(void)                        { return 0; }
+void mocha_ex_reset_landed(void)                   { }
+void mocha_ex_throw(const char* msg)               { mocha_ex_unsupported(msg); }
+void mocha_ex_rethrow(void)                        { mocha_ex_unsupported("rethrow"); }
+const char* mocha_ex_pop(void)                     { return NULL; }
 
 #else
 // ── Linux / macOS ──────────────────────────────────────────

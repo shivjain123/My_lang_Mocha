@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Mocha in the browser ☕</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #1e1410; color: #f3e6d8; padding: 2rem; }
+    button { font-size: 1.1rem; padding: .6rem 1.2rem; border-radius: 8px; border: 0;
+             background: #c98a54; color: #1e1410; cursor: pointer; }
+    pre { background: #120b08; padding: 1rem; border-radius: 8px; min-height: 6rem; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>☕ Mocha, running as WebAssembly</h1>
+  <button id="run">Run Mocha</button>
+  <pre id="out"></pre>
+
+<script>
+const out = document.getElementById('out');
+let mem;
+
+const handlers = {
+  // printf / print ends up here
+  fd_write(fd, iovs, iovsLen, nwrittenPtr) {
+    const dv = new DataView(mem.buffer);
+    let total = 0, text = '';
+    for (let i = 0; i < iovsLen; i++) {
+      const ptr = dv.getUint32(iovs + i * 8, true);
+      const len = dv.getUint32(iovs + i * 8 + 4, true);
+      text += new TextDecoder().decode(new Uint8Array(mem.buffer, ptr, len));
+      total += len;
+    }
+    dv.setUint32(nwrittenPtr, total, true);
+    out.textContent += text;
+    return 0;
+  },
+  environ_sizes_get(countPtr, sizePtr) {
+    const dv = new DataView(mem.buffer);
+    dv.setUint32(countPtr, 0, true);
+    dv.setUint32(sizePtr, 0, true);
+    return 0;
+  },
+  random_get(ptr, len) {
+    crypto.getRandomValues(new Uint8Array(mem.buffer, ptr, len));
+    return 0;
+  },
+  clock_time_get(id, precision, outPtr) {
+    new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Date.now()) * 1000000n, true);
+    return 0;
+  },
+  proc_exit(code) { throw new Error('Mocha exited with code ' + code); },
+};
+
+// Any WASI function not listed above just returns 0 ("success") for now.
+const wasi = new Proxy({}, { get: (_, name) => handlers[name] || (() => 0) });
+
+document.getElementById('run').onclick = async () => {
+  out.textContent = '';
+  const bytes = await (await fetch('alloc_full.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: wasi });
+  mem = instance.exports.memory;
+  if (instance.exports._initialize) instance.exports._initialize();
+  instance.exports.mocha_entry_main();
+};
+</script>
+</body>
+</html>

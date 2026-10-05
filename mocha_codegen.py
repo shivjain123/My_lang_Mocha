@@ -626,13 +626,25 @@ class CodeGen:
         self.emit(f"define void @{class_name}_drop({T} %self) {{")
         self.emit("entry:")
         for idx, (fname, mtype) in enumerate(mfields):
-            if mtype != "str" and "[" not in mtype:
+            kind = self.rc_simple_field_kind(mtype)
+            is_cls = mtype in self.rc_classes
+            if kind is not None and lfields[idx][1] != kind[0]:
+                continue  # LLVM field type is not what we expect: leave it alone (leaks, same as before)
+            if mtype != "str" and kind is None and "[" not in mtype and not is_cls:
                 continue
             gep, val = self.fresh_temp(), self.fresh_temp()
             self.emit(f"  {gep} = getelementptr %struct.{class_name}, {T} %self, i32 0, i32 {idx}")
             if mtype == "str":
                 self.emit(f"  {val} = load i8*, i8** {gep}")
                 self.emit(f"  call void @rc_release(i8* {val})")
+            elif is_cls:
+                CT = f"%struct.{mtype}*"
+                self.emit(f"  {val} = load {CT}, {CT}* {gep}")
+                self.emit(f"  call void @{mtype}_release({CT} {val})")
+            elif kind is not None:
+                lt, _, rel = kind
+                self.emit(f"  {val} = load {lt}, {lt}* {gep}")
+                self.emit(f"  call void @{rel}({lt} {val})")
             elif "[" in mtype[:mtype.rfind("[")]:
                 # 2D array field
                 self.emit(f"  {val} = load %MochaArray2D*, %MochaArray2D** {gep}")
@@ -666,6 +678,35 @@ class CodeGen:
         self.emit("}")
         self.emit_blank()
 
+    def rc_simple_field_kind(self, mtype):
+        """(llvm_type, retain_fn, release_fn) for dict/set/tuple/Complex fields, else None."""
+        if mtype == "dict":
+            return ("%MochaDict*", "mocha_dict_retain", "mocha_dict_release")
+        if mtype.startswith("set<"):
+            return ("%MochaSet*", "mocha_set_retain", "mocha_set_release")
+        if mtype.startswith("("):
+            return ("%MochaTuple*", "mocha_tuple_retain", "mocha_tuple_release")
+        if mtype == "Complex":
+            return ("%struct.MochaComplex*", "mocha_complex_retain", "mocha_complex_release")
+        return None
+
+    def array_elem_class(self, mocha_type):
+        """Class name if mocha_type is a 1D array of a Mocha-defined RC class (T[] or T[N]), else None."""
+        if not mocha_type or "[" not in mocha_type:
+            return None
+        base = mocha_type[:mocha_type.rfind("[")]
+        if "[" in base:
+            return None
+        return base if base in self.rc_classes else None
+
+    def emit_array_release_call(self, arr_reg, elem_kind):
+        """elem_kind: 0/1 (elem_is_str) or a class name (array of RC class instances)."""
+        if isinstance(elem_kind, str):
+            cb = f"bitcast (void (%struct.{elem_kind}*)* @{elem_kind}_release to void (i8*)*)"
+            self.emit(f"  call void @mocha_array_release_objs(%MochaArray* {arr_reg}, void (i8*)* {cb})")
+        else:
+            self.emit(f"  call void @mocha_array_release(%MochaArray* {arr_reg}, i32 {elem_kind})")
+
     def emit_release_owned_class_locals(self):
         for ptr, cls in self.owned_class_locals:
             T = f"%struct.{cls}*"
@@ -687,6 +728,7 @@ class CodeGen:
                 "declare void @mocha_rc_shutdown()",
                 "declare void @rc_retain(i8*) nounwind",
                 "declare void @rc_release(i8*) nounwind",
+                "declare void @mocha_array_release_objs(%MochaArray*, void (i8*)*)",
                 "declare i64 @rc_count(i8*) nounwind",
                 "declare i8* @rc_alloc(i64) nounwind",
             ],
@@ -3581,13 +3623,29 @@ class CodeGen:
 
                     # RC: owned fields. Retain new value first (self-assignment safe), then release old one.
                     borrowed = isinstance(node.value, (Identifier, MemberAccess))
+                    kind = self.rc_simple_field_kind(field_mocha_type or "")
                     if field_mocha_type == "str" and val_type == "i8*":
                         if borrowed:
                             self.emit(f"  call void @rc_retain(i8* {val_reg})")
                         old = self.fresh_temp()
                         self.emit(f"  {old} = load i8*, i8** {ptr}")
                         self.emit(f"  call void @rc_release(i8* {old})")
-                    elif field_mocha_type and "[" in field_mocha_type and val_type == llvm_ftype:
+                    elif field_mocha_type in self.rc_classes and val_type == llvm_ftype:
+                        if borrowed:
+                            raw = self.fresh_temp()
+                            self.emit(f"  {raw} = bitcast {llvm_ftype} {val_reg} to i8*")
+                            self.emit(f"  call void @rc_retain(i8* {raw})")
+                        old = self.fresh_temp()
+                        self.emit(f"  {old} = load {llvm_ftype}, {llvm_ftype}* {ptr}")
+                        self.emit(f"  call void @{field_mocha_type}_release({llvm_ftype} {old})")
+                    elif kind is not None and val_type == llvm_ftype and llvm_ftype == kind[0]:
+                        _, ret_fn, rel_fn = kind
+                        if borrowed:
+                            self.emit(f"  call void @{ret_fn}({llvm_ftype} {val_reg})")
+                        old = self.fresh_temp()
+                        self.emit(f"  {old} = load {llvm_ftype}, {llvm_ftype}* {ptr}")
+                        self.emit(f"  call void @{rel_fn}({llvm_ftype} {old})")
+                    elif kind is None and field_mocha_type and "[" in field_mocha_type and val_type == llvm_ftype:
                         old = self.fresh_temp()
                         if llvm_ftype == "%MochaArray*":
                             elem_is_str = 1 if self.is_str_array_type(field_mocha_type) else 0
