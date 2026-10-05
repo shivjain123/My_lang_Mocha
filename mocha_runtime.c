@@ -238,6 +238,9 @@
  *
  * ============================================================
  */
+#ifdef __wasm__
+    #define MOCHA_WASM 1
+#endif
 
 #include <stdint.h>
 #include <stddef.h>
@@ -247,8 +250,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <setjmp.h>
-#include <signal.h>
+#ifndef MOCHA_WASM
+    #include <setjmp.h>
+    #include <signal.h>
+#endif
 #include <limits.h>
 
 #ifdef _WIN32

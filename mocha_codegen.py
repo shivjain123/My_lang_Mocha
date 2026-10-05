@@ -626,11 +626,22 @@ class CodeGen:
         self.emit(f"define void @{class_name}_drop({T} %self) {{")
         self.emit("entry:")
         for idx, (fname, mtype) in enumerate(mfields):
+            if mtype != "str" and "[" not in mtype:
+                continue
+            gep, val = self.fresh_temp(), self.fresh_temp()
+            self.emit(f"  {gep} = getelementptr %struct.{class_name}, {T} %self, i32 0, i32 {idx}")
             if mtype == "str":
-                gep, val = self.fresh_temp(), self.fresh_temp()
-                self.emit(f"  {gep} = getelementptr %struct.{class_name}, {T} %self, i32 0, i32 {idx}")
                 self.emit(f"  {val} = load i8*, i8** {gep}")
                 self.emit(f"  call void @rc_release(i8* {val})")
+            elif "[" in mtype[:mtype.rfind("[")]:
+                # 2D array field
+                self.emit(f"  {val} = load %MochaArray2D*, %MochaArray2D** {gep}")
+                self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {val})")
+            else:
+                # 1D array field
+                elem_is_str = 1 if self.is_str_array_type(mtype) else 0
+                self.emit(f"  {val} = load %MochaArray*, %MochaArray** {gep}")
+                self.emit(f"  call void @mocha_array_release(%MochaArray* {val}, i32 {elem_is_str})")
         self.emit("  ret void")
         self.emit("}")
         self.emit_blank()
@@ -2670,6 +2681,7 @@ class CodeGen:
 
         args = []
         named_args = {}  # {param_name: (reg, type)}
+        fresh_str_args = []  # string temporaries we own; released after constructor calls
 
         if self.extra_first_arg:
             args.append(self.extra_first_arg)
@@ -2677,13 +2689,15 @@ class CodeGen:
 
         for arg in node.args:
             if isinstance(arg, Assignment):
-                # Named arg — evaluate and store by name
+                # Named arg - evaluate and store by name
                 if isinstance(arg.target, Identifier):
                     reg, typ = self.gen_expr(arg.value)
                     named_args[arg.target.name] = (reg, typ)
             else:
                 reg, typ = self.gen_expr(arg)
                 args.append((reg, typ))
+                if typ == "i8*" and isinstance(arg, (StrLiteral, BinaryOp)):
+                    fresh_str_args.append(reg)
 
         # -------------------------------------------------------
         # Step 3: Built-in functions
@@ -2753,6 +2767,8 @@ class CodeGen:
             args.insert(0, (obj, struct_ptr_type))
             arg_str = ", ".join(f"{t} {r}" for r, t in args)
             self.emit(f"  call void @{func_name}({arg_str})")
+            for r in fresh_str_args:                                    # NEW
+                self.emit(f"  call void @rc_release(i8* {r})")          # NEW
             return (obj, struct_ptr_type)
 
         elif is_constructor_candidate:
@@ -3551,25 +3567,39 @@ class CodeGen:
             fields = self.class_fields.get(class_name, [])
             for idx, (fname, ftype) in enumerate(fields):
                 if fname == node.target.member:
-                    llvm_ftype = ftype if ftype.startswith("%") or ftype in ("i32", "i64", "double", "i8", "i8*", "void") else to_llvm_type(ftype) # ← convert here
+                    llvm_ftype = ftype if ftype.startswith("%") or ftype in ("i32", "i64", "double", "i8", "i8*", "void") else to_llvm_type(ftype)
                     ptr = self.fresh_temp()
                     self.emit(
                         f"  {ptr} = getelementptr %struct.{class_name}, "
                         f"%struct.{class_name}* {obj_reg}, i32 0, i32 {idx}"
                     )
-                    # Promote i32 → double if needed
+                    # Promote i32 -> double if needed
                     if llvm_ftype == "double" and val_type == "i32":
                         p = self.fresh_temp()
                         self.emit(f"  {p} = sitofp i32 {val_reg} to double")
                         val_reg = p
 
+                    # RC: owned fields. Retain new value first (self-assignment safe), then release old one.
+                    borrowed = isinstance(node.value, (Identifier, MemberAccess))
                     if field_mocha_type == "str" and val_type == "i8*":
-                        # retain the new value first (self-assignment safe), then release the old one
-                        if isinstance(node.value, (Identifier, MemberAccess)):
+                        if borrowed:
                             self.emit(f"  call void @rc_retain(i8* {val_reg})")
                         old = self.fresh_temp()
                         self.emit(f"  {old} = load i8*, i8** {ptr}")
                         self.emit(f"  call void @rc_release(i8* {old})")
+                    elif field_mocha_type and "[" in field_mocha_type and val_type == llvm_ftype:
+                        old = self.fresh_temp()
+                        if llvm_ftype == "%MochaArray*":
+                            elem_is_str = 1 if self.is_str_array_type(field_mocha_type) else 0
+                            if borrowed:
+                                self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
+                            self.emit(f"  {old} = load %MochaArray*, %MochaArray** {ptr}")
+                            self.emit(f"  call void @mocha_array_release(%MochaArray* {old}, i32 {elem_is_str})")
+                        elif llvm_ftype == "%MochaArray2D*":
+                            if borrowed:
+                                self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
+                            self.emit(f"  {old} = load %MochaArray2D*, %MochaArray2D** {ptr}")
+                            self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old})")
 
                     self.emit(f"  store {llvm_ftype} {val_reg}, {llvm_ftype}* {ptr}")
                     break

@@ -1,4 +1,5 @@
-$proc = Start-Process -FilePath "C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\bert_sentiment_anal.exe" -NoNewWindow -PassThru
+param([string]$exe)
+$proc = Start-Process -FilePath (Resolve-Path $exe).Path -NoNewWindow -PassThru
 $null = $proc.Handle
 while (-not $proc.HasExited) {
     $proc.Refresh()
