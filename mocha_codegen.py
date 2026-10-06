@@ -573,10 +573,14 @@ class CodeGen:
             self.emit(f"  call void @rc_release(i8* {tmp})")
     
     def emit_release_owned_arr_locals(self):
-        for ptr, elem_is_str in self.owned_arr_locals:
+        for ptr, elem_kind in self.owned_arr_locals:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = load %MochaArray*, %MochaArray** {ptr}")
-            self.emit(f"  call void @mocha_array_release(%MochaArray* {tmp}, i32 {elem_is_str})")
+            self.emit_array_release_call(tmp, elem_kind)
+
+    def is_borrowed_expr(self, node):
+        """True if the expression yields a pointer still owned by something else (a variable, a field, an array slot)."""
+        return isinstance(node, (Identifier, MemberAccess, IndexAccess))
 
     def emit_release_owned_arr2d_locals(self):
         for ptr in self.owned_arr2d_locals:
@@ -3260,7 +3264,7 @@ class CodeGen:
 
             # RC: retain if borrowed from an existing variable — a fresh tuple
             # literal already has ref_count=1 from mocha_tuple_new.
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_tuple_retain(%MochaTuple* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
@@ -3281,7 +3285,7 @@ class CodeGen:
             # (dict literal, or a function call returning a dict) already
             # has ref_count=1 from mocha_dict_new and doesn't need an extra
             # retain.
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
@@ -3305,7 +3309,7 @@ class CodeGen:
                 # RC: retain if borrowed from an existing variable; a fresh
                 # 2D array (literal, alloc, or a function call returning one)
                 # already has ref_count=1 from mocha_array2d_new.
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
                 self.alloca_at_entry("%MochaArray2D*", ptr, init_null=True)
@@ -3313,14 +3317,15 @@ class CodeGen:
                 self.locals[node.name] = (ptr, "%MochaArray2D*")
                 self.owned_arr2d_locals.append(ptr)   # was: node.name
             else:
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
 
                 self.alloca_at_entry("%MochaArray*", ptr, init_null=True)
                 self.emit(f"  store %MochaArray* {val_reg}, %MochaArray** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaArray*")
-                elem_is_str = 1 if self.is_str_array_type(node.type) else 0
-                self.owned_arr_locals.append((ptr, elem_is_str))   # was: node.name
+                elem_cls = self.array_elem_class(node.type)
+                elem_kind = elem_cls if elem_cls else (1 if self.is_str_array_type(node.type) else 0)
+                self.owned_arr_locals.append((ptr, elem_kind))
             self.local_mocha_types[node.name] = node.type
             return
         
@@ -3344,7 +3349,7 @@ class CodeGen:
             # RC: retain if borrowed from an existing variable; a fresh set
             # (set literal, or a function call returning a set) already has
             # ref_count=1 from mocha_set_new and doesn't need an extra retain.
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_set_retain(%MochaSet* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
@@ -3362,7 +3367,7 @@ class CodeGen:
             # RC: retain if borrowed from an existing variable; a fresh
             # Complex (constructor call, or an arithmetic op result) already
             # has ref_count=1 from mocha_complex_new / rc_alloc.
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
@@ -3380,6 +3385,11 @@ class CodeGen:
                 cast = self.fresh_temp()
                 self.emit(f"  {cast} = bitcast {val_type} {val_reg} to {T}")
                 val_reg = cast
+            # RC: value read out of a field or array slot is still owned by that container, so take our own reference
+            if self.is_borrowed_expr(node.value):
+                raw = self.fresh_temp()
+                self.emit(f"  {raw} = bitcast {T} {val_reg} to i8*")
+                self.emit(f"  call void @rc_retain(i8* {raw})")
             ptr = self.unique_ptr_name(node.name)
             self.alloca_at_entry(T, ptr, init_null=True)
             old = self.fresh_temp()
@@ -3452,7 +3462,7 @@ class CodeGen:
         # RC: if this is a str and the source is a borrowed value (another variable),
         # retain it before storing — fresh values (literals, concat, format, calls) already
         # come with ref_count=1 and don't need an extra retain.
-        if node.type == "str" and isinstance(node.value, Identifier):
+        if node.type == "str" and self.is_borrowed_expr(node.value):
             self.emit(f"  call void @rc_retain(i8* {val_reg})")
 
         self.emit(f"  store {llvm_type} {val_reg}, {llvm_type}* {ptr}")
@@ -3545,7 +3555,7 @@ class CodeGen:
                 old_reg = self.fresh_temp()
                 self.emit(f"  {old_reg} = load i8*, i8** {ptr}")
                 self.emit(f"  call void @rc_release(i8* {old_reg})")
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @rc_retain(i8* {val_reg})")
 
             if is_arr_target:
@@ -3553,36 +3563,53 @@ class CodeGen:
                 self.emit(f"  {old_arr_reg} = load %MochaArray*, %MochaArray** {ptr}")
                 elem_is_str = 1 if self.is_str_array_type(target_mocha_type) else 0
                 self.emit(f"  call void @mocha_array_release(%MochaArray* {old_arr_reg}, i32 {elem_is_str})")
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
 
             if is_set_target:
                 old_set_reg = self.fresh_temp()
                 self.emit(f"  {old_set_reg} = load %MochaSet*, %MochaSet** {ptr}")
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {old_set_reg})")
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_set_retain(%MochaSet* {val_reg})")
             
             if is_dict_target:
                 old_dict_reg = self.fresh_temp()
                 self.emit(f"  {old_dict_reg} = load %MochaDict*, %MochaDict** {ptr}")
                 self.emit(f"  call void @mocha_dict_release(%MochaDict* {old_dict_reg})")
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
             
             if is_arr2d_target:
                 old_arr2d_reg = self.fresh_temp()
                 self.emit(f"  {old_arr2d_reg} = load %MochaArray2D*, %MochaArray2D** {ptr}")
                 self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old_arr2d_reg})")
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
             if is_complex_target:
                 old_complex_reg = self.fresh_temp()
                 self.emit(f"  {old_complex_reg} = load %struct.MochaComplex*, %struct.MochaComplex** {ptr}")
                 self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {old_complex_reg})")
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
+
+            if target_mocha_type in self.rc_classes and llvm_type == f"%struct.{target_mocha_type}*":
+                CT = llvm_type
+                if val_type != CT and val_reg != "null":
+                    cast = self.fresh_temp()
+                    self.emit(f"  {cast} = bitcast {val_type} {val_reg} to {CT}")
+                    val_reg = cast
+                # only locals we own (declared with var) release their old value; parameters are borrowed
+                if any(p == ptr for p, _ in self.owned_class_locals):
+                    # retain the new value first (self-assignment safe), then release the old one
+                    if self.is_borrowed_expr(node.value):
+                        raw = self.fresh_temp()
+                        self.emit(f"  {raw} = bitcast {CT} {val_reg} to i8*")
+                        self.emit(f"  call void @rc_retain(i8* {raw})")
+                    old_cls_reg = self.fresh_temp()
+                    self.emit(f"  {old_cls_reg} = load {CT}, {CT}* {ptr}")
+                    self.emit(f"  call void @{target_mocha_type}_release({CT} {old_cls_reg})")
 
             self.emit(f"  store {llvm_type} {val_reg}, {llvm_type}* {ptr}")
 
@@ -3672,7 +3699,7 @@ class CodeGen:
             # RC: str[] arrays get a dedicated path that releases the old value
             # and retains the new one if it's borrowed from an existing variable.
             if elem_llvm == "i8*":
-                if isinstance(node.value, Identifier):
+                if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @rc_retain(i8* {val_reg})")
                 self.emit(f"  call void @mocha_array_set_str(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {val_reg})")
             else:
@@ -3775,45 +3802,45 @@ class CodeGen:
         # RC: protect a returned string before we release the function's own locals —
         # if it's borrowed from a local, retain it first so it survives the cleanup below.
         if self.current_return_type == "i8*" and val_type == "i8*" and self.current_mocha_return_type == "str":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @rc_retain(i8* {val_reg})")
 
         # RC: same protection for a returned array — retain before we release
         # the function's own owned array locals below.
         if self.current_return_type == "%MochaArray*" and val_type == "%MochaArray*":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
         
         if self.current_return_type == "%MochaTuple*" and val_type == "%MochaTuple*":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_tuple_retain(%MochaTuple* {val_reg})")
         
         # RC: same protection for a returned set — retain before we release
         # the function's own owned set locals below.
         if self.current_return_type == "%MochaSet*" and val_type == "%MochaSet*":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_set_retain(%MochaSet* {val_reg})")
         
         # RC: same protection for a returned dict — retain before we release
         # the function's own owned dict locals below.
         if self.current_return_type == "%MochaDict*" and val_type == "%MochaDict*":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
         
         # RC: same protection for a returned 2D array — retain before we
         # release the function's own owned 2D array locals below.
         if self.current_return_type == "%MochaArray2D*" and val_type == "%MochaArray2D*":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
         # RC: same protection for a returned Complex — retain before we
         # release the function's own owned Complex locals below.
         if self.current_return_type == "%struct.MochaComplex*" and val_type == "%struct.MochaComplex*":
-            if isinstance(node.value, Identifier):
+            if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_complex_retain(%struct.MochaComplex* {val_reg})")
 
         # RC: same protection for a returned Mocha class instance
-        if self.current_mocha_return_type in self.rc_classes and isinstance(node.value, Identifier):
+        if self.current_mocha_return_type in self.rc_classes and self.is_borrowed_expr(node.value):
             raw = self.fresh_temp()
             self.emit(f"  {raw} = bitcast {val_type} {val_reg} to i8*")
             self.emit(f"  call void @rc_retain(i8* {raw})")
@@ -5191,10 +5218,8 @@ class CodeGen:
                 elif val_type == "i64":
                     self.emit(f"  call void @mocha_dict_set_vast(%MochaDict* {arr_reg}, i8* {idx_reg}, i64 {val_reg})")
                 elif val_type == "%MochaDict*":
-                    # RC: mocha_dict_set_dict only stores the raw pointer — if
-                    # this is a borrowed dict variable, retain it since the
-                    # outer dict now co-owns it.
-                    if isinstance(node.value, Identifier):
+                    # RC: set_dict stores the raw pointer; retain if borrowed
+                    if self.is_borrowed_expr(node.value):
                         self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
                     self.emit(f"  call void @mocha_dict_set_dict(%MochaDict* {arr_reg}, i8* {idx_reg}, %MochaDict* {val_reg})")
                 elif val_type.startswith("%struct."):
@@ -5203,13 +5228,11 @@ class CodeGen:
                     self.emit(f"  call void @mocha_dict_set_object(%MochaDict* {arr_reg}, i8* {idx_reg}, i8* {cast})")
                 else:
                     self.emit(f"  call void @mocha_dict_set_str(%MochaDict* {arr_reg}, i8* {idx_reg}, i8* {val_reg})")
-                    # RC: mocha_dict_set_str rc_strdup's internally — a fresh
-                    # (non-borrowed) string value is orphaned after this call.
-                    if not isinstance(node.value, Identifier):
+                    # RC: set_str rc_strdup's; a fresh (non-borrowed) value is orphaned
+                    if not self.is_borrowed_expr(node.value):
                         self.emit(f"  call void @rc_release(i8* {val_reg})")
-                # RC: every setter internally strdup's the key — a fresh
-                # (non-borrowed) key expression is orphaned after this call.
-                if not isinstance(node.target.index, Identifier):
+                # RC: every setter strdup's the key; a fresh key is orphaned
+                if not self.is_borrowed_expr(node.target.index):
                     self.emit(f"  call void @rc_release(i8* {idx_reg})")
                 return
 

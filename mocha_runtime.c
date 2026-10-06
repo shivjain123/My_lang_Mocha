@@ -1,7 +1,7 @@
 /*
  * ============================================================
  * Mocha Language Runtime
- * mocha_runtime.c                      (Mocha v1.1 — 29 Sep 2026)
+ * mocha_runtime.c                      (Mocha v1.2 — 5th October 2026)
  * ============================================================
  *
  * PLATFORM SUPPORT
