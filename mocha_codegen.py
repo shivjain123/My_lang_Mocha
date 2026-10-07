@@ -3308,25 +3308,33 @@ class CodeGen:
 
             ptr = self.unique_ptr_name(node.name)
             if is_2d:
-                # RC: retain if borrowed from an existing variable; a fresh
+                # RC: retain if borrowed from an existing variable, field or slot; a fresh
                 # 2D array (literal, alloc, or a function call returning one)
                 # already has ref_count=1 from mocha_array2d_new.
                 if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
                 self.alloca_at_entry("%MochaArray2D*", ptr, init_null=True)
+                # RC: release the previous value (null on the first pass) so a 2D array declared in a loop doesn't leak
+                old_arr2d_reg = self.fresh_temp()
+                self.emit(f"  {old_arr2d_reg} = load %MochaArray2D*, %MochaArray2D** {ptr}")
+                self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old_arr2d_reg})")
                 self.emit(f"  store %MochaArray2D* {val_reg}, %MochaArray2D** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaArray2D*")
-                self.owned_arr2d_locals.append(ptr)   # was: node.name
+                self.owned_arr2d_locals.append(ptr)
             else:
                 if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
 
                 self.alloca_at_entry("%MochaArray*", ptr, init_null=True)
-                self.emit(f"  store %MochaArray* {val_reg}, %MochaArray** {ptr}")
-                self.locals[node.name] = (ptr, "%MochaArray*")
                 elem_cls = self.array_elem_class(node.type)
                 elem_kind = elem_cls if elem_cls else (1 if self.is_str_array_type(node.type) else 0)
+                # RC: release the previous value (null on the first pass) so an array declared in a loop doesn't leak
+                old_arr_reg = self.fresh_temp()
+                self.emit(f"  {old_arr_reg} = load %MochaArray*, %MochaArray** {ptr}")
+                self.emit_array_release_call(old_arr_reg, elem_kind)
+                self.emit(f"  store %MochaArray* {val_reg}, %MochaArray** {ptr}")
+                self.locals[node.name] = (ptr, "%MochaArray*")
                 self.owned_arr_locals.append((ptr, elem_kind))
             self.local_mocha_types[node.name] = node.type
             return
@@ -3341,14 +3349,18 @@ class CodeGen:
                 self.emit(f"  {s} = call %MochaSet* @mocha_set_new(i32 {tag})")
                 ptr = self.unique_ptr_name(node.name)
                 self.alloca_at_entry("%MochaSet*", ptr, init_null=True)
+                # RC: release the previous value (null on the first pass) so a set declared in a loop doesn't leak
+                old_set_reg = self.fresh_temp()
+                self.emit(f"  {old_set_reg} = load %MochaSet*, %MochaSet** {ptr}")
+                self.emit(f"  call void @mocha_set_release(%MochaSet* {old_set_reg})")
                 self.emit(f"  store %MochaSet* {s}, %MochaSet** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaSet*")
                 self.local_mocha_types[node.name] = node.type
                 self.owned_set_locals.append(node.name)
                 return
-            val_reg, val_type = self.gen_expr(node.value)
+            # value was already evaluated once at the top of gen_var_decl; don't evaluate it again
 
-            # RC: retain if borrowed from an existing variable; a fresh set
+            # RC: retain if borrowed from an existing variable, field or slot; a fresh set
             # (set literal, or a function call returning a set) already has
             # ref_count=1 from mocha_set_new and doesn't need an extra retain.
             if self.is_borrowed_expr(node.value):
@@ -3356,6 +3368,10 @@ class CodeGen:
 
             ptr = self.unique_ptr_name(node.name)
             self.alloca_at_entry("%MochaSet*", ptr, init_null=True)
+            # RC: release the previous value (null on the first pass) so a set declared in a loop doesn't leak
+            old_set_reg = self.fresh_temp()
+            self.emit(f"  {old_set_reg} = load %MochaSet*, %MochaSet** {ptr}")
+            self.emit(f"  call void @mocha_set_release(%MochaSet* {old_set_reg})")
             self.emit(f"  store %MochaSet* {val_reg}, %MochaSet** {ptr}")
             self.locals[node.name] = (ptr, "%MochaSet*")
             self.local_mocha_types[node.name] = node.type
