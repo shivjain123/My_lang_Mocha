@@ -3281,15 +3281,17 @@ class CodeGen:
         self.expected_assign_type = None  # reset
 
         if node.type == "dict":
-            # RC: retain if borrowed from an existing variable; a fresh dict
-            # (dict literal, or a function call returning a dict) already
-            # has ref_count=1 from mocha_dict_new and doesn't need an extra
-            # retain.
+            # RC: retain if borrowed from an existing variable, field or slot; a fresh dict
+            # (dict literal, or a function call returning a dict) already has ref_count=1
             if self.is_borrowed_expr(node.value):
                 self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
 
             ptr = self.unique_ptr_name(node.name)
             self.alloca_at_entry("%MochaDict*", ptr, init_null=True)
+            # RC: release the previous value (null on the first pass) so a dict declared in a loop doesn't leak
+            old_dict_reg = self.fresh_temp()
+            self.emit(f"  {old_dict_reg} = load %MochaDict*, %MochaDict** {ptr}")
+            self.emit(f"  call void @mocha_dict_release(%MochaDict* {old_dict_reg})")
             self.emit(f"  store %MochaDict* {val_reg}, %MochaDict** {ptr}")
             self.locals[node.name] = (ptr, "%MochaDict*")
             self.local_mocha_types[node.name] = "dict"
