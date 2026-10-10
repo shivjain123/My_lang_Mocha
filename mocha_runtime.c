@@ -3695,9 +3695,9 @@ double mocha_lua_getnumber(void *L, const char *varname) {
 /* Read a global string variable from Lua state */
 const char* mocha_lua_getstring(void *L, const char *varname) {
     lua_getglobal((lua_State*)L, varname);
-    const char *r = lua_tostring((lua_State*)L, -1);
+    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
-    return r;
+    return out;
 }
 
 /* ── Get values from Lua ── */
@@ -3747,11 +3747,12 @@ void* mocha_lua_setint(void *L, const char *varname, int val) {
 const char* mocha_lua_safe_dostring(void *L, const char *code) {
     int r = luaL_dostring((lua_State*)L, code);
     if (r != 0) {
-        const char *err = lua_tostring((lua_State*)L, -1);
+        char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
         lua_pop((lua_State*)L, 1);
-        return err;
+        return out;
     }
-    return "";  // empty string = success (NULL would crash Mocha)
+    return mocha_rc_copy("");  // empty string = success;
+    //NULL WOULD CRASH MOCHA
 }
 
 /* ── Stack utilities ── */
@@ -3787,14 +3788,14 @@ const char* mocha_lua_call_string(void *L, const char *funcname) {
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call_string('%s') failed: %s\n", 
+        fprintf(stderr, "MochaLuaError: call_string('%s') failed: %s\n",
                 funcname, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
-        return "";
+        return mocha_rc_copy("");
     }
-    const char *r = lua_tostring((lua_State*)L, -1);
+    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
-    return r;
+    return out;
 }
 
 // call func() → int
@@ -3834,14 +3835,14 @@ const char* mocha_lua_call1s_string(void *L, const char *funcname, const char *a
     lua_pushstring((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1s_string('%s', '%s') failed: %s\n", 
+        fprintf(stderr, "MochaLuaError: call1s_string('%s', '%s') failed: %s\n",
                 funcname, arg, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
-        return "";
+        return mocha_rc_copy("");
     }
-    const char *r = lua_tostring((lua_State*)L, -1);
+    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
-    return r;
+    return out;
 }
 
 // call func(number, number) → number
@@ -3868,14 +3869,14 @@ const char* mocha_lua_call2s_string(void *L, const char *funcname, const char *a
     lua_pushstring((lua_State*)L, b);
     if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2s_string('%s', '%s', '%s') failed: %s\n", 
+        fprintf(stderr, "MochaLuaError: call2s_string('%s', '%s', '%s') failed: %s\n",
                 funcname, a, b, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
-        return "";
+        return mocha_rc_copy("");
     }
-    const char *r = lua_tostring((lua_State*)L, -1);
+    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
-    return r;
+    return out;
 }
 
 // call func(number) → string
@@ -3884,14 +3885,14 @@ const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
     lua_pushnumber((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1n_string('%s', %f) failed: %s\n", 
+        fprintf(stderr, "MochaLuaError: call1n_string('%s', %f) failed: %s\n",
                 funcname, arg, err ? err : "unknown error");
         lua_pop((lua_State*)L, 1);
-        return "";
+        return mocha_rc_copy("");
     }
-    const char *r = lua_tostring((lua_State*)L, -1);
+    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
-    return r;
+    return out;
 }
 
 #endif /* MOCHA_WITH_LUA */
