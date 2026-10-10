@@ -496,9 +496,9 @@ class CodeGen:
     
     def compute_struct_size(self, class_name: str, visited=None) -> int:
         """
-        Compute the byte size of a Mocha class struct by summing its fields.
-        Recurses into parent classes for inherited fields.
-        Rounds up to 16-byte alignment.
+        Compute the byte size of a Mocha class struct the way LLVM lays it out:
+        each field starts at an offset aligned to its own size, and the total
+        is rounded up to the largest field alignment, then to 16 bytes.
         """
         if visited is None:
             visited = set()
@@ -516,20 +516,24 @@ class CodeGen:
         }
 
         fields = self.class_fields.get(class_name, [])
-        size = 0
+        offset = 0
+        max_align = 1
         for _, llvm_type in fields:
             if llvm_type in LLVM_SIZES:
-                size += LLVM_SIZES[llvm_type]
-            elif llvm_type.startswith("%struct."):
-                size += 8   # struct pointer
-            elif llvm_type.startswith("["):
-                # fixed array type e.g. [4 x i32] — rare in Mocha but handle it
-                size += 8   # treat as pointer
+                fsize = LLVM_SIZES[llvm_type]
             else:
-                size += 8   # safe default for unknown pointer types
+                fsize = 8   # struct pointers, arrays, unknown pointer types
+            falign = fsize
+            # move to the next offset that fits this field's alignment
+            offset = ((offset + falign - 1) // falign) * falign
+            offset += fsize
+            if falign > max_align:
+                max_align = falign
 
+        # pad the end of the struct to its largest alignment
+        offset = ((offset + max_align - 1) // max_align) * max_align
         # 16-byte alignment
-        size = ((size + 15) // 16) * 16
+        size = ((offset + 15) // 16) * 16
         # minimum 16 bytes even for empty structs
         return max(size, 16)
     
