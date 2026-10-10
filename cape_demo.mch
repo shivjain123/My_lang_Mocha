@@ -10,4 +10,8 @@ function cape_demo(t_sfc: float, td_sfc: float) -> float {
 
 function main(didLoad) -> null {
     print(cape_demo(28.0, 18.0), newLine=true);
+    print(cape_demo(28.0, 28.0), newLine=true);
+    print(cape_demo(28.0, 10.0), newLine=true);
+    print(cape_demo(26.0, 16.0), newLine=true);
+    print(cape_demo(24.0, 20.0), newLine=true);
 };

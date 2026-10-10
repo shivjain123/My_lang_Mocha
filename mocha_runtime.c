@@ -271,6 +271,11 @@
     #include <execinfo.h>
 #endif
 
+#ifdef MOCHA_WASM
+/* The compiler emits malloc(i64) with 64-bit sizes, but wasm32's libc malloc takes a 32-bit size. */
+void* mocha_malloc64(uint64_t n) { return malloc((size_t)n); }
+#endif
+
 // ── Crash handler — replaces SIGSEGV with a readable error ────────────────
 #ifndef MOCHA_WASM
 static void mocha_crash_handler(int sig) {
@@ -11441,10 +11446,34 @@ double metero_equiv_potential_temp(double t_c, double dewpoint_c, double pressur
     
     double theta_e_k = MUL(
         MUL(t_k, exp(MUL(exp1, mocha_ext_float_log(DIV(1000.0, pressure_mb))->real))),
-        exp(MUL(exp2, MUL(w, ADD(1.0, MUL(0.81, w)))))
+        exp(MUL(exp2, MUL(MUL(1000.0, w), ADD(1.0, MUL(0.81, w)))))
     );
     
     return theta_e_k;  // KELVIN — DO NOT convert to Celsius
+}
+
+/* Saturated equivalent potential temperature (K): parcel at T with dewpoint == T.
+   When dewpoint == T the Bolton LCL temperature tl is simply T (in K). */
+static double sat_theta_e_k(double t_c, double p_mb) {
+    double t_k = t_c + 273.15;
+    double e   = metero_sat_vp(t_c);
+    if (p_mb - e < 1.0) return 1.0e9;           /* absurdly hot/low-pressure guard */
+    double w     = 0.622 * e / (p_mb - e);      /* kg/kg */
+    double exp1  = 0.2854 * (1.0 - 0.28 * w);
+    double exp2  = 3.376 / t_k - 0.00254;
+    return t_k * exp(exp1 * log(1000.0 / p_mb))
+               * exp(exp2 * (1000.0 * w) * (1.0 + 0.81 * w));
+}
+
+/* Temperature (°C) of a saturated parcel with the given theta_e (K) at pressure p (mb).
+   Bisection: saturated theta_e rises steadily with T at fixed p. */
+double metero_moist_parcel_temp(double theta_e_k, double pressure_mb) {
+    double lo = -100.0, hi = 60.0;
+    for (int i = 0; i < 60; i++) {
+        double mid = 0.5 * (lo + hi);
+        if (sat_theta_e_k(mid, pressure_mb) < theta_e_k) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
 }
 
 /* Lifting condensation level temperature */

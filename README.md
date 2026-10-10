@@ -4,7 +4,8 @@ In 1995, Brendan Eich named his new language Mocha at Netscape — before market
 
 •	Mocha is what JS could have been if written in 2 years, not 10 days — and had not chased the Java bandwagon.
 •	Mocha is what CoffeeScript wanted to be — but CoffeeScript transpiled to JS and inherited its crimes. Mocha compiles to native LLVM IR via Clang. The problems are fixed at the foundation, not papered over.
-•	Mocha is now Julia's cousin: breaks backward compatibility where necessary, faster than Julia due to no JVM, easier syntax, strict like Rust but flexible like Swift, pragmatic like Kotlin but practical like Go, cute like Lua.
+•	Mocha is Julia's cousin: the same scientific focus, without the JIT lag. Warm compiles in 0.25–2s — iteration speed that Julia's 'time to first plot' never solved
+•	Mocha breaks backward compatibility where necessary, easier syntax, strict like Rust but flexible like Swift, pragmatic like Kotlin but practical like Go, and cute like Lua.
 •	Mocha is the Mocha that Brendan Eich himself named. Welcome back.
 
 Core principle: failures are loud, never silent.

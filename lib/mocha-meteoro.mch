@@ -32,6 +32,7 @@ local function c_feels_like(t_c: float, rh: float, speed_kmh: float) -> float na
 local function c_potential_temp(t_c: float, pressure_mb: float) -> float native metero_potential_temp;
 local function c_virtual_temp(t_c: float, mixing_ratio_gkg: float) -> float native metero_virtual_temp;
 local function c_equiv_potential_temp(t_c: float, dewpoint_c: float, pressure_mb: float) -> float native metero_equiv_potential_temp;
+local function c_moist_parcel_temp(theta_e_k: float, pressure_mb: float) -> float native metero_moist_parcel_temp;
 local function c_lcl_temp(t_c: float, dewpoint_c: float) -> float native metero_lcl_temp;
 local function c_lcl_pressure(t_c: float, dewpoint_c: float, pressure_mb: float) -> float native metero_lcl_pressure;
 
@@ -1137,64 +1138,97 @@ function cape_cin(pressure_mb: float[], temp_c: float[], dewpoint_c: float[]) ->
     var t_sfc: float  = temp_c[0];
     var td_sfc: float = dewpoint_c[0];
     var p_sfc: float  = pressure_mb[0];
+    var p_lcl: float  = c_lcl_pressure(t_sfc, td_sfc, p_sfc);
 
-    var p_lcl: float = c_lcl_pressure(t_sfc, td_sfc, p_sfc);
-    var t_lcl: float = c_lcl_temp(t_sfc, td_sfc);
+    // Surface mixing ratio (kg/kg) stays constant until the LCL; theta_e is constant along the moist adiabat
+    var e_sfc: float = c_sat_vp(td_sfc);
+    var w_sfc: float = 0.622 * e_sfc / (p_sfc - e_sfc);
+    var theta_e_k: float = c_equiv_potential_temp(t_sfc, td_sfc, p_sfc);
 
+    // Pass 1: virtual-temperature excess (parcel minus environment) at every level,
+    // with an extra point inserted wherever the parcel crosses the environment
+    var pts_p: float[] = [];
+    var pts_x: float[] = [];
+    var prev_p: float = p_sfc;
+    var prev_x: float = 0.0;
+    var i: int = 0;
+    while (i < n) {
+        var p_lev: float = pressure_mb[i];
+        var t_env: float = temp_c[i];
+        var t_parcel: float = t_sfc;
+        var w_p: float = w_sfc;
+
+        if (p_lev >= p_lcl) {
+            var dz_m: float = 29.271 * (t_sfc + 273.15) * (p_sfc / p_lev).log().real;
+            t_parcel = t_sfc - 9.8 * (dz_m / 1000.0);
+        } else {
+            t_parcel = c_moist_parcel_temp(theta_e_k, p_lev);
+            var e_p: float = c_sat_vp(t_parcel);
+            w_p = 0.622 * e_p / (p_lev - e_p);
+        };
+
+        var e_e: float = c_sat_vp(dewpoint_c[i]);
+        var w_e: float = 0.622 * e_e / (p_lev - e_e);
+        var x_lev: float = (t_parcel + 273.15) * (1.0 + 0.61 * w_p) - (t_env + 273.15) * (1.0 + 0.61 * w_e);
+
+        if (i > 0 && prev_x * x_lev < 0.0) {
+            var frac: float = prev_x / (prev_x - x_lev);
+            pts_p.push(prev_p * c_pow(p_lev / prev_p, frac));
+            pts_x.push(0.0);
+        };
+        pts_p.push(p_lev);
+        pts_x.push(x_lev);
+        prev_p = p_lev;
+        prev_x = x_lev;
+        i++;
+    };
+
+    // Pass 2: LFC = first point at or above the LCL where the parcel is buoyant
+    var m: int = pts_p.length;
+    var k_lfc: int = -1;
+    var k: int = 0;
+    while (k < m) {
+        if (k_lfc < 0 && pts_p[k] <= p_lcl && pts_x[k] >= 0.0) {
+            k_lfc = k;
+        };
+        k++;
+    };
+
+    // EL = first point above the LFC where buoyancy drops back to zero (else the top of the sounding)
+    var k_el: int = m - 1;
+    if (k_lfc >= 0) {
+        var el_done: bool = false;
+        k = k_lfc + 1;
+        while (k < m) {
+            if (!el_done && pts_x[k] <= 0.0) {
+                k_el = k;
+                el_done = true;
+            };
+            k++;
+        };
+    };
+
+    // Pass 3: trapezoid integration in ln(p). CAPE only between LFC and EL, CIN only below the LFC
     var cape: float = 0.0;
     var cin: float  = 0.0;
     var lfc: float  = -1.0;
     var el: float   = -1.0;
-    var lfc_found: bool = false;
-    var el_found: bool  = false;
-
-    var i: int = 1;
-    while (i < n) {
-        var p_lev: float = pressure_mb[i];
-        var t_env: float = temp_c[i];
-
-        var t_parcel: float = 0.0;
-
-        if (p_lev >= p_lcl) {
-            // ── Dry adiabatic (below LCL) ──
-            var dz_m: float = 29.271 * (t_sfc + 273.15) * (p_sfc / p_lev).log().real;
-            t_parcel = t_sfc - 9.8 * (dz_m / 1000.0);
-        } else {
-            // ── Moist adiabatic (above LCL) ──
-            var theta_e_k: float = c_equiv_potential_temp(t_sfc, td_sfc, p_sfc);
-            t_parcel = theta_e_k * c_pow((p_lev / 1000.0), 0.286) - 273.15;
+    if (k_lfc >= 0) {
+        lfc = pts_p[k_lfc];
+        el  = pts_p[k_el];
+        k = 0;
+        while (k < m - 1) {
+            var dl: float = (pts_p[k] / pts_p[k + 1]).log().real;
+            var area: float = 0.5 * (pts_x[k] + pts_x[k + 1]) * dl * 287.04;
+            if (k >= k_lfc && k < k_el) {
+                cape = cape + area;
+            } else {
+                if (k < k_lfc && area < 0.0) {
+                    cin = cin + area;
+                };
+            };
+            k++;
         };
-
-        var buoy: float = t_parcel - t_env;
-        var tv_p: float = t_parcel + 273.15;
-        var tv_e: float = t_env + 273.15;
-        var dz: float = 29.271 * (tv_p + tv_e) / 2.0 * (pressure_mb[i-1] / p_lev).log().real;
-        var buoy_acc: float = 9.80665 * (tv_p - tv_e) / tv_e;
-
-        if (!lfc_found && p_lev < p_lcl && buoy > 0.0) {
-            lfc = p_lev;
-            lfc_found = true;
-        };
-
-        if (lfc_found && !el_found && buoy < 0.0 && p_lev < lfc) {
-            el = p_lev;
-            el_found = true;
-        };
-
-        if (lfc_found && !el_found && buoy > 0.0) {
-            cape = cape + buoy_acc * dz;
-        };
-
-        if (!lfc_found && buoy < 0.0 && p_lev < p_sfc) {
-            cin = cin + buoy_acc * dz;
-        };
-
-        i++;
-    };
-
-    if (!lfc_found) {
-        cape = 0.0;
-        cin  = 0.0;
     };
 
     var result: float[] = [cape, cin, lfc, el];

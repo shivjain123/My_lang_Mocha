@@ -16,6 +16,7 @@ function c_feels_like(t_c: float, rh: float, speed_kmh: float) -> float native m
 function c_potential_temp(t_c: float, pressure_mb: float) -> float native metero_potential_temp;
 function c_virtual_temp(t_c: float, mixing_ratio_gkg: float) -> float native metero_virtual_temp;
 function c_equiv_potential_temp(t_c: float, dewpoint_c: float, pressure_mb: float) -> float native metero_equiv_potential_temp;
+function c_moist_parcel_temp(theta_e_k: float, pressure_mb: float) -> float native metero_moist_parcel_temp;
 function c_lcl_temp(t_c: float, dewpoint_c: float) -> float native metero_lcl_temp;
 function c_lcl_pressure(t_c: float, dewpoint_c: float, pressure_mb: float) -> float native metero_lcl_pressure;
 function celsius_to_fahrenheit(t: float) -> float;

@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mocha CAPE demo 🌩️</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #1e1410; color: #f3e6d8; padding: 2rem; max-width: 32rem; }
+    label { display: block; margin-top: 1.2rem; }
+    input[type=range] { width: 100%; }
+    .result { margin-top: 2rem; font-size: 2.4rem; color: #e8b27d; }
+    small { color: #a58c76; }
+  </style>
+</head>
+<body>
+  <h1>🌩️ CAPE, computed by Mocha</h1>
+  <small>mocha-meteoro compiled to WebAssembly, running in your browser. The upper-air sounding is fixed; the sliders change the surface.</small>
+
+  <label>Surface temperature: <b id="tv">28</b> °C
+    <input id="t" type="range" min="10" max="40" step="0.5" value="28">
+  </label>
+  <label>Surface dew point: <b id="dv">18</b> °C
+    <input id="d" type="range" min="0" max="40" step="0.5" value="18">
+  </label>
+
+  <div class="result">CAPE: <span id="r">...</span> J/kg</div>
+
+<script>
+(async () => {
+  const handlers = {
+    proc_exit(code) { throw new Error('Mocha exited with code ' + code); },
+    random_get(ptr, len) { crypto.getRandomValues(new Uint8Array(mem.buffer, ptr, len)); return 0; },
+    clock_time_get(id, prec, outPtr) {
+      new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Date.now()) * 1000000n, true); return 0;
+    },
+  };
+  let mem;
+  const wasi = new Proxy({}, { get: (_, name) => handlers[name] || (() => 0) });
+  const bytes = await (await fetch('cape_demo.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: wasi });
+  mem = instance.exports.memory;
+  if (instance.exports._initialize) instance.exports._initialize();
+
+  const t = document.getElementById('t'), d = document.getElementById('d');
+  function update() {
+    if (+d.value > +t.value) d.value = t.value;        // dew point can't exceed temperature
+    document.getElementById('tv').textContent = t.value;
+    document.getElementById('dv').textContent = d.value;
+    let out;
+    try { out = instance.exports.cape_demo(+t.value, +d.value).toFixed(1); }
+    catch (e) { out = 'error'; console.error(e); }
+    document.getElementById('r').textContent = out;
+  }
+  t.oninput = d.oninput = update;
+  update();
+})();
+</script>
+</body>
+</html>
