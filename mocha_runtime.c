@@ -3656,9 +3656,9 @@ int mocha_sqlite3_table_exists(void *db, const char *table) {
  * ============================================================ */
 
 #ifdef MOCHA_WITH_LUA
-#include "lua-5.5.0_Win64_dllw6_lib/include/lua.h"
-#include "lua-5.5.0_Win64_dllw6_lib/include/lualib.h"
-#include "lua-5.5.0_Win64_dllw6_lib/include/lauxlib.h"
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
 
 /* Create a new Lua state with all standard libs loaded */
 void* mocha_lua_new() {
