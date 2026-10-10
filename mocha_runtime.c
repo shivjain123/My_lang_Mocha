@@ -436,6 +436,11 @@ static char* rc_strdup(const char* src) {
     return copy;
 }
 
+/* Copy a borrowed C string into a fresh RC string (NULL becomes "") */
+static char* mocha_rc_copy(const char* s) {
+    return rc_strdup(s ? s : "");
+}
+
 void mocha_signal_handlers_init() {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
@@ -4102,7 +4107,7 @@ int mocha_wren_dofile(void* vm, const char* filename) {
 
 const char* mocha_wren_safe_dostring(void* vm, const char* module, const char* code) {
     WrenInterpretResult r = wrenInterpret((WrenVM*)vm, module, code);
-    return (r == WREN_RESULT_SUCCESS) ? "" : "WrenError: script failed";
+    return mocha_rc_copy((r == WREN_RESULT_SUCCESS) ? "" : "WrenError: script failed");
 }
 
 /* ============================================================
@@ -4114,7 +4119,7 @@ double mocha_wren_eval_number(void* vm, const char* expr) {
 }
 
 const char* mocha_wren_eval_string(void* vm, const char* expr) {
-    return (const char*)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_STRING);
+    return mocha_rc_copy((const char*)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_STRING));
 }
 
 int mocha_wren_eval_bool(void* vm, const char* expr) {
@@ -4137,8 +4142,8 @@ double mocha_wren_call_number(void* vm, const char* module,
 
 const char* mocha_wren_call_string(void* vm, const char* module,
                                     const char* classname, const char* signature) {
-    return (const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_STRING, 0);
+    return mocha_rc_copy((const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+                       signature, WREN_RET_STRING, 0));
 }
 
 int mocha_wren_call_int(void* vm, const char* module,
@@ -4162,9 +4167,9 @@ double mocha_wren_call1n_number(void* vm, const char* module,
 const char* mocha_wren_call1s_string(void* vm, const char* module,
                                       const char* classname, const char* signature,
                                       const char* arg) {
-    return (const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+    return mocha_rc_copy((const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
                        signature, WREN_RET_STRING, 1,
-                       WREN_ARG_STRING, arg);
+                       WREN_ARG_STRING, arg));
 }
 
 /* ============================================================
@@ -4183,10 +4188,10 @@ double mocha_wren_call2n_number(void* vm, const char* module,
 const char* mocha_wren_call2s_string(void* vm, const char* module,
                                       const char* classname, const char* signature,
                                       const char* a, const char* b) {
-    return (const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
+    return mocha_rc_copy((const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
                        signature, WREN_RET_STRING, 2,
                        WREN_ARG_STRING, a,
-                       WREN_ARG_STRING, b);
+                       WREN_ARG_STRING, b));
 }
 
 /* ============================================================
