@@ -1,0 +1,115 @@
+
+allEncompassing_v0.6_tests
+      G¥î Type errors found:
+         MochaTypeError at line 922, col 21: occs() on a 2D array requires a 'row=' or 'col=' argument. Example: arr.occs(val, row=0) or arr.occs(val, col=2)
+         MochaTypeError at line 923, col 21: occs() on a 2D array requires a 'row=' or 'col=' argument. Example: arr.occs(val, row=0) or arr.occs(val, col=2)
+         MochaTypeError at line 924, col 21: occs() on a 2D array requires a 'row=' or 'col=' argument. Example: arr.occs(val, row=0) or arr.occs(val, col=2)
+
+blorp_test
+    corpus_current\blorp_test.ll:311:18: error: use of undefined value '@mocha_ext_str_blorp'
+      311 |   %t4 = call i8* @mocha_ext_str_blorp(i8* %t3)
+          |                  ^
+    1 error generated.
+
+caller
+      G£à Imported: ./lib_a.mch
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 4, col 23: 'secretHelper' is local to its file and cannot be called from outside
+
+check_64double
+      G£à No imports
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 4, col 5: Type mismatch in declaration of 'z': declared as 'vast' but value is 'float'
+
+comprehensive_v0.5_tests
+    corpus_current\comprehensive_v0.5_tests.ll:3591:20: error: '%t1200' defined with type 'i32' but expected 'ptr'
+     3591 |   store %MochaSet* %t1200, %MochaSet** %d.ptr
+          |                    ^
+    1 error generated.
+
+extend_private
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 11, col 13: 'secret' is private to 'Foo' and cannot be called from outside
+         MochaTypeError at line 13, col 19: 'secret' is private to 'Foo' and cannot be called from outside
+
+hello
+      G£à 10 tokens
+    Step 2: Parsing...
+    MochaParseError at line 1, col 27: Expected ';' after import (found 'from' [FROM] instead, at line 1, col 33)
+    MochaParseError at line 1, col 38: Expected 'import' after source (found 'as' [AS] instead, at line 1, col 48)
+
+ir_test
+      G£à No imports
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 2, col 5: Type mismatch in declaration of 'i': declared as 'int[]' but value is 'unknown[][][]'
+
+lib_a
+      G£à No imports
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaCompileError: No entry point found. Mark one function with 'didLoad' as its first parameter. Example: function main(didLoad, name: str) -> null { ... };
+
+lin_svm_T
+    Step 3: Type Checking...
+      G£à Type check passed
+    Step 4: Code Generation...
+      G¥î MochaCodeGenError at line 13, col 14: Unknown function or method 'LinearSVM_fit' GÇö did you forget to import a library?
+
+lsp_mini_test
+    Step 1: Lexing...
+      G£à 18 tokens
+    Step 2: Parsing...
+    MochaParseError at line 2, col 24: Expected a type annotation here (e.g. int, float, str, bool, or a class name). Got '' (EOF)
+
+mental_health_conf
+         MochaTypeError at line 93, col 52: 'mood_max' is not declared. Did you forget 'var mood_max: type = value;'?
+         MochaTypeError at line 93, col 63: 'mood_min' is not declared. Did you forget 'var mood_min: type = value;'?
+         MochaTypeError at line 93, col 61: Cannot use '-' on type 'unknown'. Arithmetic requires int or float
+         MochaTypeError at line 93, col 37: Cannot use '+' on type 'unknown'. Arithmetic requires int or float
+
+object_comprehension
+      G£à No imports
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 20, col 5: Type mismatch in declaration of 'something': declared as 'bool[]' but value is 'int[]'
+
+ps1_analyse_storage_code
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 11, col 27: Cannot cast str to float directly. Use a toFloat() method from mocha-string library.
+         MochaCompileError: No entry point found. Mark one function with 'didLoad' as its first parameter. Example: function main(didLoad, name: str) -> null { ... };
+
+shared_field
+      G£à No imports
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 2, col 5: 'shared' is not allowed on fields GÇö use a module-level variable instead
+
+suite_of_v0.7
+    Step 3: Type Checking...
+      G£à Type check passed
+    Step 4: Code Generation...
+      G¥î MochaCodeGenError at line 702, col 41: Unknown array method 'normalize' on type 'float[]'
+
+test_cd
+    =ƒöÑ Mocha Compiler v1.2
+    =ƒôä Compiling: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\test_cd.mch
+    Step 1: Lexing...
+      G¥î MochaLexError at line 9, col 5: Unexpected character: '`'
+
+test_correct_line
+      G£à No imports
+    Step 3: Type Checking...
+      G¥î Type errors found:
+         MochaTypeError at line 3, col 11: Cannot use '+' on type 'str'. Arithmetic requires int or float
+
+vast_check
+    Step 3: Type Checking...
+      G£à Type check passed
+    Step 4: Code Generation...
+      G¥î MochaCodeGenError at line 2, col 19: Integer literal 32983209832029893933 exceeds vast (int64) range. Maximum is 9223372036854775807.
+

@@ -2,12 +2,16 @@
   "name": "mocha-language",
   "displayName": "Mocha Language",
   "description": "Syntax highlighting and language support for the Mocha programming language (.mch)",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "publisher": "shiv-jain",
   "activationEvents": [
     "onLanguage:mocha"
   ],
-  "main": "./extension.js",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "esbuild extension.js --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "vscode:prepublish": "npm run build"
+  },
   "icon": "icons/mocha-dark.png",
   "repository": {
     "type": "git",
@@ -59,11 +63,19 @@
           "type": "string",
           "default": "",
           "description": "Absolute path to mocha_lsp.py (e.g. C:\\path\\to\\mocha_lsp.py)"
+        },
+        "mocha.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable used to run mocha_lsp.py (e.g. python3, py, or a venv path)."
         }
       }
     }
   },
   "dependencies": {
     "vscode-languageclient": "^10.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

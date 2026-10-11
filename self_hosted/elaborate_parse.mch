@@ -175,5 +175,63 @@ function main(didLoad) -> null {
     check("param name", "x", s10.left.params[0].value);
     check("return type", "int", s10.left.type_str);
 
+    // ─── TEST 11: Match with range, when, and member-access cases ───
+    print("--- TEST 11: Match case patterns ---", newLine=true);
+    var src11: str = "match (x) { case 90..99: var a: int = 1; case y when y < 60: var b: int = 2; case TokenType.INT_LIT: var c: int = 3; default: var d: int = 0; };";
+    var lex11: Lexer = Lexer(src11);
+    var toks11: Token[] = lex11.tokenise();
+    var p11: Parser = Parser(toks11);
+    var ast11: ASTNode = p11.parse();
+    var s11: ASTNode = ast11.children[0];
+    check("kind", "MatchStmt", s11.kind);
+    check_int("case count", 4, s11.cases.length);
+    check("case0 pattern kind", "RangeNode", s11.cases[0].left.kind);
+    check_int("case0 range start", 90, s11.cases[0].left.left.int_val);
+    check_int("case0 range end", 99, s11.cases[0].left.right.int_val);
+    check("case1 pattern kind", "Identifier", s11.cases[1].left.kind);
+    check("case1 pattern name", "y", s11.cases[1].left.value);
+    check("case1 when kind", "BinaryOp", s11.cases[1].condition.kind);
+    check("case2 pattern kind", "MemberAccess", s11.cases[2].left.kind);
+    check("case2 member", "INT_LIT", s11.cases[2].left.value);
+    check("case2 object", "TokenType", s11.cases[2].left.left.value);
+    check_bool("case3 is_default", true, s11.cases[3].flag1);
+
+    // ─── TEST 12: Bitwise precedence chain ───
+    print("--- TEST 12: Bitwise precedence ---", newLine=true);
+    var src12: str = "var z: int = 1 | 2 ^ 3 & 4 << 5;";
+    var lex12: Lexer = Lexer(src12);
+    var toks12: Token[] = lex12.tokenise();
+    var p12: Parser = Parser(toks12);
+    var ast12: ASTNode = p12.parse();
+    var s12: ASTNode = ast12.children[0];
+    check("kind", "VarDecl", s12.kind);
+    check("top op", "|", s12.left.value);
+    check_int("top left", 1, s12.left.left.int_val);
+    check("second op", "^", s12.left.right.value);
+    check_int("second left", 2, s12.left.right.left.int_val);
+    check("third op", "&", s12.left.right.right.value);
+    check_int("third left", 3, s12.left.right.right.left.int_val);
+    check("fourth op", "<<", s12.left.right.right.right.value);
+    check_int("fourth left", 4, s12.left.right.right.right.left.int_val);
+    check_int("fourth right", 5, s12.left.right.right.right.right.int_val);
+
+    // ─── TEST 13: Bitwise NOT ───
+    print("--- TEST 13: Bitwise NOT ---", newLine=true);
+    var src13: str = "var a: int = ~5; var b: int = ~x & 3;";
+    var lex13: Lexer = Lexer(src13);
+    var toks13: Token[] = lex13.tokenise();
+    var p13: Parser = Parser(toks13);
+    var ast13: ASTNode = p13.parse();
+    var s13a: ASTNode = ast13.children[0];
+    var s13b: ASTNode = ast13.children[1];
+    check("a val kind", "UnaryOp", s13a.left.kind);
+    check("a op", "~", s13a.left.value);
+    check_int("a operand", 5, s13a.left.right.int_val);
+    check("b top op", "&", s13b.left.value);
+    check("b left kind", "UnaryOp", s13b.left.left.kind);
+    check("b left op", "~", s13b.left.left.value);
+    check("b left operand", "x", s13b.left.left.right.value);
+    check_int("b right", 3, s13b.left.right.int_val);
+
     print("--- ALL TESTS DONE ---", newLine=true);
 };

@@ -82,6 +82,15 @@ def parse_module(ll_text: str) -> dict[str, Function]:
                     current_label = "entry"
                     func.blocks[current_label] = BasicBlock(label=current_label)
                     func.block_order.append(current_label)
+                # multi-line switch: "switch ... [" ... "]" becomes one Instr
+                if l.endswith('['):
+                    parts = [l]
+                    i += 1
+                    while i < len(lines) and lines[i].strip() != ']':
+                        parts.append(lines[i].strip())
+                        i += 1
+                    parts.append(']')
+                    l = ' '.join(parts)
                 func.blocks[current_label].instrs.append(parse_instr(l))
             i += 1
 

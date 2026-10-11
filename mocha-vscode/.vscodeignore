@@ -1,0 +1,5 @@
+*.vsix
+node_modules/**
+extension.js
+package-lock.json
+**/*.map

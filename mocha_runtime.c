@@ -2684,8 +2684,8 @@ static void mocha_dict_release_value(void *value, int value_type) {
             mocha_dict_release((MochaDict*)value);
             break;
         case MOCHA_DICT_OBJECT:
-            /* objects aren't RC'd yet (same as sets) — deliberately
-             * left untouched until class instances get their own RC pass */
+            /* the dict owns one reference (taken in mocha_dict_set_object), same as sets */
+            rc_release(value);
             break;
     }
 }
@@ -2746,6 +2746,9 @@ void mocha_dict_set_dict(MochaDict *d, char *key, MochaDict *val) {
 }
 
 void mocha_dict_set_object(MochaDict *d, char *key, void *val) {
+    /* the dict co-owns the object: retain BEFORE dict_set_entry, which releases an
+     * overwritten old value, so re-storing the same object can't free it */
+    if (val) rc_retain(val);
     dict_set_entry(d, key, val, MOCHA_DICT_OBJECT);
 }
 
@@ -2895,7 +2898,8 @@ static void* mocha_dict_dup_value(void *val, int vt) {
         case MOCHA_DICT_DICT:
             mocha_dict_retain((MochaDict*)val);
             return val;
-        default: /* MOCHA_DICT_OBJECT — not RC'd yet */
+        default:
+            rc_retain(val); //for OBJECT
             return val;
     }
 }
@@ -2906,7 +2910,7 @@ MochaDict* mocha_dict_merge(MochaDict *a, MochaDict *b, int8_t override) {
     // Copy all entries from a
     for (int32_t i = 0; i < a->size; i++) {
         void *new_val = mocha_dict_dup_value(a->entries[i].value, a->entries[i].value_type);
-        dict_set_entry(result, strdup(a->entries[i].key), new_val, a->entries[i].value_type);
+        dict_set_entry(result, a->entries[i].key, new_val, a->entries[i].value_type);
     }
 
     // Merge entries from b
@@ -2924,7 +2928,7 @@ MochaDict* mocha_dict_merge(MochaDict *a, MochaDict *b, int8_t override) {
             // override=true — b wins, update existing entry
             dict_set_entry(result, key, new_val, b->entries[i].value_type);
         } else {
-            dict_set_entry(result, strdup(key), new_val, b->entries[i].value_type);
+            dict_set_entry(result, key, new_val, b->entries[i].value_type);
         }
     }
 
@@ -2952,7 +2956,7 @@ MochaDict* mocha_dict_copy(MochaDict *src) {
     MochaDict *d = mocha_dict_new();
     for (int32_t i = 0; i < src->size; i++) {
         void *new_val = mocha_dict_dup_value(src->entries[i].value, src->entries[i].value_type);
-        dict_set_entry(d, strdup(src->entries[i].key), new_val, src->entries[i].value_type);
+        dict_set_entry(d, src->entries[i].key, new_val, src->entries[i].value_type);
     }
     return d;
 }

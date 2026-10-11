@@ -1265,8 +1265,8 @@ function feurea_value(urine_urea: float, serum_cr: float, serum_urea: float, uri
     return ((urine_urea * serum_cr) / (serum_urea * urine_cr)) * 100.0;
 };
 
-// Urine specific gravity from solute and solvent densities
-// SG = density_urine / density_water
+~~ Urine specific gravity from solute and solvent densities
+~~ SG = density_urine / density_water
 function urine_specific_gravity(density_urine: float, density_water: float) -> float {
     if (density_water <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Water density must be positive.");
@@ -1276,7 +1276,7 @@ function urine_specific_gravity(density_urine: float, density_water: float) -> f
     return density_urine / density_water;
 };
 
-// Interpret urine specific gravity value
+~~ Interpret urine specific gravity value
 function urine_sg_interpretation(sg: float) -> UrineSGInterpretation {
     validate_urine_sg(sg);
     if (sg < URINE_SG_MIN_NORMAL) {
@@ -1288,7 +1288,7 @@ function urine_sg_interpretation(sg: float) -> UrineSGInterpretation {
     return UrineSGInterpretation.HIGH;
 };
 
-// Clinical message for urine SG interpretation
+~~ Clinical message for urine SG interpretation
 function urine_sg_message(sg: float) -> str {
     validate_urine_sg(sg);
     if (sg < URINE_SG_MIN_NORMAL) {
@@ -2318,11 +2318,11 @@ local function validate_burn_region(val: float, region: str) -> null {
     };
 };
 
-// Rule of Nines — estimates total body surface area burned (% TBSA)
-// Each param is the percentage of THAT region that is burned (0-100)
-// Weightings: head=9%, chest=18%, abdomen=18%,
-//             left_arm=9%, right_arm=9%,
-//             left_leg=18%, right_leg=18%, perineum=1%
+~~ Rule of Nines — estimates total body surface area burned (% TBSA)
+~~ Each param is the percentage of THAT region that is burned (0-100)
+~~ Weightings: head=9%, chest=18%, abdomen=18%,
+~~             left_arm=9%, right_arm=9%,
+~~             left_leg=18%, right_leg=18%, perineum=1%
 function rule_of_nines(head: float, chest: float, abdomen: float,
                        left_arm: float, right_arm: float,
                        left_leg: float, right_leg: float,
@@ -2349,30 +2349,30 @@ function rule_of_nines(head: float, chest: float, abdomen: float,
     return tbsa;
 };
 
-// Parkland formula — total IV fluid (mL) in first 24 hours post-burn
-// Standard: 4 mL * weight_kg * %TBSA_burned
-// First half given in first 8 hours, second half over next 16 hours
-// Returns total 24hr volume in mL
+~~ Parkland formula — total IV fluid (mL) in first 24 hours post-burn
+~~ Standard: 4 mL * weight_kg * %TBSA_burned
+~~ First half given in first 8 hours, second half over next 16 hours
+~~ Returns total 24hr volume in mL
 function parkland(weight_kg: float, tbsa_burned: float) -> float {
     validate_bsa_inputs(weight_kg, 100.0);  // reuse weight validation
     validate_tbsa(tbsa_burned);
     return 4.0 * weight_kg * tbsa_burned;
 };
 
-// Parkland first 8 hours — mL/hr rate for first 8 hours
+~~ Parkland first 8 hours — mL/hr rate for first 8 hours
 function parkland_first_8hr_rate(weight_kg: float, tbsa_burned: float) -> float {
     var total: float = parkland(weight_kg, tbsa_burned);
     return (total / 2.0) / 8.0;
 };
 
-// Parkland next 16 hours — mL/hr rate for hours 8-24
+~~ Parkland next 16 hours — mL/hr rate for hours 8-24
 function parkland_next_16hr_rate(weight_kg: float, tbsa_burned: float) -> float {
     var total: float = parkland(weight_kg, tbsa_burned);
     return (total / 2.0) / 16.0;
 };
 
-// Burn severity classification by TBSA
-// Returns: 0 = minor (<10%), 1 = moderate (10-20%), 2 = major (>20%)
+~~ Burn severity classification by TBSA
+~~ Returns: 0 = minor (<10%), 1 = moderate (10-20%), 2 = major (>20%)
 tag BurnSeverity { MINOR, MODERATE, MAJOR };
 
 function burn_severity(tbsa: float) -> BurnSeverity {
@@ -2435,8 +2435,8 @@ local function validate_concentration_iv(conc: float) -> null {
 
 // ---- Basic Rate / Volume / Time ----
 
-// Drip rate in gtt/min
-// drop_factor: drops per mL (typically 10, 15, 20 for macrodrip; 60 for microdrip)
+~~ Drip rate in gtt/min
+~~ drop_factor: drops per mL (typically 10, 15, 20 for macrodrip; 60 for microdrip)
 function drip_rate_gtt_min(volume_ml: float, time_hr: float, drop_factor: float) -> float {
     validate_infusion_volume(volume_ml);
     validate_infusion_time(time_hr);
@@ -2444,14 +2444,14 @@ function drip_rate_gtt_min(volume_ml: float, time_hr: float, drop_factor: float)
     return (volume_ml * drop_factor) / (time_hr * 60.0);
 };
 
-// Infusion time in hours given volume and rate
+~~ Infusion time in hours given volume and rate
 function infusion_time_hr(volume_ml: float, rate_ml_hr: float) -> float {
     validate_infusion_volume(volume_ml);
     validate_infusion_rate(rate_ml_hr);
     return volume_ml / rate_ml_hr;
 };
 
-// Total volume to infuse given rate and time
+~~ Total volume to infuse given rate and time
 function volume_to_infuse(rate_ml_hr: float, time_hr: float) -> float {
     validate_infusion_rate(rate_ml_hr);
     validate_infusion_time(time_hr);
@@ -2460,8 +2460,8 @@ function volume_to_infuse(rate_ml_hr: float, time_hr: float) -> float {
 
 // ---- Weight-Based Dosing ----
 
-// Convert mcg/kg/min dose to mL/hr pump rate
-// e.g. norepinephrine, dopamine, dobutamine, propofol
+~~ Convert mcg/kg/min dose to mL/hr pump rate
+~~ e.g. norepinephrine, dopamine, dobutamine, propofol
 function mcg_kg_min_to_ml_hr(dose_mcg_kg_min: float, weight_kg: float, concentration_mcg_ml: float) -> float {
     validate_bsa_inputs(weight_kg, 100.0);
     validate_concentration_iv(concentration_mcg_ml);
@@ -2473,7 +2473,7 @@ function mcg_kg_min_to_ml_hr(dose_mcg_kg_min: float, weight_kg: float, concentra
     return (dose_mcg_kg_min * weight_kg * 60.0) / concentration_mcg_ml;
 };
 
-// Convert mL/hr pump rate back to mcg/kg/min dose
+~~ Convert mL/hr pump rate back to mcg/kg/min dose
 function ml_hr_to_mcg_kg_min(rate_ml_hr: float, weight_kg: float, concentration_mcg_ml: float) -> float {
     validate_infusion_rate(rate_ml_hr);
     validate_bsa_inputs(weight_kg, 100.0);
@@ -2481,8 +2481,8 @@ function ml_hr_to_mcg_kg_min(rate_ml_hr: float, weight_kg: float, concentration_
     return (rate_ml_hr * concentration_mcg_ml) / (weight_kg * 60.0);
 };
 
-// Convert mg/hr dose to mL/hr pump rate (non-weight-based)
-// e.g. heparin units/hr, morphine mg/hr
+~~ Convert mg/hr dose to mL/hr pump rate (non-weight-based)
+~~ e.g. heparin units/hr, morphine mg/hr
 function mg_hr_to_ml_hr(dose_mg_hr: float, concentration_mg_ml: float) -> float {
     if (dose_mg_hr <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Dose must be greater than 0.");
@@ -2493,7 +2493,7 @@ function mg_hr_to_ml_hr(dose_mg_hr: float, concentration_mg_ml: float) -> float 
     return dose_mg_hr / concentration_mg_ml;
 };
 
-// Convert mL/hr pump rate back to mg/hr dose (non-weight-based)
+~~ Convert mL/hr pump rate back to mg/hr dose (non-weight-based)
 function ml_hr_to_mg_hr(rate_ml_hr: float, concentration_mg_ml: float) -> float {
     validate_infusion_rate(rate_ml_hr);
     validate_concentration_iv(concentration_mg_ml);
@@ -2502,7 +2502,7 @@ function ml_hr_to_mg_hr(rate_ml_hr: float, concentration_mg_ml: float) -> float 
 
 // ---- Bolus ----
 
-// Bolus pump rate in mL/hr to deliver volume_ml over time_min minutes
+~~ Bolus pump rate in mL/hr to deliver volume_ml over time_min minutes
 function bolus_rate_ml_hr(volume_ml: float, time_min: float) -> float {
     validate_infusion_volume(volume_ml);
     if (time_min <= 0.0) {
@@ -2515,7 +2515,7 @@ function bolus_rate_ml_hr(volume_ml: float, time_min: float) -> float {
 
 // ---- Units/hr (for heparin, insulin — same as mg_hr_to_ml_hr but named clearly) ----
 
-// Convert units/hr to mL/hr (e.g. heparin 1000 units/mL bag)
+~~ Convert units/hr to mL/hr (e.g. heparin 1000 units/mL bag)
 function units_hr_to_ml_hr(dose_units_hr: float, concentration_units_ml: float) -> float {
     if (dose_units_hr <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Dose must be greater than 0.");
@@ -2526,7 +2526,7 @@ function units_hr_to_ml_hr(dose_units_hr: float, concentration_units_ml: float) 
     return dose_units_hr / concentration_units_ml;
 };
 
-// Convert mL/hr back to units/hr
+~~ Convert mL/hr back to units/hr
 function ml_hr_to_units_hr(rate_ml_hr: float, concentration_units_ml: float) -> float {
     validate_infusion_rate(rate_ml_hr);
     validate_concentration_iv(concentration_units_ml);
@@ -2590,8 +2590,8 @@ local function validate_kupperman_score(score: int, symptom: str) -> null {
 
 // ---- Female Reproductive ----
 
-// Naegele's rule — estimated due date returned as (day, month, year)
-// Add 7 days and 9 months (or subtract 3 months and add 1 year) to LMP
+~~ Naegele's rule — estimated due date returned as (day, month, year)
+~~ Add 7 days and 9 months (or subtract 3 months and add 1 year) to LMP
 function naegele_edd(lmp_day: int, lmp_month: int, lmp_year: int) -> (int, 3) {
     var day:   int = lmp_day + 7;
     var month: int = lmp_month + 9;
@@ -2624,8 +2624,8 @@ function naegele_edd(lmp_day: int, lmp_month: int, lmp_year: int) -> (int, 3) {
     return (day, month, year);
 };
 
-// Gestational age in total days from LMP to current date
-// Approximate: uses 30-day months
+~~ Gestational age in total days from LMP to current date
+~~ Approximate: uses 30-day months
 function gestational_age_days(lmp_day: int, lmp_month: int, lmp_year: int,
                                cur_day: int, cur_month: int, cur_year: int) -> int {
     var lmp_total: int = lmp_year * 365 + lmp_month * 30 + lmp_day;
@@ -2637,7 +2637,7 @@ function gestational_age_days(lmp_day: int, lmp_month: int, lmp_year: int,
     return diff;
 };
 
-// Gestational age as (weeks, days) tuple
+~~ Gestational age as (weeks, days) tuple
 function gestational_age_weeks(lmp_day: int, lmp_month: int, lmp_year: int,
                                 cur_day: int, cur_month: int, cur_year: int) -> (int, 2) {
     var total: int = gestational_age_days(lmp_day, lmp_month, lmp_year,
@@ -2647,7 +2647,7 @@ function gestational_age_weeks(lmp_day: int, lmp_month: int, lmp_year: int,
     return (weeks, days);
 };
 
-// BMI-based fertility risk
+~~ BMI-based fertility risk
 function bmi_fertility_risk(bmi: float) -> BmiFertilityRisk {
     if (bmi < 18.5) {
         return BmiFertilityRisk.UNDERWEIGHT_RISK;
@@ -2661,7 +2661,7 @@ function bmi_fertility_risk(bmi: float) -> BmiFertilityRisk {
     return BmiFertilityRisk.OBESE_RISK;
 };
 
-// AMH-based ovarian reserve interpretation
+~~ AMH-based ovarian reserve interpretation
 function amh_ovarian_reserve(amh_ng_ml: float) -> OvarianReserve {
     validate_amh(amh_ng_ml);
     if (amh_ng_ml < AMH_LOW_THRESHOLD) {
@@ -2673,12 +2673,12 @@ function amh_ovarian_reserve(amh_ng_ml: float) -> OvarianReserve {
     return OvarianReserve.HIGH;
 };
 
-// Kupperman Menopausal Index
-// 11 symptoms scored 0-3 (none/mild/moderate/severe)
-// Weighted sum: hot_flushes×4, sweating×2, insomnia×2, nervousness×2,
-// depression×1, dizziness×1, fatigue×1, joint_pain×1,
-// headache×1, palpitations×1, paraesthesia×1
-// Total ≤ 20 = mild, 21-35 = moderate, > 35 = severe
+~~ Kupperman Menopausal Index
+~~ 11 symptoms scored 0-3 (none/mild/moderate/severe)
+~~ Weighted sum: hot_flushes×4, sweating×2, insomnia×2, nervousness×2,
+~~ depression×1, dizziness×1, fatigue×1, joint_pain×1,
+~~ headache×1, palpitations×1, paraesthesia×1
+~~ Total ≤ 20 = mild, 21-35 = moderate, > 35 = severe
 function kupperman_index(hot_flushes: int, sweating: int, insomnia: int,
                           nervousness: int, depression: int, dizziness: int,
                           fatigue: int, joint_pain: int, headache: int,
@@ -2708,16 +2708,16 @@ function kupperman_index(hot_flushes: int, sweating: int, insomnia: int,
            paraesthesia * 1;
 };
 
-// LH surge timing — estimated day of LH surge from cycle length
-// Occurs approximately 14 days before next period
+~~ LH surge timing — estimated day of LH surge from cycle length
+~~ Occurs approximately 14 days before next period
 function lh_surge_day(cycle_length: float) -> float {
     validate_cycle_length(cycle_length);
     return cycle_length - 14.0;
 };
 
-// Uterine resistance index (RI) from Doppler waveform
-// RI = (S - D) / S
-// S = peak systolic velocity, D = end diastolic velocity
+~~ Uterine resistance index (RI) from Doppler waveform
+~~ RI = (S - D) / S
+~~ S = peak systolic velocity, D = end diastolic velocity
 function uterine_ri(peak_systolic: float, end_diastolic: float) -> float {
     validate_doppler(peak_systolic,  "peak_systolic");
     validate_doppler(end_diastolic, "end_diastolic");
@@ -2729,8 +2729,8 @@ function uterine_ri(peak_systolic: float, end_diastolic: float) -> float {
     return (peak_systolic - end_diastolic) / peak_systolic;
 };
 
-// Uterine pulsatility index (PI) from Doppler waveform
-// PI = (S - D) / mean_velocity
+~~ Uterine pulsatility index (PI) from Doppler waveform
+~~ PI = (S - D) / mean_velocity
 function uterine_pi(peak_systolic: float, end_diastolic: float, mean_velocity: float) -> float {
     validate_doppler(peak_systolic,  "peak_systolic");
     validate_doppler(end_diastolic, "end_diastolic");
@@ -2743,7 +2743,7 @@ function uterine_pi(peak_systolic: float, end_diastolic: float, mean_velocity: f
     return (peak_systolic - end_diastolic) / mean_velocity;
 };
 
-// Uterine resistance interpretation from RI value
+~~ Uterine resistance interpretation from RI value
 function uterine_resistance(peak_systolic: float, end_diastolic: float) -> UterineResistance {
     var ri: float = uterine_ri(peak_systolic, end_diastolic);
     if (ri <= RI_ELEVATED_THRESHOLD) {
@@ -2757,13 +2757,13 @@ function uterine_resistance(peak_systolic: float, end_diastolic: float) -> Uteri
 
 // ---- Shared: Fertility Window ----
 
-// First day of fertility window (5 days before ovulation)
+~~ First day of fertility window (5 days before ovulation)
 function fertility_window_begin(cycle_length: float) -> float {
     validate_cycle_length(cycle_length);
     return cycle_length - 19.0;
 };
 
-// Peak fertility day (ovulation — 14 days before next period)
+~~ Peak fertility day (ovulation — 14 days before next period)
 function fertility_window_peak(cycle_length: float) -> float {
     validate_cycle_length(cycle_length);
     return cycle_length - 14.0;
@@ -2771,9 +2771,9 @@ function fertility_window_peak(cycle_length: float) -> float {
 
 // ---- Male Reproductive ----
 
-// Free testosterone estimation — Vermeulen equation (simplified)
-// total_t: nmol/L, shbg: nmol/L, albumin: g/dL
-// Returns free testosterone in pmol/L
+~~ Free testosterone estimation — Vermeulen equation (simplified)
+~~ total_t: nmol/L, shbg: nmol/L, albumin: g/dL
+~~ Returns free testosterone in pmol/L
 function free_testosterone(total_t: float, shbg: float, albumin: float) -> float {
     if (total_t <= 0.0 || shbg <= 0.0 || albumin <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Testosterone, SHBG, and albumin must be positive.");
@@ -2789,7 +2789,7 @@ function free_testosterone(total_t: float, shbg: float, albumin: float) -> float
     return (total_t / denominator) * 1000.0;
 };
 
-// Sperm concentration interpretation (WHO 2021 reference: ≥16 million/mL normal)
+~~ Sperm concentration interpretation (WHO 2021 reference: ≥16 million/mL normal)
 function sperm_concentration(million_per_ml: float) -> SpermConcentration {
     if (million_per_ml < 0.0) {
         c_print_err("MochaBioError (mocha-bio): Sperm concentration cannot be negative.");
@@ -2805,7 +2805,7 @@ function sperm_concentration(million_per_ml: float) -> SpermConcentration {
     return SpermConcentration.NORMAL;
 };
 
-// Sperm motility interpretation (WHO 2021 reference: ≥42% total motility normal)
+~~ Sperm motility interpretation (WHO 2021 reference: ≥42% total motility normal)
 function sperm_motility(motility_pct: float) -> SpermMotility {
     if (motility_pct < 0.0 || motility_pct > 100.0) {
         c_print_err("MochaBioError (mocha-bio): Sperm motility must be between 0 and 100.");
@@ -2850,14 +2850,14 @@ local function validate_carrying_capacity(k: float) -> null {
     };
 };
 
-// Exponential growth: N(t) = N0 * e^(rt)
+~~ Exponential growth: N(t) = N0 * e^(rt)
 function exponential_growth(n0: float, r: float, t: float) -> float {
     validate_population(n0);
     validate_growth_rate(r);
     return n0 * c_exp(r * t);
 };
 
-// Logistic growth (S-curve): N(t) = K / (1 + ((K - N0) / N0) * e^(-r*t))
+~~ Logistic growth (S-curve): N(t) = K / (1 + ((K - N0) / N0) * e^(-r*t))
 function logistic_growth(n0: float, r: float, k: float, t: float) -> float {
     validate_population(n0);
     validate_growth_rate(r);
@@ -2870,7 +2870,7 @@ function logistic_growth(n0: float, r: float, k: float, t: float) -> float {
     return k / denom;
 };
 
-// Doubling time: t = ln(2) / r
+~~ Doubling time: t = ln(2) / r
 function doubling_time(r: float) -> float {
     if (r <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Doubling time requires positive growth rate r.");
@@ -2880,14 +2880,14 @@ function doubling_time(r: float) -> float {
     return 0.6931471805599453 / r;
 };
 
-// Carrying capacity utilization — what fraction of K is currently used
+~~ Carrying capacity utilization — what fraction of K is currently used
 function carrying_capacity_usage(n: float, k: float) -> float {
     validate_population(n);
     validate_carrying_capacity(k);
     return (n / k) * 100.0;
 };
 
-// Population density — individuals per unit area
+~~ Population density — individuals per unit area
 function population_density(population: float, area: float) -> float {
     validate_population(population);
     if (area <= POP_AREA_MIN) {
@@ -2898,13 +2898,13 @@ function population_density(population: float, area: float) -> float {
     return population / area;
 };
 
-// Lotka-Volterra predator-prey — one time step
-// prey:     dN/dt = alpha*N - beta*N*P
-// predator: dP/dt = delta*N*P - gamma*P
-// alpha = prey birth rate, beta = predation rate,
-// delta = predator reproduction per prey eaten, gamma = predator death rate
-// dt = time step size
-// Returns (prey_next, predator_next) as (float, 2) tuple
+~~ Lotka-Volterra predator-prey — one time step
+~~ prey:     dN/dt = alpha*N - beta*N*P
+~~ predator: dP/dt = delta*N*P - gamma*P
+~~ alpha = prey birth rate, beta = predation rate,
+~~ delta = predator reproduction per prey eaten, gamma = predator death rate
+~~ dt = time step size
+~~ Returns (prey_next, predator_next) as (float, 2) tuple
 function lotka_volterra(prey: float, predator: float,
                          alpha: float, beta: float,
                          delta: float, gamma: float,
@@ -2950,7 +2950,7 @@ local function validate_vmax(vmax: float) -> null {
     };
 };
 
-// Michaelis-Menten enzyme kinetics: v = Vmax * [S] / (Km + [S])
+~~ Michaelis-Menten enzyme kinetics: v = Vmax * [S] / (Km + [S])
 function michaelis_menten(vmax: float, km: float, substrate: float) -> float {
     validate_vmax(vmax);
     validate_km(km);
@@ -2962,14 +2962,14 @@ function michaelis_menten(vmax: float, km: float, substrate: float) -> float {
     return (vmax * substrate) / (km + substrate);
 };
 
-// Substrate concentration at half-maximal velocity (Km definition check)
-// Returns substrate concentration giving v = Vmax/2 — always equals Km
+~~ Substrate concentration at half-maximal velocity (Km definition check)
+~~ Returns substrate concentration giving v = Vmax/2 — always equals Km
 function half_velocity_substrate(km: float) -> float {
     validate_km(km);
     return km;
 };
 
-// Reaction velocity as fraction of Vmax
+~~ Reaction velocity as fraction of Vmax
 function velocity_fraction(km: float, substrate: float) -> float {
     validate_km(km);
     if (substrate < 0.0) {
@@ -2980,9 +2980,9 @@ function velocity_fraction(km: float, substrate: float) -> float {
     return substrate / (km + substrate);
 };
 
-// Beer-Lambert law: A = epsilon * l * c
-// epsilon = molar attenuation coefficient (L/mol/cm)
-// l = path length (cm), c = concentration (mol/L)
+~~ Beer-Lambert law: A = epsilon * l * c
+~~ epsilon = molar attenuation coefficient (L/mol/cm)
+~~ l = path length (cm), c = concentration (mol/L)
 function absorbance(epsilon: float, path_length: float, concentration: float) -> float {
     if (epsilon <= BEER_EPSILON_MIN) {
         c_print_err("MochaBioError (mocha-bio): Molar attenuation coefficient must be positive.");
@@ -3002,7 +3002,7 @@ function absorbance(epsilon: float, path_length: float, concentration: float) ->
     return epsilon * path_length * concentration;
 };
 
-// Concentration from Beer-Lambert: c = A / (epsilon * l)
+~~ Concentration from Beer-Lambert: c = A / (epsilon * l)
 function concentration_from_absorbance(absorbance_val: float, epsilon: float, path_length: float) -> float {
     if (epsilon <= BEER_EPSILON_MIN) {
         c_print_err("MochaBioError (mocha-bio): Molar attenuation coefficient must be positive.");
@@ -3022,7 +3022,7 @@ function concentration_from_absorbance(absorbance_val: float, epsilon: float, pa
     return absorbance_val / (epsilon * path_length);
 };
 
-// Henderson-Hasselbalch: pH = pKa + log10([A-] / [HA])
+~~ Henderson-Hasselbalch: pH = pKa + log10([A-] / [HA])
 function henderson_hasselbalch(pka: float, base_conc: float, acid_conc: float) -> float {
     if (base_conc <= 0.0 || acid_conc <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Buffer concentrations must be positive.");
@@ -3034,8 +3034,8 @@ function henderson_hasselbalch(pka: float, base_conc: float, acid_conc: float) -
     return pka + log10_ratio;
 };
 
-// Q10 temperature coefficient — rate change per 10°C
-// Q10 = (R2 / R1) ^ (10 / (T2 - T1))
+~~ Q10 temperature coefficient — rate change per 10°C
+~~ Q10 = (R2 / R1) ^ (10 / (T2 - T1))
 function q10(r1: float, r2: float, t1: float, t2: float) -> float {
     if (r1 <= 0.0 || r2 <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Reaction rates must be positive.");
@@ -3053,7 +3053,7 @@ function q10(r1: float, r2: float, t1: float, t2: float) -> float {
     return c_exp(exponent * ln_ratio);
 };
 
-// Rate at new temperature using Q10: R2 = R1 * Q10 ^ ((T2-T1)/10)
+~~ Rate at new temperature using Q10: R2 = R1 * Q10 ^ ((T2-T1)/10)
 function rate_at_temperature(r1: float, q10_val: float, t1: float, t2: float) -> float {
     if (r1 <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Reaction rate must be positive.");
@@ -3091,9 +3091,9 @@ local function validate_mutation_rate(mu: float) -> null {
     };
 };
 
-// Hardy-Weinberg genotype frequencies
-// Given dominant allele frequency p, returns (p², 2pq, q²)
-// p² = homozygous dominant, 2pq = heterozygous, q² = homozygous recessive
+~~ Hardy-Weinberg genotype frequencies
+~~ Given dominant allele frequency p, returns (p², 2pq, q²)
+~~ p² = homozygous dominant, 2pq = heterozygous, q² = homozygous recessive
 function hardy_weinberg(p: float) -> (float, 3) {
     validate_allele_freq(p);
     var q: float    = 1.0 - p;
@@ -3103,15 +3103,15 @@ function hardy_weinberg(p: float) -> (float, 3) {
     return (pp, tpq, qq);
 };
 
-// Hardy-Weinberg equilibrium check — returns true if p² + 2pq + q² ≈ 1
+~~ Hardy-Weinberg equilibrium check — returns true if p² + 2pq + q² ≈ 1
 function hardy_weinberg_check(homo_dom: float, hetero: float, homo_rec: float) -> bool {
     var total: float = homo_dom + hetero + homo_rec;
     return total > 0.999 && total < 1.001;
 };
 
-// Allele frequency after one generation of mutation pressure
-// p_next = p * (1 - mu_forward) + q * mu_reverse
-// mu_forward: rate of A→a, mu_reverse: rate of a→A
+~~ Allele frequency after one generation of mutation pressure
+~~ p_next = p * (1 - mu_forward) + q * mu_reverse
+~~ mu_forward: rate of A→a, mu_reverse: rate of a→A
 function allele_freq_after_mutation(p: float, mu_forward: float, mu_reverse: float) -> float {
     validate_allele_freq(p);
     validate_mutation_rate(mu_forward);
@@ -3120,10 +3120,10 @@ function allele_freq_after_mutation(p: float, mu_forward: float, mu_reverse: flo
     return p * (1.0 - mu_forward) + q * mu_reverse;
 };
 
-// Allele frequency after one generation of natural selection
-// Assumes diploid, selection against recessive homozygote (q²)
-// s = selection coefficient (0 = neutral, 1 = lethal)
-// p_next = p² + p*q / (1 - s*q²)   [mean fitness denominator]
+~~ Allele frequency after one generation of natural selection
+~~ Assumes diploid, selection against recessive homozygote (q²)
+~~ s = selection coefficient (0 = neutral, 1 = lethal)
+~~ p_next = p² + p*q / (1 - s*q²)   [mean fitness denominator]
 function allele_freq_after_selection(p: float, s: float) -> float {
     validate_allele_freq(p);
     if (s < 0.0 || s > 1.0) {
@@ -3141,8 +3141,8 @@ function allele_freq_after_selection(p: float, s: float) -> float {
     return (p * p + p * q) / mean_fitness;
 };
 
-// Effective population size from census size and sex ratio
-// Ne = 4 * Nm * Nf / (Nm + Nf)
+~~ Effective population size from census size and sex ratio
+~~ Ne = 4 * Nm * Nf / (Nm + Nf)
 function effective_population_size(n_male: float, n_female: float) -> float {
     validate_population(n_male);
     validate_population(n_female);

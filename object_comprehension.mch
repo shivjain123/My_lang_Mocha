@@ -16,6 +16,6 @@ function did(didLoad){
     // Nested object comprehension — also NO IMPORTS
     var pairs: int[][] = [[u.age + v.age for each v in users] for each u in users];
 
-    // and even (This is a prototype. this syntax does not work yet)
-    var something: bool[] = [u.age if u.age >= 30 for each u in users];
+    // and even
+    var something: bool[] = [true if u.age >= 30 for each u in users];
 };

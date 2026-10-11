@@ -30,6 +30,7 @@ echo   mocha execute ^<file.mch^>         Compile and run immediately
 echo   mocha --lib ^<libfile.mch^>        Compile a library
 echo   mocha doc ^<file.mch^>             Generate documentation
 echo   mocha repl                       Launch interactive REPL
+echo   mocha wasm ^<file.mch^> [fn ...]   Build a WebAssembly module
 echo   mocha help                       Show this message
 echo.
 echo Coming soon:
@@ -66,6 +67,15 @@ if "%1"=="execute" (
 
 if "%1"=="--lib" (
     python "%COMPILER%" --lib "%~f2"
+    exit /b
+)
+
+if "%1"=="wasm" (
+    if "%2"=="" (
+        echo Usage: mocha wasm ^<file.mch^> [function ...]
+        exit /b 1
+    )
+    python "%COMPILER%" --wasm "%~f2" "%~dpn2" %3 %4 %5 %6 %7 %8 %9
     exit /b
 )
 

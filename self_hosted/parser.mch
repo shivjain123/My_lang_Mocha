@@ -45,10 +45,50 @@ parse_expression
 class Parser {
     var tokens: Token[];
     var pos:    int;
+    var known_tags:    str[];
+    var known_classes: str[];
 
     function constructor(toks: Token[]) -> null {
         this.tokens = toks;
         this.pos = 0;
+        this.known_tags = [];
+        this.known_classes = [];
+
+        // pre-scan: collect the name after every 'tag' and 'class' token
+        var scan_i: int = 0;
+        while (scan_i < toks.length) {
+            if (scan_i + 1 < toks.length) {
+                if (toks[scan_i].type == TokenType.TAG) {
+                    this.known_tags.push(toks[scan_i + 1].value);
+                };
+                if (toks[scan_i].type == TokenType.CLASS) {
+                    this.known_classes.push(toks[scan_i + 1].value);
+                };
+            };
+            scan_i = scan_i + 1;
+        };
+    };
+
+    function is_known_tag(name: str) -> bool {
+        var ti: int = 0;
+        while (ti < this.known_tags.length) {
+            if (this.known_tags[ti] == name) {
+                return true;
+            };
+            ti = ti + 1;
+        };
+        return false;
+    };
+
+    function is_known_class(name: str) -> bool {
+        var ci: int = 0;
+        while (ci < this.known_classes.length) {
+            if (this.known_classes[ci] == name) {
+                return true;
+            };
+            ci = ci + 1;
+        };
+        return false;
     };
 
     // --------------------------------------------------------
@@ -307,6 +347,7 @@ class Parser {
         this.pair(TokenType.SEMICOLON);
         return node;
     };
+
     function parse_match() -> ASTNode {
         var node: ASTNode = this.make_node("MatchStmt");
         this.advance(); // consume 'match'
@@ -323,16 +364,56 @@ class Parser {
                 case_node.flag1 = true; // is_default
             } else {
                 this.expect(TokenType.CASE, "Expected 'case' or 'default' in match");
-                case_node.left = this.parse_expression(); // pattern
-                if (this.check(TokenType.WHEN)) {
-                    this.advance();
-                    case_node.condition = this.parse_expression();
+
+                if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
+                    // case x when x < 60   or   case TokenType.INT_LIT
+                    var pattern: ASTNode = this.make_node("Identifier");
+                    if (this.check(TokenType.CONST_IDENT)) {
+                        var cname: Token = this.expect(TokenType.CONST_IDENT, "Expected name in case pattern");
+                        pattern.value = cname.value;
+                    } else {
+                        var iname: Token = this.expect(TokenType.IDENTIFIER, "Expected name in case pattern");
+                        pattern.value = iname.value;
+                    };
+
+                    while (this.check(TokenType.DOT)) {
+                        this.advance();
+                        var mem_node: ASTNode = this.make_node("MemberAccess");
+                        mem_node.left = pattern;
+                        if (this.check(TokenType.CONST_IDENT)) {
+                            var mc: Token = this.expect(TokenType.CONST_IDENT, "Expected member name after '.'");
+                            mem_node.value = mc.value;
+                        } else {
+                            var mi: Token = this.expect(TokenType.IDENTIFIER, "Expected member name after '.'");
+                            mem_node.value = mi.value;
+                        };
+                        pattern = mem_node;
+                    };
+
+                    case_node.left = pattern;
+                    if (this.check(TokenType.WHEN)) {
+                        this.advance();
+                        case_node.condition = this.parse_expression();
+                    };
+                } else {
+                    // case 100   or   case 90..99
+                    var start_expr: ASTNode = this.parse_expression();
+                    if (this.check(TokenType.RANGE)) {
+                        this.advance();
+                        var end_expr: ASTNode = this.parse_expression();
+                        var range_node: ASTNode = this.make_node("RangeNode");
+                        range_node.left = start_expr;
+                        range_node.right = end_expr;
+                        case_node.left = range_node;
+                    } else {
+                        case_node.left = start_expr;
+                    };
                 };
             };
 
             this.expect(TokenType.COLON, "Expected ':' after case pattern");
 
-            // body — statements until next case/default/}
+            // body: statements until next case/default/}
             while (!this.check(TokenType.CASE) && !this.check(TokenType.DEFAULT) &&
                 !this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
                 case_node.body.push(this.parse_statement());
@@ -848,6 +929,13 @@ class Parser {
             node2.right = this.parse_unary();
             return node2;
         };
+        if (this.check(TokenType.BIT_NOT)) {
+            var op_tok5: Token = this.advance();
+            var node5: ASTNode = this.make_node("UnaryOp");
+            node5.value = op_tok5.value;
+            node5.right = this.parse_unary();
+            return node5;
+        };
         if (this.check(TokenType.PLUS_PLUS)) {
             var op_tok3: Token = this.advance();
             var node3: ASTNode = this.make_node("PreIncrement");
@@ -975,6 +1063,43 @@ class Parser {
             };
         };
         return expr;
+    };
+
+    function parse_call_arg() -> ASTNode {
+        // keyword argument: newLine=true
+        if (this.check(TokenType.NEWLINE_ARG)) {
+            this.advance();
+            this.expect(TokenType.ASSIGN, "Expected '=' after 'newLine'");
+            var nl_val: ASTNode = this.parse_expression();
+            var nl_node: ASTNode = this.make_node("NamedArg");
+            nl_node.value = "newLine";
+            nl_node.left = nl_val;
+            return nl_node;
+        };
+
+        // keyword argument: start=true
+        if (this.check(TokenType.START_ARG)) {
+            this.advance();
+            this.expect(TokenType.ASSIGN, "Expected '=' after 'start'");
+            var st_val: ASTNode = this.parse_expression();
+            var st_node: ASTNode = this.make_node("NamedArg");
+            st_node.value = "start";
+            st_node.left = st_val;
+            return st_node;
+        };
+
+        // generic named argument: identifier=value
+        if (this.check(TokenType.IDENTIFIER) && this.peek(1).type == TokenType.ASSIGN) {
+            var gn_tok: Token = this.advance();
+            this.advance(); // consume '='
+            var gn_val: ASTNode = this.parse_expression();
+            var gn_node: ASTNode = this.make_node("NamedArg");
+            gn_node.value = gn_tok.value;
+            gn_node.left = gn_val;
+            return gn_node;
+        };
+
+        return this.parse_expression();
     };
 
     function parse_lambda() -> ASTNode {

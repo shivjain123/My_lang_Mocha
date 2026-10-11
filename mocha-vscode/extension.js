@@ -24,10 +24,12 @@ function activate(context) {
         return;
     }
 
+    const pythonPath = config.get('pythonPath') || 'python';
+
     const serverOptions = {
-        command: 'python',
-        args: [serverScript],
-        transport: TransportKind.stdio
+    command: pythonPath,
+    args: [serverScript],
+    transport: TransportKind.stdio
     };
 
     const clientOptions = {

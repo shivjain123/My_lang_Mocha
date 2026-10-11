@@ -9,7 +9,8 @@ function linear(didLoad){
     y[0] = 0; y[1] = 0; y[2] = 0;
     y[3] = 1; y[4] = 1; y[5] = 1;
 
-    var model: LinearSVM = LinearSVM(0.01, 1000);
+    var model: Svm = Svm(1000);
+    model.linear(0.01);
     model.fit(x, y);
 
     var preds: int[] = model.predict(x);

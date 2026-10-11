@@ -16,6 +16,7 @@ show_help() {
     echo "  mocha --lib <libfile.mch>        Compile a library"
     echo "  mocha doc <file.mch>             Generate documentation"
     echo "  mocha repl                       Launch interactive REPL"
+    echo "  mocha wasm <file.mch> [fn ...]   Build a WebAssembly module"
     echo "  mocha help                       Show this message"
     echo ""
     echo "Coming soon:"
@@ -66,6 +67,18 @@ fi
 
 if [ "$1" = "--lib" ]; then
     python3 "$COMPILER" --lib "$(realpath "$2")"
+    exit 0
+fi
+
+if [ "$1" = "wasm" ]; then
+    if [ -z "$2" ]; then
+        echo "Usage: mocha wasm <file.mch> [function ...]"
+        exit 1
+    fi
+    INPUT="$(realpath "$2")"
+    OUTPUT="$(dirname "$INPUT")/$(basename "$INPUT" .mch)"
+    shift 2
+    python3 "$COMPILER" --wasm "$INPUT" "$OUTPUT" "$@"
     exit 0
 fi
 

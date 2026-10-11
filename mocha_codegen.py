@@ -584,7 +584,7 @@ class CodeGen:
 
     def is_borrowed_expr(self, node):
         """True if the expression yields a pointer still owned by something else (a variable, a field, an array slot)."""
-        return isinstance(node, (Identifier, MemberAccess, IndexAccess))
+        return isinstance(node, (Identifier, MemberAccess, IndexAccess, Index2DAccess))
 
     def emit_release_owned_arr2d_locals(self):
         for ptr in self.owned_arr2d_locals:
@@ -5208,7 +5208,6 @@ class CodeGen:
                 # handle this.fieldName[i]
                 if isinstance(node.obj.obj, Identifier) and node.obj.obj.name == "self" or \
                 isinstance(node.obj.obj, Identifier) and node.obj.obj.name == "this":
-                    print(f"DEBUG: MemberAccess index, member={node.obj.member}, class={self.current_class}, mocha_type resolved={mocha_type}")
                     class_name = self.current_class
                     fields = self.class_fields.get(class_name, [])
                     for fname, ftype in fields:
@@ -5318,6 +5317,10 @@ class CodeGen:
                     cast = self.fresh_temp()
                     self.emit(f"  {cast} = bitcast {val_type} {val_reg} to i8*")
                     self.emit(f"  call void @mocha_dict_set_object(%MochaDict* {arr_reg}, i8* {idx_reg}, i8* {cast})")
+                    # RC: set_object retains the object; a fresh (non-borrowed) value's own
+                    # reference is now orphaned (count stays above zero, so plain rc_release is safe)
+                    if not self.is_borrowed_expr(node.value):
+                        self.emit(f"  call void @rc_release(i8* {cast})")
                 else:
                     self.emit(f"  call void @mocha_dict_set_str(%MochaDict* {arr_reg}, i8* {idx_reg}, i8* {val_reg})")
                     # RC: set_str rc_strdup's; a fresh (non-borrowed) value is orphaned
@@ -5383,10 +5386,11 @@ class CodeGen:
         if val_type == "i8*":
             row_arr_reg = self.fresh_temp()
             self.emit(f"  {row_arr_reg} = call %MochaArray* @mocha_array2d_get_row(%MochaArray2D* {arr_reg}, i32 {row_reg})")
-            if isinstance(node.value, Identifier):
+            # retain borrowed values (variable, field, 2D element); a 1D array read already arrives retained
+            if self.is_borrowed_expr(node.value) and not isinstance(node.value, IndexAccess):
                 self.emit(f"  call void @rc_retain(i8* {val_reg})")
             self.emit(f"  call void @mocha_array_set_str(%MochaArray* {row_arr_reg}, i32 {col_reg}, i8* {val_reg})")
-            # mocha_array2d_get_row retains the row (Step 68) — since we're
+            # mocha_array2d_get_row retains the row — since we're
             # only using it transiently here (not storing it), release that
             # extra retain immediately after use.
             self.emit(f"  call void @mocha_array_release(%MochaArray* {row_arr_reg}, i32 1)")
@@ -5510,6 +5514,10 @@ class CodeGen:
                 cast = self.fresh_temp()
                 self.emit(f"  {cast} = bitcast {val_type} {val_reg} to i8*")
                 self.emit(f"  call void @mocha_dict_set_object(%MochaDict* {d}, i8* {key_reg}, i8* {cast})")
+                # RC: set_object retains the object; a fresh (non-borrowed) value's own
+                # reference is now orphaned (count stays above zero, so plain rc_release is safe)
+                if not self.is_borrowed_expr(val_node):
+                    self.emit(f"  call void @rc_release(i8* {cast})")
             else:
                 self.emit(f"  call void @mocha_dict_set_str(%MochaDict* {d}, i8* {key_reg}, i8* {val_reg})")
                 # RC: mocha_dict_set_str rc_strdup's internally (makes its own

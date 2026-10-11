@@ -25,35 +25,21 @@
 
   <div class="result">CAPE: <span id="r">...</span> J/kg</div>
 
-<script>
-(async () => {
-  const handlers = {
-    proc_exit(code) { throw new Error('Mocha exited with code ' + code); },
-    random_get(ptr, len) { crypto.getRandomValues(new Uint8Array(mem.buffer, ptr, len)); return 0; },
-    clock_time_get(id, prec, outPtr) {
-      new DataView(mem.buffer).setBigUint64(outPtr, BigInt(Date.now()) * 1000000n, true); return 0;
-    },
-  };
-  let mem;
-  const wasi = new Proxy({}, { get: (_, name) => handlers[name] || (() => 0) });
-  const bytes = await (await fetch('cape_demo.wasm')).arrayBuffer();
-  const { instance } = await WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: wasi });
-  mem = instance.exports.memory;
-  if (instance.exports._initialize) instance.exports._initialize();
-
+<script type="module">
+  import { load } from './cape_demo.js';
+  const m = await load();
   const t = document.getElementById('t'), d = document.getElementById('d');
   function update() {
-    if (+d.value > +t.value) d.value = t.value;        // dew point can't exceed temperature
+    if (+d.value > +t.value) d.value = t.value;
     document.getElementById('tv').textContent = t.value;
     document.getElementById('dv').textContent = d.value;
     let out;
-    try { out = instance.exports.cape_demo(+t.value, +d.value).toFixed(1); }
+    try { out = m.cape_demo(+t.value, +d.value).toFixed(1); }
     catch (e) { out = 'error'; console.error(e); }
     document.getElementById('r').textContent = out;
   }
   t.oninput = d.oninput = update;
   update();
-})();
 </script>
 </body>
 </html>

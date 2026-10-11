@@ -1210,7 +1210,7 @@ def needs_recompile(src: str, obj: str) -> bool:
     ]
     return any(os.path.getmtime(cf) > obj_mtime for cf in compiler_files)
 
-def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = False, check_only: bool = False) -> bool:
+def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = False, check_only: bool = False, wasm_exports=None) -> bool:
     import time
     start = time.time()
 
@@ -1339,6 +1339,24 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     with open(ll_file, 'w', encoding='utf-8') as f:
         f.write(llvm_ir)
     print(f"  ✅ Generated {ll_file}\n")
+
+    # --- wasm --- build a .wasm instead of a native executable
+    if wasm_exports is not None:
+        from mocha_wasm import compile_wasm, auto_exports
+        print("Step 5: Building WebAssembly...")
+        if not ensure_zig():
+            return False
+        if not wasm_exports:
+            wasm_exports, skipped = auto_exports(source)
+            for s in skipped:
+                print(f"  ℹ️  not exported (not plain numbers): {s}")
+            if not wasm_exports:
+                print("  ❌ No exportable functions found (need public functions with int/float/vast/bool parameters)")
+                return False
+        print(f"  📤 Exporting: {', '.join(wasm_exports)}")
+        lib_lls = [os.path.splitext(o)[0] + ".ll" for o in link_objects]
+        return compile_wasm(ll_file, f"{output_name}.wasm", wasm_exports, lib_lls,
+                            zig_path=ZIG_PATH, zig_lib_dir=os.path.join(SCRIPT_DIR, "zig-lib"))
 
     print("Step 5: Compiling to executable...")
 
@@ -1698,10 +1716,29 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
 # ============================================================
 
 if __name__ == "__main__":
-    # Remove --debug and --check-only from argv for cleaner processing
+    # --- wasm --- `mocha wasm file.mch [function ...]` arrives here as: --wasm <src> <output-base> [function ...]
+    if len(sys.argv) > 1 and sys.argv[1] == "--wasm":
+        if len(sys.argv) < 4:
+            print("Usage: mocha wasm <file.mch> [function ...]")
+            sys.exit(1)
+        ok = compile_mocha(sys.argv[2], sys.argv[3], wasm_exports=sys.argv[4:])
+        sys.exit(0 if ok else 1)
+        
+    # Remove --debug, --check-only, --wasm and --export <name> from argv 
+    # for cleaner processing
     debug_mode  = "--debug"      in sys.argv
     check_only  = "--check-only" in sys.argv
-    args = [a for a in sys.argv if a not in ("--debug", "--check-only")]
+    wasm_mode   = "--wasm"       in sys.argv     # --- wasm ---
+    wasm_exports = []                            # --- wasm ---
+    argv = list(sys.argv)
+    while "--export" in argv:                    # --- wasm ---
+        j = argv.index("--export")
+        wasm_exports.append(argv[j + 1])
+        del argv[j:j + 2]
+    args = [a for a in argv if a not in ("--debug", "--check-only", "--wasm")]
+    if wasm_mode and not wasm_exports:           # --- wasm ---
+        print("Usage: mocha --wasm <file.mch> --export <function> [--export <function> ...]")
+        sys.exit(1)
     
     if len(args) < 2:
         print("Usage: mocha <file.mch>")
@@ -1717,5 +1754,6 @@ if __name__ == "__main__":
 
     source_file = args[1]
     output_name = args[2] if len(args) > 2 else os.path.splitext(source_file)[0]
-    success = compile_mocha(source_file, output_name, debug=debug_mode, check_only=check_only)
+    success = compile_mocha(source_file, output_name, debug=debug_mode, check_only=check_only,
+                             wasm_exports=wasm_exports if wasm_mode else None)
     sys.exit(0 if success else 1)
