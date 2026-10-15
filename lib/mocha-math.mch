@@ -14,7 +14,7 @@ function mocha_ext_float_cosech_ffi(x: float) -> float native mocha_ext_float_co
 function mocha_ext_float_sech_ffi(x: float) -> float native mocha_ext_float_sech_c;
 function mocha_ext_float_coth_ffi(x: float) -> float native mocha_ext_float_coth_c;
 function mocha_ext_float_inv_cosech_ffi(x: float) -> float native mocha_ext_float_inv_cosech_c;
-function mocha_ext_float_inv_sech_ffi(x: float) -> float native mocha_ext_float_inv_sech_c;
+function mocha_ext_float_inv_sech_ffi(x: float) -> Complex native mocha_ext_float_inv_sech_c;
 function mocha_ext_float_inv_coth_ffi(x: float) -> float native mocha_ext_float_inv_coth_c;
 
 // =============================================
@@ -135,7 +135,7 @@ extend float {
     function inv_cosech() -> float {
         return mocha_ext_float_inv_cosech_ffi(this);
     };
-    function inv_sech() -> float {
+    function inv_sech() -> Complex {
         return mocha_ext_float_inv_sech_ffi(this);
     };
     function inv_coth() -> float {

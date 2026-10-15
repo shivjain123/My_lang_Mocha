@@ -1478,13 +1478,13 @@ class CodeGen:
         if op_kind == "string_concat":
             self.emit(f"  {tmp} = call i8* @mocha_str_concat(i8* {left_reg}, i8* {right_reg})")
 
-            # RC: release any fresh (non-variable) operand right after it's consumed —
-            # nothing else can ever reach it again, since it was never stored anywhere.
-            # Borrowed operands (existing variables) are left untouched — their owner
-            # is still responsible for them.
-            if not isinstance(node.left, Identifier):
+            # RC: release only operands that arrive OWNED (fresh literals, nested
+            # concat, call results, 1D/dict IndexAccess str reads, which retain on
+            # read). Borrowed reads (variables, field reads, 2D element reads) still
+            # belong to their owner, so releasing them here would double-release.
+            if not isinstance(node.left, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {left_reg})")
-            if not isinstance(node.right, Identifier):
+            if not isinstance(node.right, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {right_reg})")
 
             return (tmp, "i8*")
@@ -1494,12 +1494,13 @@ class CodeGen:
             cmp = self.fresh_temp()
             self.emit(f"  {cmp} = call i32 @mocha_str_eq(i8* {left_reg}, i8* {right_reg})")
 
-            # RC: release any fresh (non-variable) operand right after the comparison —
-            # mocha_str_eq only reads the strings, never takes ownership, and a fresh
-            # operand (e.g. an array index-read) is orphaned after this call.
-            if not isinstance(node.left, Identifier):
+            # RC: release only operands that arrive OWNED (fresh literals, concat,
+            # call results, 1D/dict IndexAccess str reads, which retain on read).
+            # Borrowed reads (variables, field reads, 2D element reads) still belong
+            # to their owner, so releasing them here is a double release at drop time.
+            if not isinstance(node.left, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {left_reg})")
-            if not isinstance(node.right, Identifier):
+            if not isinstance(node.right, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {right_reg})")
 
             result = self.fresh_temp()
@@ -2126,16 +2127,18 @@ class CodeGen:
                 argc = len(named)
 
                 # build keys array on stack
+                keys_slot = self.alloca_at_entry(f"[{argc} x i8*]")
                 keys_ptr = self.fresh_temp()
-                self.emit(f"  {keys_ptr} = alloca i8*, i32 {argc}")
+                self.emit(f"  {keys_ptr} = getelementptr [{argc} x i8*], [{argc} x i8*]* {keys_slot}, i32 0, i32 0")
                 for i, kr in enumerate(key_regs):
                     ep = self.fresh_temp()
                     self.emit(f"  {ep} = getelementptr i8*, i8** {keys_ptr}, i32 {i}")
                     self.emit(f"  store i8* {kr}, i8** {ep}")
 
                 # build values array on stack
+                vals_slot = self.alloca_at_entry(f"[{argc} x i8*]")
                 vals_ptr = self.fresh_temp()
-                self.emit(f"  {vals_ptr} = alloca i8*, i32 {argc}")
+                self.emit(f"  {vals_ptr} = getelementptr [{argc} x i8*], [{argc} x i8*]* {vals_slot}, i32 0, i32 0")
                 for i, vr in enumerate(val_regs):
                     ep = self.fresh_temp()
                     self.emit(f"  {ep} = getelementptr i8*, i8** {vals_ptr}, i32 {i}")
@@ -2144,7 +2147,7 @@ class CodeGen:
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call i8* @mocha_str_format_named(i8* {s_reg}, i8** {keys_ptr}, i8** {vals_ptr}, i32 {argc})")
 
-                if not isinstance(node.name.obj, Identifier):
+                if not isinstance(node.name.obj, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {s_reg})")
 
                 for arg, vr in zip(named, val_regs):
@@ -2164,25 +2167,32 @@ class CodeGen:
                 }
 
                 str_regs = []
+                str_owned = []
                 for arg in positional:
                     r, t = self.gen_expr(arg)
                     if t == "i8*":
                         str_regs.append(r)
+                        # a str arg is owned only if it is a fresh expression;
+                        # variables, field reads and 2D element reads are borrowed
+                        str_owned.append(not isinstance(arg, (Identifier, MemberAccess, Index2DAccess)))
                     elif t == "i1":
                         w = self.fresh_temp()
                         self.emit(f"  {w} = zext i1 {r} to i8")
                         s = self.fresh_temp()
                         self.emit(f"  {s} = call i8* @mocha_bool_to_str(i8 {w})")
                         str_regs.append(s)
+                        str_owned.append(True)
                     else:
                         fn, llvm_t = to_str_fns.get(t, ("mocha_int_to_str", "i32"))
                         s = self.fresh_temp()
                         self.emit(f"  {s} = call i8* @{fn}({llvm_t} {r})")
                         str_regs.append(s)
+                        str_owned.append(True)
 
                 argc = len(str_regs)
+                arr_slot = self.alloca_at_entry(f"[{argc} x i8*]")
                 arr_ptr = self.fresh_temp()
-                self.emit(f"  {arr_ptr} = alloca i8*, i32 {argc}")
+                self.emit(f"  {arr_ptr} = getelementptr [{argc} x i8*], [{argc} x i8*]* {arr_slot}, i32 0, i32 0")
                 for i, sr in enumerate(str_regs):
                     ep = self.fresh_temp()
                     self.emit(f"  {ep} = getelementptr i8*, i8** {arr_ptr}, i32 {i}")
@@ -2193,14 +2203,14 @@ class CodeGen:
 
                 # RC: release the receiver if it was fresh (not a plain variable) — format()
                 # reads it but doesn't own it, so nothing else releases it if we don't.
-                if not isinstance(node.name.obj, Identifier):
+                if not isinstance(node.name.obj, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {s_reg})")
 
                 # RC: release each positional argument's string form if it was fresh
                 # (type conversions are always fresh; string args that were literals/
                 # calls/concats are fresh too; plain variables are skipped — borrowed).
-                for arg, sr in zip(positional, str_regs):
-                    if not isinstance(arg, Identifier):
+                for sr, owned in zip(str_regs, str_owned):
+                    if owned:
                         self.emit(f"  call void @rc_release(i8* {sr})")
 
                 return (tmp, "i8*")
@@ -2223,7 +2233,7 @@ class CodeGen:
             # RC: release the receiver if it was fresh (not a plain variable) —
             # this method reads it but doesn't own it, so nothing else releases
             # it if we don't. Fixes leak on chained calls like a.trimLeft().trimRight()
-            if not isinstance(node.name.obj, Identifier):
+            if not isinstance(node.name.obj, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {s_reg})")
 
             return (tmp, ret_llvm)
@@ -2971,7 +2981,7 @@ class CodeGen:
                         self.emit(f"  {inner} = call i8* @mocha_dict_get(%MochaDict* {dict_reg}, i8* {key1_reg})")
                         # RC: mocha_dict_get only reads key1 — fresh (non-borrowed)
                         # key expressions are orphaned after this call.
-                        if not isinstance(print_arg.row, Identifier):
+                        if not isinstance(print_arg.row, (Identifier, MemberAccess, Index2DAccess)):
                             self.emit(f"  call void @rc_release(i8* {key1_reg})")
                         cast = self.fresh_temp()
                         self.emit(f"  {cast} = bitcast i8* {inner} to %MochaDict*")
@@ -2979,7 +2989,7 @@ class CodeGen:
                         self.emit(f"  call void @mocha_dict_print_value(%MochaDict* {cast}, i8* {key2_reg}, i8 {nl})")
                         # RC: same reasoning for key2 — mocha_dict_print_value
                         # only reads it to find the value to print.
-                        if not isinstance(print_arg.col, Identifier):
+                        if not isinstance(print_arg.col, (Identifier, MemberAccess, Index2DAccess)):
                             self.emit(f"  call void @rc_release(i8* {key2_reg})")
                         continue
 
@@ -2991,7 +3001,7 @@ class CodeGen:
                         key_reg, _ = self.gen_expr(print_arg.index)
                         self.emit(f"  call void @mocha_dict_print_value(%MochaDict* {dict_reg}, i8* {key_reg}, i8 {nl})")
                         # RC: mocha_dict_print_value only reads the key.
-                        if not isinstance(print_arg.index, Identifier):
+                        if not isinstance(print_arg.index, (Identifier, MemberAccess, Index2DAccess)):
                             self.emit(f"  call void @rc_release(i8* {key_reg})")
                         continue
 
@@ -5091,7 +5101,7 @@ class CodeGen:
                 # RC: mocha_dict_get/get_typed only read the key to find a
                 # match — never take ownership. A fresh (non-borrowed) key
                 # expression (e.g. d[k + "x"]) is orphaned after this call.
-                if not isinstance(node.index, Identifier):
+                if not isinstance(node.index, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {idx_reg})")
                 
                 # Unbox based on expected type
@@ -5162,7 +5172,7 @@ class CodeGen:
                     
                     # RC: same reasoning as the main dict-get branch above —
                     # release a fresh (non-borrowed) key after the read.
-                    if not isinstance(node.index, Identifier):
+                    if not isinstance(node.index, (Identifier, MemberAccess, Index2DAccess)):
                         self.emit(f"  call void @rc_release(i8* {idx_reg})")
                     
                     # Unbox based on expected type
@@ -5252,7 +5262,7 @@ class CodeGen:
                 # First access: d["person"] -> i8*
                 inner_tmp = self.fresh_temp()
                 self.emit(f"  {inner_tmp} = call i8* @mocha_dict_get(%MochaDict* {arr_reg}, i8* {row_reg})")
-                if not isinstance(node.row, Identifier):
+                if not isinstance(node.row, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {row_reg})")
                 # Cast i8* to MochaDict*
                 cast = self.fresh_temp()
@@ -5260,7 +5270,7 @@ class CodeGen:
                 # Second access: inner["name"] -> i8*
                 val_tmp = self.fresh_temp()
                 self.emit(f"  {val_tmp} = call i8* @mocha_dict_get(%MochaDict* {cast}, i8* {col_reg})")
-                if not isinstance(node.col, Identifier):
+                if not isinstance(node.col, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {col_reg})")
                 return (val_tmp, "i8*")
 
@@ -5522,12 +5532,12 @@ class CodeGen:
                 self.emit(f"  call void @mocha_dict_set_str(%MochaDict* {d}, i8* {key_reg}, i8* {val_reg})")
                 # RC: mocha_dict_set_str rc_strdup's internally (makes its own
                 # copy) — a fresh (non-borrowed) string value is orphaned.
-                if not isinstance(val_node, Identifier):
+                if not isinstance(val_node, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {val_reg})")
 
             # RC: every setter internally strdup's the key (dict_set_entry) —
             # a fresh (non-borrowed) key expression is orphaned after this call.
-            if not isinstance(key_node, Identifier):
+            if not isinstance(key_node, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {key_reg})")
 
         return (d, "%MochaDict*")
@@ -5539,7 +5549,7 @@ class CodeGen:
             self.emit(f"  {tmp} = call i8 @mocha_dict_has(%MochaDict* {d_reg}, i8* {key_reg})")
             # RC: mocha_dict_has only reads the key for comparison — never
             # takes ownership. A fresh (non-borrowed) key temp is orphaned.
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {key_reg})")
             return (tmp, "i8")
         elif member == "remove":
@@ -5547,7 +5557,7 @@ class CodeGen:
             self.emit(f"  call void @mocha_dict_remove(%MochaDict* {d_reg}, i8* {key_reg})")
             # RC: mocha_dict_remove only reads the key to find a match (it
             # frees its own internal strdup'd copy) — never touches this arg.
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {key_reg})")
             return ("void", "void")
         elif member == "clean":
@@ -5618,7 +5628,7 @@ class CodeGen:
             cast = self.fresh_temp()
             self.emit(f"  {cast} = bitcast {first_llvm}* {slot} to i8*")
             self.emit(f"  call void @mocha_set_insert(%MochaSet* {s}, i8* {cast})")
-            if first_llvm == "i8*" and not isinstance(node.elements[0], Identifier):
+            if first_llvm == "i8*" and not isinstance(node.elements[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {first_reg})")
 
         # Insert remaining elements
@@ -5629,7 +5639,7 @@ class CodeGen:
             cast = self.fresh_temp()
             self.emit(f"  {cast} = bitcast {llvm}* {slot} to i8*")
             self.emit(f"  call void @mocha_set_insert(%MochaSet* {s}, i8* {cast})")
-            if llvm == "i8*" and not isinstance(elem, Identifier):
+            if llvm == "i8*" and not isinstance(elem, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {reg})")
 
         return (s, "%MochaSet*")
@@ -5642,7 +5652,7 @@ class CodeGen:
             cast = self.fresh_temp()
             self.emit(f"  {cast} = bitcast {val_type}* {slot} to i8*")
             self.emit(f"  call void @mocha_set_insert(%MochaSet* {s_reg}, i8* {cast})")
-            if val_type == "i8*" and not isinstance(node.args[0], Identifier):
+            if val_type == "i8*" and not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {val_reg})")
             return ("void", "void")
         elif member == "delete":
@@ -5654,7 +5664,7 @@ class CodeGen:
             # RC: mocha_set_delete only reads this value to find a match — it
             # releases the set's own matching copy internally, but never touches
             # this argument. A fresh (non-borrowed) string temp is orphaned.
-            if val_type == "i8*" and not isinstance(node.args[0], Identifier):
+            if val_type == "i8*" and not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {val_reg})")
             return ("void", "void")
         
@@ -5667,7 +5677,7 @@ class CodeGen:
             self.emit(f"  call void @free(i8* {cast})")
             # RC: mocha_set_has only reads this value for comparison — never
             # takes ownership. A fresh (non-borrowed) string temp is orphaned.
-            if val_type == "i8*" and not isinstance(node.args[0], Identifier):
+            if val_type == "i8*" and not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {val_reg})")
             return (tmp, "i8")
         
@@ -5701,7 +5711,7 @@ class CodeGen:
             # RC: mocha_set_union only reads s2 (copies its elements into a
             # brand-new result set) — never takes ownership of s2 itself.
             # A fresh (non-borrowed) set temp is orphaned after this call.
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "%MochaSet*")
         
@@ -5709,7 +5719,7 @@ class CodeGen:
             s2_reg, _ = self.gen_expr(node.args[0])
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call %MochaSet* @mocha_set_intersect(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "%MochaSet*")
         
@@ -5717,7 +5727,7 @@ class CodeGen:
             s2_reg, _ = self.gen_expr(node.args[0])
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call %MochaSet* @mocha_set_xor(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "%MochaSet*")
         
@@ -5725,7 +5735,7 @@ class CodeGen:
             s2_reg, _ = self.gen_expr(node.args[0])
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call %MochaSet* @mocha_set_rel_diff(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "%MochaSet*")
         
@@ -5750,7 +5760,7 @@ class CodeGen:
             s2_reg, _ = self.gen_expr(node.args[0])
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call double @mocha_set_jaccard(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "double")
         
@@ -5758,7 +5768,7 @@ class CodeGen:
             s2_reg, _ = self.gen_expr(node.args[0])
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call double @mocha_set_dice(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "double")
         
@@ -5766,7 +5776,7 @@ class CodeGen:
             s2_reg, _ = self.gen_expr(node.args[0])
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call double @mocha_set_overlap(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
-            if not isinstance(node.args[0], Identifier):
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "double")
         return None
@@ -6092,7 +6102,6 @@ class CodeGen:
                     sanitized = self.sanitize_type_name(raw_type)
 
                     method_name = f"mocha_ext_{sanitized}_{func.name}"
-                    self.method_return_types[method_name] = ret_llvm
                     self.method_return_types[method_name] = ret_llvm
 
                     if getattr(func, 'is_native', False) and func.native_name:

@@ -40,16 +40,3 @@ function test(didLoad) -> null {
     print("after fail", newLine=true);
 
 };
-
-"""function test(didLoad) -> null {
-    print("before try", newLine=true);
-    try {
-        print("inside try", newLine=true);
-        fail "test error";
-        print("after fail", newLine=true);
-    } rescue, e {
-        print("inside rescue", newLine=true); //Until here and even this prints.
-        //but gets stuck and does not exit rescue
-    };
-    print("after try", newLine=true); //This never prints
-};"""

@@ -12890,3 +12890,11 @@ double mocha_unsafe_mod(double a, double b) {
     mocha_unsafe_guard("mocha_unsafe_mod", a, b);
     return fmod(a, b);
 }
+
+//wasm special
+#ifdef MOCHA_WASM
+/* The compiler declares rc_alloc(i64) and rc_count(i8*) -> i64, but size_t is 32-bit on wasm32.
+   These adapters give the IR the 64-bit signatures it expects. */
+void* mocha_rc_alloc64(uint64_t n) { return rc_alloc((size_t)n); }
+uint64_t mocha_rc_count64(void* p) { return (uint64_t)rc_count(p); }
+#endif

@@ -114,11 +114,19 @@ IF_THEN_RE = re.compile(r'^if_then_(\d+)$')
 
 
 def dominators(cfg: dict, entry: str) -> dict:
-    """label -> set of labels that dominate it (every path from entry passes through them)."""
-    nodes = list(cfg)
+    """label -> set of labels that dominate it. Blocks unreachable from entry
+    are ignored when computing the others and get just {themselves}."""
+    reach, stack = set(), [entry]
+    while stack:
+        n = stack.pop()
+        if n in reach:
+            continue
+        reach.add(n)
+        stack.extend(cfg[n])
+    nodes = [n for n in cfg if n in reach]
     preds = {n: [] for n in nodes}
-    for n, succs in cfg.items():
-        for s in succs:
+    for n in nodes:
+        for s in cfg[n]:
             preds[s].append(n)
     dom = {n: set(nodes) for n in nodes}
     dom[entry] = {entry}
@@ -128,11 +136,13 @@ def dominators(cfg: dict, entry: str) -> dict:
         for n in nodes:
             if n == entry:
                 continue
-            ps = [dom[p] for p in preds[n]]
-            new = {n} | (set.intersection(*ps) if ps else set())
+            new = {n} | set.intersection(*[dom[p] for p in preds[n]])
             if new != dom[n]:
                 dom[n] = new
                 changed = True
+    for n in cfg:
+        if n not in reach:
+            dom[n] = {n}
     return dom
 
 
@@ -229,6 +239,196 @@ def find_loops(fn: Function) -> list:
             "latches": ls, "body": body, "end": f"{family}_end_{lid}",
         })
     return loops
+
+LC_ROLE_RE = re.compile(r'^lc_([a-z]+)_(\d+)$')
+
+
+def describe_lc(fn: Function, lp: dict) -> dict:
+    """Kind and loop variable of a list-comprehension loop.
+    kinds: plain, filtered (append + skip), ternary (then + else; still a guess)"""
+    roles = {}
+    for b in lp["body"]:
+        m = LC_ROLE_RE.match(b)
+        if m and m.group(2) == lp["id"]:
+            roles[m.group(1)] = b
+    if "append" in roles and "skip" in roles:
+        kind = "filtered"
+    elif "then" in roles and "else" in roles:
+        kind = "ternary"
+    else:
+        kind = "plain"
+
+    var = None
+    var_re = re.compile(r'%lc_(\w+?)_' + lp["id"] + r'\.ptr')
+    for b in lp["body"]:
+        for i in fn.blocks[b].instrs:
+            m = var_re.search(i.raw)
+            if m:
+                var = m.group(1)
+                break
+        if var:
+            break
+    return {"kind": kind, "var": var, "roles": roles}
+
+def find_shortcircuits(fn: Function) -> list:
+    """Every and/or expression in a function, found via the branch that
+    jumps to both X_right_N and X_done_M."""
+    cfg = build_cfg(fn)
+    dom = dominators(cfg, fn.block_order[0])
+    found = []
+    for left, succ in cfg.items():
+        if len(succ) != 2:
+            continue
+        for kind in ("and", "or"):
+            right = next((s for s in succ if s.startswith(f"{kind}_right_")), None)
+            done = next((s for s in succ if s.startswith(f"{kind}_done_")), None)
+            if not (right and done):
+                continue
+            inside, exits = region(cfg, dom, right, done)
+            found.append({
+                "kind": kind, "left": left, "right": right, "done": done,
+                "right_region": inside, "right_exits": exits,
+                "branch_order": "right_first" if succ[0] == right else "done_first",
+            })
+    return found
+
+MATCH_LABEL_RE = re.compile(r'^match_(case|body|default|end)_(\d+)(?:_(\d+))?$')
+ICMP_EQ_RE = re.compile(r'icmp eq i32 (%[\w.]+), (%[\w.]+)')
+LOAD_GLOBAL_RE = re.compile(r'(%[\w.]+) = load i32, i32\* @([\w.]+)')
+
+
+def find_matches(fn: Function) -> list:
+    """Every plain match in a function (value cases only, no ranges yet)."""
+    cfg = build_cfg(fn)
+    dom = dominators(cfg, fn.block_order[0])
+    groups = {}
+    for b in fn.block_order:
+        m = MATCH_LABEL_RE.match(b)
+        if not m:
+            continue
+        role, mid, idx = m.group(1), m.group(2), m.group(3)
+        g = groups.setdefault(mid, {"case": {}, "body": {}, "default": None, "end": None})
+        if role in ("case", "body"):
+            g[role][int(idx)] = b
+        else:
+            g[role] = b
+
+    found = []
+    for mid, g in groups.items():
+        end = g["end"]
+        cases = []
+        for n in sorted(g["case"]):
+            cb = g["case"][n]
+            loads, scrutinee, const = {}, None, None
+            for i in fn.blocks[cb].instrs:
+                m = LOAD_GLOBAL_RE.search(i.raw)
+                if m:
+                    loads[m.group(1)] = m.group(2)
+                m = ICMP_EQ_RE.search(i.raw)
+                if m:
+                    scrutinee = m.group(1)
+                    const = loads.get(m.group(2))
+            body = g["body"].get(n)
+            inside, exits = region(cfg, dom, body, end) if body and end else (set(), set())
+            cases.append({
+                "index": n, "test_block": cb, "body_block": body,
+                "scrutinee": scrutinee, "const": const,
+                "body_region": inside, "body_exits": exits,
+                "falls_through": any(end in cfg[b] for b in inside) if end else False,
+            })
+        d = g["default"]
+        d_in, d_exits = region(cfg, dom, d, end) if d and end else (set(), set())
+        found.append({
+            "id": mid, "cases": cases, "default": d, "end": end,
+            "default_region": d_in, "default_exits": d_exits,
+            "default_falls_through": any(end in cfg[b] for b in d_in) if end else False,
+        })
+    return found
+
+POP_RE = re.compile(r'(%[\w.]+) = call i8\* @mocha_ex_pop\(\)')
+BIND_RE = re.compile(r'store i8\* (%[\w.]+), i8\*\* %([\w.]+)\.ptr')
+AFTER_RE = re.compile(r'label %(after_try_\d+)')
+TRY_ID_RE = re.compile(r'^try_body_(\d+)$')
+
+
+def _dead_is_plumbing(dead) -> bool:
+    """A dead tail is compiler plumbing if it is only mocha_ex_pop calls and a br."""
+    for i in dead:
+        if i.op == "br":
+            continue
+        if i.op == "call" and "@mocha_ex_pop" in i.raw:
+            continue
+        return False
+    return True
+
+
+def user_dead_blocks(fn: Function) -> list:
+    """Blocks whose dead tail holds real code (e.g. statements written after a fail)."""
+    return [b for b in fn.block_order
+            if fn.blocks[b].dead and not _dead_is_plumbing(fn.blocks[b].dead)]
+
+
+def find_fails(fn: Function) -> list:
+    """Blocks ending in `fail msg;` = mocha_ex_throw(...) followed by unreachable."""
+    out = []
+    for label in fn.block_order:
+        ins = fn.blocks[label].instrs
+        if len(ins) >= 2 and ins[-1].op == "unreachable" and "@mocha_ex_throw" in ins[-2].raw:
+            out.append(label)
+    return out
+
+
+def find_trys(fn: Function) -> list:
+    """Every try/rescue in a function, paired through the branch at the try site."""
+    cfg = build_cfg(fn)
+    dom = dominators(cfg, fn.block_order[0])
+    found = []
+    for site in fn.block_order:
+        succ = cfg[site]
+        if len(succ) != 2:
+            continue
+        resc = [s for s in succ if s.startswith("rescue_body_")]
+        body = [s for s in succ if s.startswith("try_body_")]
+        if not (resc and body):
+            continue
+        try_b, resc_b = body[0], resc[0]
+        tid = int(TRY_ID_RE.match(try_b).group(1)) # type: ignore
+        after = f"after_try_{tid + 2}"
+        if after not in fn.blocks:
+            after = None
+        after_jump = None                      # cross-check: where do the two bodies jump?
+        for b in (try_b, resc_b):
+            for i in fn.blocks[b].instrs + fn.blocks[b].dead:
+                m = AFTER_RE.search(i.raw)
+                if m:
+                    after_jump = m.group(1)
+        stop = after or ""
+        try_in, try_exits = region(cfg, dom, try_b, stop)
+        resc_in, resc_exits = region(cfg, dom, resc_b, stop)
+
+        binding, popped = None, None
+        ins = fn.blocks[resc_b].instrs
+        if ins:
+            m = POP_RE.search(ins[0].raw)
+            popped = m.group(1) if m else None
+            if popped and len(ins) > 1:
+                m2 = BIND_RE.search(ins[1].raw)
+                if m2 and m2.group(1) == popped:
+                    binding = re.sub(r'\.\d+$', '', m2.group(2))   # e.3 -> e
+
+        found.append({
+            "site": site, "id": tid, "try_block": try_b, "rescue_block": resc_b,
+            "after": after, "after_jump": after_jump,
+            "try_region": try_in, "try_exits": try_exits,
+            "rescue_region": resc_in, "rescue_exits": resc_exits,
+            "binding": binding, "rescue_pops": popped is not None,
+            "branch_order_ok": succ == [resc_b, try_b],
+            "ids_ok": resc_b == f"rescue_body_{tid + 1}",
+        })
+    for t in found:
+        t["depth"] = sum(1 for o in found if o is not t
+                         and (t["site"] in o["try_region"] or t["site"] in o["rescue_region"]))
+    return found
 
 if __name__ == "__main__":
     import glob

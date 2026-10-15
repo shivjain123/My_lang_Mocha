@@ -11,11 +11,13 @@ import argparse, os, re, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+_SHIMS = {"malloc": "mocha_malloc64", "rc_alloc": "mocha_rc_alloc64", "rc_count": "mocha_rc_count64"}
+
 def _patch_ir(src, dst):
-    """wasm32's malloc takes a 32-bit size, but the IR declares malloc(i64). Route it through a shim."""
+    """wasm32's size_t is 32-bit, but the IR declares these functions with i64 sizes. Route them through adapters."""
     with open(src, encoding="utf-8") as f:
         text = f.read()
-    text = re.sub(r"@malloc\b", "@mocha_malloc64", text)
+    text = re.sub(r"@(malloc|rc_alloc|rc_count)\b", lambda m: "@" + _SHIMS[m.group(1)], text)
     with open(dst, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
 
@@ -74,7 +76,11 @@ def compile_wasm(program_ll, output_wasm, exports, lib_lls=(), zig_path=None,
 
     env = os.environ.copy()
     env["ZIG_LIB_DIR"] = zig_lib_dir
-    cc = [zig_path, "cc", "-target", "wasm32-wasi", "-O2"]
+
+    # Release builds drop all debug info (it was 97% of the file size). Set MOCHA_WASM_DEBUG=1 to keep it.
+    debug = bool(os.environ.get("MOCHA_WASM_DEBUG"))
+    cc = [zig_path, "cc", "-target", "wasm32-wasi", "-O2"] + ([] if debug else ["-g0"])
+
     warnings = []
 
     def step(cmd, what):
@@ -87,7 +93,7 @@ def compile_wasm(program_ll, output_wasm, exports, lib_lls=(), zig_path=None,
         return True
 
     # 1. the C runtime (cached; rebuilt only when mocha_runtime.c changes)
-    rt_obj = os.path.join(build_dir, "rt_wasm.o")
+    rt_obj = os.path.join(build_dir, "rt_wasm_debug.o" if debug else "rt_wasm_release.o")
     if not os.path.exists(rt_obj) or os.path.getmtime(runtime_c) > os.path.getmtime(rt_obj):
         print("  🔧 Building the wasm runtime (first time, or the runtime changed)...")
         if not step(cc + ["-c", runtime_c, "-o", rt_obj], "runtime compile"):
@@ -108,6 +114,7 @@ def compile_wasm(program_ll, output_wasm, exports, lib_lls=(), zig_path=None,
 
     # 3. link as a reactor module (a library the browser calls into, not a program with main)
     link = [zig_path, "cc", "-target", "wasm32-wasi", "-mexec-model=reactor"]
+    link += ["-Wl,--gc-sections"] + ([] if debug else ["-Wl,--strip-all"])
     link += [f"-Wl,--export={e}" for e in exports]
     link += objs + [rt_obj, "-o", output_wasm]
     if not step(link, "link"):
@@ -115,6 +122,7 @@ def compile_wasm(program_ll, output_wasm, exports, lib_lls=(), zig_path=None,
 
     for w in sorted(set(warnings)):
         print("  ⚠️ ", w)
+    print(f"  ✅ Wrote {output_wasm} ({os.path.getsize(output_wasm) // 1024} KB)")
     js_path = write_js_loader(output_wasm)
     print(f"  📄 Wrote {js_path} (browser loader)")
     return True

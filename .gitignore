@@ -37,6 +37,9 @@ node_modules/
 *.log
 *.map
 trace_output.txt
+test_*.js
+test_*.wasm
+wasm_out.txt
 
 # ─── Scratch / One-off Debug Test Files ──────────────────────────────────────
 avl_change_test.mch
@@ -52,3 +55,28 @@ tokenizer_rc.mch
 !lua-5.5.0_Win64_dllw6_lib/liblua55.a
 !lua-5.5.0_Win64_dllw6_lib/lua55_msvc.lib
 !lua-5.5.0_unix/**/*.a
+# scratch: decompiler probes and checks
+*_check.py
+*_survey.py
+peek_*.py
+show_ir.py
+show_ir2.py
+builtin_examples.py
+call_groups.py
+callee_where.py
+coll_evidence.py
+coverage_run.py
+finder_probe.py
+if_probe.py
+plain_probe.py
+native_out.txt
+size_*.wasm
+size_*.wasm.gz
+
+# scratch: new RC tests
+test_cm.mch
+test_c[q-z].mch
+test_d[a-i].mch
+lib_sigs.py
+type_survey2.py
+wasm_regress.ps1

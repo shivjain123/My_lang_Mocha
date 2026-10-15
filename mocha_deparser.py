@@ -12,6 +12,7 @@ class Instr:
 class BasicBlock:
     label: str
     instrs: list[Instr] = field(default_factory=list)
+    dead: list[Instr] = field(default_factory=list)   # unreachable tail after a terminator
 
 @dataclass
 class Function:
@@ -39,6 +40,7 @@ FUNC_DEF_RE = re.compile(
     r'^define\s+([\w.\*%\s]+?)\s+@([\w.]+)\s*\((.*?)\)\s*(?:\w+\s*)*\{$'
 )
 LABEL_RE = re.compile(r'^([\w.]+):$')
+TERMINATOR_OPS = ("br", "switch", "ret", "unreachable")
 
 def parse_module(ll_text: str) -> dict[str, Function]:
     functions = {}
@@ -91,11 +93,102 @@ def parse_module(ll_text: str) -> dict[str, Function]:
                         i += 1
                     parts.append(']')
                     l = ' '.join(parts)
-                func.blocks[current_label].instrs.append(parse_instr(l))
+                blk = func.blocks[current_label]
+                if blk.instrs and blk.instrs[-1].op in TERMINATOR_OPS:
+                    blk.dead.append(parse_instr(l))      # dead tail, kept out of the CFG
+                else:
+                    blk.instrs.append(parse_instr(l))
             i += 1
 
         functions[fname] = func
     return functions
+
+PRELUDE_TYPES = {"MochaArray", "MochaArray2D", "MochaTuple", "MochaClosureBundle",
+                 "MochaDict", "MochaSet", "struct.MochaStringBuilder", "struct.MochaComplex",
+                 "struct.MochaFile", "struct.MochaHashTable", "MochaExFrame"}
+
+STR_DEF_RE = re.compile(r'^@(\.str\d+) = private unnamed_addr constant \[(\d+) x i8\] c"(.*)"\s*$')
+TYPE_DEF_RE = re.compile(r'^%([\w.]+) = type (.*)$')
+TAG_DEF_RE = re.compile(r'^@(\w+?)__(\w+) = (external )?constant i32(?: (-?\d+))?\s*$')
+HEX2 = re.compile(r'[0-9A-Fa-f]{2}')
+
+
+@dataclass
+class Globals:
+    strings: dict = field(default_factory=dict)     # ".str0" -> decoded text
+    tags: dict = field(default_factory=dict)        # enum -> {tag: value, or None if external}
+    types: dict = field(default_factory=dict)       # "struct.T" -> [field llvm types]
+    str_errors: list = field(default_factory=list)  # strings whose length/NUL didn't match
+
+
+def decode_llvm_string(body: str) -> bytes:
+    """Decode the inside of c"..." (\\XX hex escapes) into raw bytes."""
+    out = bytearray()
+    i = 0
+    while i < len(body):
+        if body[i] == '\\':
+            m = HEX2.match(body, i + 1)
+            if m:
+                out.append(int(m.group(), 16))
+                i += 3
+                continue
+        out.extend(body[i].encode("utf-8"))
+        i += 1
+    return bytes(out)
+
+
+def split_top_level(s: str) -> list:
+    """Split on commas that are not inside (), [], {} or <>."""
+    parts, depth, cur = [], 0, ""
+    for ch in s:
+        if ch in "([{<":
+            depth += 1
+        elif ch in ")]}>":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        parts.append(cur.strip())
+    return parts
+
+
+def parse_globals(ll_text: str) -> Globals:
+    g = Globals()
+    inside = False
+    for raw in ll_text.splitlines():
+        s = raw.rstrip()
+        if s.startswith("define"):
+            inside = True
+            continue
+        if inside:
+            if s.strip() == "}":
+                inside = False
+            continue
+        m = STR_DEF_RE.match(s)
+        if m:
+            name, n, body = m.group(1), int(m.group(2)), m.group(3)
+            data = decode_llvm_string(body)
+            if len(data) != n or not data.endswith(b"\x00"):
+                g.str_errors.append(name)
+            text = data[:-1] if data.endswith(b"\x00") else data
+            g.strings[name] = text.decode("utf-8", errors="replace")
+            continue
+        m = TAG_DEF_RE.match(s)
+        if m:
+            enum, tag, external, value = m.groups()
+            g.tags.setdefault(enum, {})[tag] = None if external else int(value)
+            continue
+        m = TYPE_DEF_RE.match(s)
+        if m and m.group(1) not in PRELUDE_TYPES:
+            body = m.group(2).strip()
+            if body.startswith("{") and body.endswith("}"):
+                g.types[m.group(1)] = split_top_level(body[1:-1])
+            else:
+                g.types[m.group(1)] = None          # opaque
+    return g
 
 if __name__ == "__main__":
     with open("geo_seisimo.ll", "r", encoding="utf-8") as f:
