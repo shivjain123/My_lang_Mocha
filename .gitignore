@@ -55,6 +55,7 @@ tokenizer_rc.mch
 !lua-5.5.0_Win64_dllw6_lib/liblua55.a
 !lua-5.5.0_Win64_dllw6_lib/lua55_msvc.lib
 !lua-5.5.0_unix/**/*.a
+
 # scratch: decompiler probes and checks
 *_check.py
 *_survey.py
@@ -76,7 +77,7 @@ size_*.wasm.gz
 # scratch: new RC tests
 test_cm.mch
 test_c[q-z].mch
-test_d[a-i].mch
+test_d[a-z].mch
 lib_sigs.py
 type_survey2.py
 wasm_regress.ps1

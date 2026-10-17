@@ -2,7 +2,7 @@ from "./parser.mch" import *;
 
 function check(label: str, expected: str, actual: str) -> null {
     if (expected == actual) {
-        print("✅ ", label, newLine=true);
+        print(label, " ✅", newLine=true);
     } else {
         print("❌ ", label, newLine=true);
         print("   expected: ", expected, newLine=true);
@@ -12,7 +12,7 @@ function check(label: str, expected: str, actual: str) -> null {
 
 function check_int(label: str, expected: int, actual: int) -> null {
     if (expected == actual) {
-        print("✅ ", label, newLine=true);
+        print(label, " ✅", newLine=true);
     } else {
         print("❌ ", label, newLine=true);
         print("   expected: ", expected, newLine=true);
@@ -22,7 +22,7 @@ function check_int(label: str, expected: int, actual: int) -> null {
 
 function check_bool(label: str, expected: bool, actual: bool) -> null {
     if (expected == actual) {
-        print("✅ ", label, newLine=true);
+        print(label, " ✅", newLine=true);
     } else {
         print("❌ ", label, newLine=true);
     };
@@ -232,6 +232,207 @@ function main(didLoad) -> null {
     check("b left op", "~", s13b.left.left.value);
     check("b left operand", "x", s13b.left.left.right.value);
     check_int("b right", 3, s13b.left.right.int_val);
+
+    // ─── TEST 14: Qualified method call ───
+    print("--- TEST 14: QualifiedMethodCall ---", newLine=true);
+    var src14: str = "class Bird { function breathe() -> null { }; }; var r: int = Bird.p.breathe(7, step=2);";
+    var lex14: Lexer = Lexer(src14);
+    var toks14: Token[] = lex14.tokenise();
+    var p14: Parser = Parser(toks14);
+    var ast14: ASTNode = p14.parse();
+    var s14: ASTNode = ast14.children[1];
+    check("kind", "VarDecl", s14.kind);
+    check("call kind", "QualifiedMethodCall", s14.left.kind);
+    check("parent class", "Bird", s14.left.value);
+    check("object", "p", s14.left.extra);
+    check("method", "breathe", s14.left.type_str);
+    check_int("arg count", 2, s14.left.args.length);
+    check_int("arg0 value", 7, s14.left.args[0].int_val);
+    check("arg1 kind", "NamedArg", s14.left.args[1].kind);
+    check("arg1 name", "step", s14.left.args[1].value);
+
+    // ─── TEST 15: TagAccess ───
+    print("--- TEST 15: TagAccess ---", newLine=true);
+    var src15: str = "tag DSKind { INT, FLOAT, STR, BOOL }; var a: DSKind = DSKind.INT; var m: str = a.name();";
+    var lex15: Lexer = Lexer(src15);
+    var toks15: Token[] = lex15.tokenise();
+    var p15: Parser = Parser(toks15);
+    var ast15: ASTNode = p15.parse();
+    var s15a: ASTNode = ast15.children[1];
+    var s15m: ASTNode = ast15.children[2];
+    check("a kind", "VarDecl", s15a.kind);
+    check("a val kind", "TagAccess", s15a.left.kind);
+    check("a tag name", "DSKind", s15a.left.value);
+    check("a member", "INT", s15a.left.extra);
+    check("m val kind", "FunctionCall", s15m.left.kind);
+    check("m callee kind", "MemberAccess", s15m.left.left.kind);
+    check("m callee name", "name", s15m.left.left.value);
+    check("m callee obj", "a", s15m.left.left.left.value);
+
+    // ─── TEST 16: SCREAMING_CASE class, extends, implements ───
+    print("--- TEST 16: CONST_IDENT class names ---", newLine=true);
+    var src16: str = "class BASE_CLASS { }; class MY_CLASS extends BASE_CLASS implements IFACE_ONE { };";
+    var lex16: Lexer = Lexer(src16);
+    var toks16: Token[] = lex16.tokenise();
+    var p16: Parser = Parser(toks16);
+    var ast16: ASTNode = p16.parse();
+    var s16a: ASTNode = ast16.children[0];
+    var s16b: ASTNode = ast16.children[1];
+    check("a kind", "ClassDecl", s16a.kind);
+    check("a name", "BASE_CLASS", s16a.value);
+    check("b kind", "ClassDecl", s16b.kind);
+    check("b name", "MY_CLASS", s16b.value);
+    check_int("b parent count", 1, s16b.children.length);
+    check("b parent kind", "Parent", s16b.children[0].kind);
+    check("b parent name", "BASE_CLASS", s16b.children[0].value);
+    check_int("b interface count", 1, s16b.else_ifs.length);
+    check("b interface name", "IFACE_ONE", s16b.else_ifs[0].value);
+
+    // ─── TEST 17: alloc with primitive, CONST_IDENT class, and 2D ───
+    print("--- TEST 17: alloc ---", newLine=true);
+    var src17: str = "var a: int[] = alloc int[5]; var b: MY_CLASS[] = alloc MY_CLASS[3]; var c: int[][] = alloc int[2][4];";
+    var lex17: Lexer = Lexer(src17);
+    var toks17: Token[] = lex17.tokenise();
+    var p17: Parser = Parser(toks17);
+    var ast17: ASTNode = p17.parse();
+    var s17a: ASTNode = ast17.children[0];
+    var s17b: ASTNode = ast17.children[1];
+    var s17c: ASTNode = ast17.children[2];
+    check("a type", "int[]", s17a.type_str);
+    check("a val kind", "AllocArray", s17a.left.kind);
+    check("a elem", "int", s17a.left.value);
+    check_int("a size", 5, s17a.left.left.int_val);
+    check("b type", "MY_CLASS[]", s17b.type_str);
+    check("b val kind", "AllocArray", s17b.left.kind);
+    check("b elem", "MY_CLASS", s17b.left.value);
+    check_int("b size", 3, s17b.left.left.int_val);
+    check("c type", "int[][]", s17c.type_str);
+    check("c elem", "int", s17c.left.value);
+    check_int("c size1", 2, s17c.left.left.int_val);
+    check_int("c size2", 4, s17c.left.right.int_val);
+
+    // ─── TEST 18: do-while ───
+    print("--- TEST 18: DoWhileLoop ---", newLine=true);
+    var src18: str = "do { i = i + 1; var y: int = 2; } while (i < 10);";
+    var lex18: Lexer = Lexer(src18);
+    var toks18: Token[] = lex18.tokenise();
+    var p18: Parser = Parser(toks18);
+    var ast18: ASTNode = p18.parse();
+    var s18: ASTNode = ast18.children[0];
+    check("kind", "DoWhileLoop", s18.kind);
+    check("cond kind", "BinaryOp", s18.condition.kind);
+    check("cond op", "<", s18.condition.value);
+    check_int("body count", 2, s18.body.length);
+    check("body[1] kind", "VarDecl", s18.body[1].kind);
+
+    // ─── TEST 19: try/rescue, fail, rethrow ───
+    print("--- TEST 19: try/rescue/fail/rethrow ---", newLine=true);
+    var src19: str = "try { fail \"boom\"; } rescue, e { rethrow; }; try { var a: int = 1; } rescue { var b: int = 2; };";
+    var lex19: Lexer = Lexer(src19);
+    var toks19: Token[] = lex19.tokenise();
+    var p19: Parser = Parser(toks19);
+    var ast19: ASTNode = p19.parse();
+    var s19a: ASTNode = ast19.children[0];
+    var s19b: ASTNode = ast19.children[1];
+    check("a kind", "TryRescue", s19a.kind);
+    check("a binding", "e", s19a.value);
+    check_int("a try count", 1, s19a.body.length);
+    check("a try[0] kind", "FailStmt", s19a.body[0].kind);
+    check("a fail msg", "boom", s19a.body[0].left.value);
+    check_int("a rescue count", 1, s19a.else_body.length);
+    check("a rescue[0] kind", "RethrowStmt", s19a.else_body[0].kind);
+    check("b kind", "TryRescue", s19b.kind);
+    check("b binding", "", s19b.value);
+    check("b try[0] kind", "VarDecl", s19b.body[0].kind);
+    check("b rescue[0] kind", "VarDecl", s19b.else_body[0].kind);
+
+    // ─── TEST 20: local functions and extend ───
+    print("--- TEST 20: local and extend ---", newLine=true);
+    var src20: str = "local function helper() -> int { return 1; }; extend int { local function twice() -> int { return 2; }; function thrice() -> int { return 3; }; };";
+    var lex20: Lexer = Lexer(src20);
+    var toks20: Token[] = lex20.tokenise();
+    var p20: Parser = Parser(toks20);
+    var ast20: ASTNode = p20.parse();
+    var s20a: ASTNode = ast20.children[0];
+    var s20b: ASTNode = ast20.children[1];
+    check("a kind", "FunctionDecl", s20a.kind);
+    check("a name", "helper", s20a.value);
+    check_bool("a is_local", true, s20a.flag2);
+    check("b kind", "ExtendDecl", s20b.kind);
+    check("b type", "int", s20b.value);
+    check_int("b body count", 2, s20b.body.length);
+    check("b m0 kind", "ExtendMethod", s20b.body[0].kind);
+    check("b m0 name", "twice", s20b.body[0].value);
+    check_bool("b m0 is_local", true, s20b.body[0].flag2);
+    check("b m1 name", "thrice", s20b.body[1].value);
+    check_bool("b m1 is_local", false, s20b.body[1].flag2);
+
+     // ─── TEST 21: doc comments ───
+    print("--- TEST 21: doc comments ---", newLine=true);
+    var src21: str = "~~ adds things\nfunction add() -> int { return 1; };\n~~ a box\nclass Box {\n~~ opens it\nfunction open() -> null { };\nfunction shut() -> null { };\n};";
+    var lex21: Lexer = Lexer(src21);
+    var toks21: Token[] = lex21.tokenise();
+    var p21: Parser = Parser(toks21);
+    var ast21: ASTNode = p21.parse();
+    var s21f: ASTNode = ast21.children[0];
+    var s21c: ASTNode = ast21.children[1];
+    check("f kind", "FunctionDecl", s21f.kind);
+    check_bool("f has doc", true, s21f.doc_text != "");
+    check("c kind", "ClassDecl", s21c.kind);
+    check_bool("c has doc", true, s21c.doc_text != "");
+    check_int("c body count", 2, s21c.body.length);
+    check_bool("open has doc", true, s21c.body[0].doc_text != "");
+    check_bool("shut has no doc", true, s21c.body[1].doc_text == "");
+
+    // ─── TEST 22: doc comments in extend ───
+    print("--- TEST 22: extend docs ---", newLine=true);
+    var src22: str = "extend int {\n~~ doubles it\nfunction double() -> int { return 2; };\nfunction plain() -> int { return 1; };\n};";
+    var lex22: Lexer = Lexer(src22);
+    var toks22: Token[] = lex22.tokenise();
+    var p22: Parser = Parser(toks22);
+    var ast22: ASTNode = p22.parse();
+    var s22: ASTNode = ast22.children[0];
+    check("kind", "ExtendDecl", s22.kind);
+    check_int("body count", 2, s22.body.length);
+    check("m0 name", "double", s22.body[0].value);
+    check_bool("m0 has doc", true, s22.body[0].doc_text != "");
+    check("m1 name", "plain", s22.body[1].value);
+    check_bool("m1 has no doc", true, s22.body[1].doc_text == "");
+
+    // ─── TEST 23: async function and await ───
+    print("--- TEST 23: async and await ---", newLine=true);
+    var src23: str = "async function fetch() -> int { var r: int = await work(); return r; }; function plain() -> int { return 1; };";
+    var lex23: Lexer = Lexer(src23);
+    var toks23: Token[] = lex23.tokenise();
+    var p23: Parser = Parser(toks23);
+    var ast23: ASTNode = p23.parse();
+    var s23a: ASTNode = ast23.children[0];
+    var s23b: ASTNode = ast23.children[1];
+    check("a kind", "FunctionDecl", s23a.kind);
+    check("a name", "fetch", s23a.value);
+    check_bool("a is_async", true, s23a.is_async);
+    check("a await kind", "AwaitExpr", s23a.body[0].left.kind);
+    check("a await operand", "FunctionCall", s23a.body[0].left.left.kind);
+    check("b name", "plain", s23b.value);
+    check_bool("b is_async", false, s23b.is_async);
+
+    // ─── TEST 24: async and shared methods in a class ───
+    print("--- TEST 24: async methods ---", newLine=true);
+    var src24: str = "class Job { async function run() -> int { return 1; }; shared function make() -> null { }; private shared async function both() -> null { }; };";
+    var lex24: Lexer = Lexer(src24);
+    var toks24: Token[] = lex24.tokenise();
+    var p24: Parser = Parser(toks24);
+    var ast24: ASTNode = p24.parse();
+    var s24: ASTNode = ast24.children[0];
+    check_int("body count", 3, s24.body.length);
+    check("m0 kind", "MethodDecl", s24.body[0].kind);
+    check_bool("m0 is_async", true, s24.body[0].is_async);
+    check_bool("m0 is_shared", false, s24.body[0].flag1);
+    check_bool("m1 is_async", false, s24.body[1].is_async);
+    check_bool("m1 is_shared", true, s24.body[1].flag1);
+    check_bool("m2 is_async", true, s24.body[2].is_async);
+    check_bool("m2 is_shared", true, s24.body[2].flag1);
+    check("m2 visibility", "private", s24.body[2].extra);
 
     print("--- ALL TESTS DONE ---", newLine=true);
 };

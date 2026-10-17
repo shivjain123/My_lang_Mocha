@@ -7,6 +7,7 @@ class ASTNode {
     var value:     str;
     var type_str:  str;
     var extra:     str;
+    var doc_text:  str;
     var int_val:   int;
     var real_val: float;  // FloatLiteral value, ComplexLiteral real part
     var imag_val: float;  // ComplexLiteral imaginary part
@@ -24,6 +25,7 @@ class ASTNode {
     var flag1:     bool;
     var flag2:     bool;
     var is_variadic: bool;
+    var is_async:  bool;
     var line:      int;
     var col:       int;
 
@@ -32,6 +34,7 @@ class ASTNode {
         this.value     = "";
         this.type_str  = "";
         this.extra     = "";
+        this.doc_text  = "";
         this.int_val   = 0;
         this.real_val = 0.0;
         this.imag_val = 0.0;
@@ -49,6 +52,7 @@ class ASTNode {
         this.flag1     = false;
         this.flag2     = false;
         this.is_variadic = false;
+        this.is_async  = false;
         this.line      = 0;
         this.col       = 0;
     };

@@ -1003,6 +1003,10 @@ def compile_lib_with_deps(source_file: str) -> bool:
     """Compile a lib and all its transitive dependencies in topological order,
     skipping any that are already up to date."""
     lib_dir = LIB_DIR
+    if not os.path.isfile(source_file):
+        print(f"❌ Could not find '{source_file}'.")
+        print("   Check the file name and that you're in the right folder.")
+        return False
     build_order = resolve_lib_build_order(source_file, lib_dir)
 
     print(f"🔍 Dependency build order:")
@@ -1219,6 +1223,11 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
 
     if not source_file.endswith('.mch'):
         print("⚠️  Warning: Mocha files should use the .mch extension\n")
+
+    if not os.path.isfile(source_file):
+        print(f"❌ Could not find '{source_file}'.")
+        print("   Check the file name and that you're in the right folder.")
+        return False
     
     with open(source_file, 'rb') as f:
         raw = f.read(512)

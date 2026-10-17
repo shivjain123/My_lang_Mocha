@@ -901,12 +901,12 @@ class CodeGen:
                 "declare void @mocha_set_clean(%MochaSet*)",
                 "declare void @mocha_set_retype(%MochaSet*, i32)",
                 "declare void @mocha_set_negate(%MochaSet*)",
-                "declare i8 @mocha_set_complement_has(%MochaSet*, i32)",
                 "declare void @mocha_set_get(%MochaSet*, i32, i8*)",
                 "declare %MochaSet* @mocha_set_union(%MochaSet*, %MochaSet*)",
                 "declare %MochaSet* @mocha_set_intersect(%MochaSet*, %MochaSet*)",
                 "declare %MochaSet* @mocha_set_xor(%MochaSet*, %MochaSet*)",
                 "declare %MochaSet* @mocha_set_rel_diff(%MochaSet*, %MochaSet*)",
+                "declare i8 @mocha_set_subset(%MochaSet*, %MochaSet*)",
                 "declare i32    @mocha_set_min_int(%MochaSet*)",
                 "declare double @mocha_set_min_float(%MochaSet*)",
                 "declare i64    @mocha_set_min_vast(%MochaSet*)",
@@ -2011,13 +2011,13 @@ class CodeGen:
                 # RC: push_col only reads col's elements (copies them into each
                 # row) — never stores col itself. A fresh (non-borrowed) col
                 # array is orphaned after this call.
-                if not isinstance(data_arg, Identifier):
+                if not self.is_borrowed_expr(data_arg):
                     self.emit(f"  call void @mocha_array_release(%MochaArray* {data_reg}, i32 {elem_is_str})")
             else:
                 # RC: push_row stores the raw pointer directly — if this is a
                 # borrowed array variable, retain it since the 2D array now
                 # co-owns it.
-                if isinstance(data_arg, Identifier):
+                if self.is_borrowed_expr(data_arg):
                     self.emit(f"  call void @mocha_array_retain(%MochaArray* {data_reg})")
                 self.emit(f"  call void @mocha_array2d_push_row(%MochaArray2D* {arr_reg}, %MochaArray* {data_reg})")
 
@@ -2097,6 +2097,7 @@ class CodeGen:
 
                 key_regs = []
                 val_regs = []
+                val_owned = []
 
                 for arg in named:
                     # key → i8*
@@ -2112,17 +2113,22 @@ class CodeGen:
                     r, t = self.gen_expr(arg.value)
                     if t == "i8*":
                         val_regs.append(r)
+                        # a str value is owned only if it is a fresh expression;
+                        # variables, field reads and 2D element reads are borrowed
+                        val_owned.append(not isinstance(arg.value, (Identifier, MemberAccess, Index2DAccess)))
                     elif t == "i1":
                         w = self.fresh_temp()
                         self.emit(f"  {w} = zext i1 {r} to i8")
                         s = self.fresh_temp()
                         self.emit(f"  {s} = call i8* @mocha_bool_to_str(i8 {w})")
                         val_regs.append(s)
+                        val_owned.append(True)
                     else:
                         fn, llvm_t = to_str_fns.get(t, ("mocha_int_to_str", "i32"))
                         s = self.fresh_temp()
                         self.emit(f"  {s} = call i8* @{fn}({llvm_t} {r})")
                         val_regs.append(s)
+                        val_owned.append(True)
 
                 argc = len(named)
 
@@ -2150,8 +2156,8 @@ class CodeGen:
                 if not isinstance(node.name.obj, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {s_reg})")
 
-                for arg, vr in zip(named, val_regs):
-                    if not isinstance(arg.value, Identifier):
+                for vr, owned in zip(val_regs, val_owned):
+                    if owned:
                         self.emit(f"  call void @rc_release(i8* {vr})")
 
                 return (tmp, "i8*")
@@ -5515,9 +5521,7 @@ class CodeGen:
             elif val_type == "i64":
                 self.emit(f"  call void @mocha_dict_set_vast(%MochaDict* {d}, i8* {key_reg}, i64 {val_reg})")
             elif val_type == "%MochaDict*":
-                # RC: mocha_dict_set_dict only stores the raw pointer — if this
-                # is a borrowed dict variable, retain it since d now co-owns it.
-                if isinstance(val_node, Identifier):
+                if self.is_borrowed_expr(val_node):
                     self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
                 self.emit(f"  call void @mocha_dict_set_dict(%MochaDict* {d}, i8* {key_reg}, %MochaDict* {val_reg})")
             elif val_type.startswith("%struct."):
@@ -5779,6 +5783,24 @@ class CodeGen:
             if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
             return (tmp, "double")
+
+        elif member == "subset":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call i8 @mocha_set_subset(%MochaSet* {s_reg}, %MochaSet* {s2_reg})")
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
+                self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
+            return (tmp, "i8")
+
+        elif member == "superset":
+            s2_reg, _ = self.gen_expr(node.args[0])
+            tmp = self.fresh_temp()
+            # a.superset(b) is b.subset(a): same C function, args swapped
+            self.emit(f"  {tmp} = call i8 @mocha_set_subset(%MochaSet* {s2_reg}, %MochaSet* {s_reg})")
+            if not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
+                self.emit(f"  call void @mocha_set_release(%MochaSet* {s2_reg})")
+            return (tmp, "i8")
+        
         return None
     
     def gen_lib_qualified_call(self, node):

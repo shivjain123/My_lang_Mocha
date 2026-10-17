@@ -104,7 +104,6 @@
 #
 #   ── Functions ───────────────────────────────────────────
 #   - Regular: function name(params) -> type { body };
-#   - Async: async function name(params) -> type { body };
 #   - Native: function name(params) -> type native c_name;
 #     (zero-body, delegates to C implementation)
 #   - Parameters: name: type, optional default values
@@ -1584,7 +1583,6 @@ class Parser:
                    is_shared=False, is_async=False, is_local=False, doc=None) -> Node:
         """
         function add(a: int, b: int) -> int { ... };
-        async function fetch(url: str) -> Result { ... };
         function main(didLoad, name: str) -> null { ... };
         function printf(fmt: str, +) -> int native printf;
         """

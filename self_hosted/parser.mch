@@ -164,6 +164,22 @@ class Parser {
             case TokenType.IMPORT:    return this.parse_import();
             case TokenType.FROM:      return this.parse_import();
             case TokenType.FUNCTION:  return this.parse_function();
+            case TokenType.LOCAL:
+                this.advance(); // consume 'local'
+                if (!this.check(TokenType.FUNCTION)) {
+                    mocha_error("Parse error", "Expected 'function' after 'local'");
+                };
+                var local_func: ASTNode = this.parse_function();
+                local_func.flag2 = true; // is_local
+                return local_func;
+            case TokenType.ASYNC:
+                this.advance(); // consume 'async'
+                if (!this.check(TokenType.FUNCTION)) {
+                    mocha_error("Parse error", "Expected 'function' after 'async'");
+                };
+                var async_func: ASTNode = this.parse_function();
+                async_func.is_async = true;
+                return async_func;
             case TokenType.CLASS:     return this.parse_class();
             case TokenType.INTERFACE: return this.parse_interface();
             case TokenType.TAG:       return this.parse_tag();
@@ -173,9 +189,15 @@ class Parser {
             case TokenType.RETURN:    return this.parse_return();
             case TokenType.IF:        return this.parse_if();
             case TokenType.WHILE:     return this.parse_while();
+            case TokenType.DO:        return this.parse_do_while();
             case TokenType.FOR:       return this.parse_for();
             case TokenType.MATCH:     return this.parse_match();
-            case TokenType.PRINT:     return this.parse_print();
+            case TokenType.TRY:       return this.parse_try_rescue();
+            case TokenType.FAIL:      return this.parse_fail();
+            case TokenType.RETHROW:
+                this.advance();
+                this.expect(TokenType.SEMICOLON, "Expected ';' after 'rethrow'");
+                return this.make_node("RethrowStmt");
             case TokenType.BREAK:
                 this.advance();
                 this.expect(TokenType.SEMICOLON, "Expected ';' after break");
@@ -215,33 +237,68 @@ class Parser {
         return node;
     };
 
+    function expect_name(what: str) -> str {
+        var tok: Token = this.current();
+        if (tok.type != TokenType.IDENTIFIER && tok.type != TokenType.CONST_IDENT) {
+            mocha_error("Parse error", "Expected " + what);
+        };
+        this.advance();
+        return tok.value;
+    };
+
     function parse_type_str() -> str {
-        // Tuple type: (float[][], 3)
+        var base: str = "";
+
         if (this.check(TokenType.LPAREN)) {
+            // Tuple type: (float, 3) or (float)
             this.advance(); // consume '('
-            var inner: str = this.parse_type_str();
-            var result: str = "(" + inner;
+            var elem_type: str = this.parse_type_str();
+            base = "(" + elem_type;
             if (this.pair(TokenType.COMMA)) {
-                var count_tok: Token = this.expect(TokenType.INT_LIT, "Expected count in tuple type");
-                result = result + ", " + count_tok.value;
+                var count_tok: Token = this.expect(TokenType.INT_LIT, "Expected an integer count in tuple type, e.g. (float, 3)");
+                base = base + ", " + count_tok.value;
             };
             this.expect(TokenType.RPAREN, "Expected ')' to close tuple type");
-            return result + ")";
-        };
-
-        // Normal type
-        var tok: Token = this.current();
-        var type_name: str = tok.value;
-        this.advance();
-
-        // Array suffix []
-        while (this.check(TokenType.LBRACKET)) {
+            base = base + ")";
+        } else if (this.check(TokenType.TYPE_DICT)) {
             this.advance();
-            this.expect(TokenType.RBRACKET, "Expected ']' in type annotation");
-            type_name = type_name + "[]";
+            return "dict";
+        } else if (this.check(TokenType.TYPE_SET)) {
+            // set<T>, or set<null, T>
+            this.advance();
+            this.expect(TokenType.LT, "Expected '<' after 'set'");
+            if (this.check(TokenType.NULL)) {
+                this.advance();
+                this.expect(TokenType.COMMA, "Expected ',' after null");
+            };
+            var inner_type: str = this.parse_type_str();
+            this.expect(TokenType.GT, "Expected '>' to close set type");
+            return "set<" + inner_type + ">";
+        } else if (this.check(TokenType.LAMBDA)) {
+            this.advance();
+            return "lambda";
+        } else if (this.check(TokenType.TYPE_INT) || this.check(TokenType.TYPE_VAST) || this.check(TokenType.TYPE_FLOAT) || this.check(TokenType.TYPE_STR) || this.check(TokenType.TYPE_BOOL) || this.check(TokenType.TYPE_RESULT) || this.check(TokenType.NULL) || this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
+            var tok: Token = this.current();
+            this.advance();
+            base = tok.value;
+        } else {
+            mocha_error("Parse error", "Expected a type annotation here (e.g. int, float, str, bool, or a class name)");
         };
 
-        return type_name;
+        // Array dimensions: [] or [5], repeated
+        while (this.check(TokenType.LBRACKET)) {
+            this.advance(); // consume '['
+            if (this.check(TokenType.RBRACKET)) {
+                this.advance();
+                base = base + "[]";
+            } else {
+                var size_tok: Token = this.expect(TokenType.INT_LIT, "Expected size or ']' in array type");
+                this.expect(TokenType.RBRACKET, "Expected ']' to close array size");
+                base = base + "[" + size_tok.value + "]";
+            };
+        };
+
+        return base;
     };
 
     function parse_return() -> ASTNode {
@@ -311,6 +368,58 @@ class Parser {
         this.pair(TokenType.SEMICOLON);
         return node;
     };
+    
+    function parse_do_while() -> ASTNode {
+        var node: ASTNode = this.make_node("DoWhileLoop");
+        this.advance(); // consume 'do'
+        this.expect(TokenType.LBRACE, "Expected '{' to open do body");
+        while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+            node.body.push(this.parse_statement());
+        };
+        this.expect(TokenType.RBRACE, "Expected '}' to close do body");
+        this.expect(TokenType.WHILE, "Expected 'while' after do block");
+        this.expect(TokenType.LPAREN, "Expected '(' after 'while'");
+        node.condition = this.parse_expression();
+        this.expect(TokenType.RPAREN, "Expected ')' after do-while condition");
+        this.expect(TokenType.SEMICOLON, "Expected ';' after do-while loop");
+        return node;
+    };
+
+    function parse_try_rescue() -> ASTNode {
+        var node: ASTNode = this.make_node("TryRescue");
+        this.advance(); // consume 'try'
+        this.expect(TokenType.LBRACE, "Expected '{' to open try body");
+        while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+            node.body.push(this.parse_statement());
+        };
+        this.expect(TokenType.RBRACE, "Expected '}' to close try body");
+
+        this.expect(TokenType.RESCUE, "Expected 'rescue' after try block");
+
+        // optional binding: rescue, e
+        if (this.check(TokenType.COMMA)) {
+            this.advance();
+            var bind_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected binding name after ','");
+            node.value = bind_tok.value;
+        };
+
+        this.expect(TokenType.LBRACE, "Expected '{' to open rescue body");
+        while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+            node.else_body.push(this.parse_statement());
+        };
+        this.expect(TokenType.RBRACE, "Expected '}' to close rescue body");
+        this.expect(TokenType.SEMICOLON, "Expected ';' after try/rescue");
+        return node;
+    };
+
+    function parse_fail() -> ASTNode {
+        var node: ASTNode = this.make_node("FailStmt");
+        this.advance(); // consume 'fail'
+        node.left = this.parse_expression();
+        this.expect(TokenType.SEMICOLON, "Expected ';' after 'fail'");
+        return node;
+    };
+
     function parse_for() -> ASTNode {
         this.advance(); // consume 'for'
         
@@ -431,12 +540,6 @@ class Parser {
         var node: ASTNode = this.make_node("FunctionDecl");
         this.advance(); // consume 'function'
 
-        // async?
-        if (this.check(TokenType.ASYNC)) {
-            this.advance();
-            node.flag1 = true; // is_async
-        };
-
         var name_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected function name");
         node.value = name_tok.value;
 
@@ -495,20 +598,17 @@ class Parser {
         var node: ASTNode = this.make_node("ClassDecl");
         this.advance(); // consume 'class'
 
-        var name_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected class name");
-        node.value = name_tok.value;
+        node.value = this.expect_name("class name");
 
         // extends
         if (this.check(TokenType.EXTENDS)) {
             this.advance();
             var parent: ASTNode = this.make_node("Parent");
-            var p_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected parent class name");
-            parent.value = p_tok.value;
+            parent.value = this.expect_name("parent class name");
             node.children.push(parent);
             while (this.pair(TokenType.COMMA)) {
                 var p2: ASTNode = this.make_node("Parent");
-                var p2_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected parent class name");
-                p2.value = p2_tok.value;
+                p2.value = this.expect_name("parent class name");
                 node.children.push(p2);
             };
         };
@@ -517,13 +617,11 @@ class Parser {
         if (this.check(TokenType.IMPLEMENTS)) {
             this.advance();
             var iface: ASTNode = this.make_node("Interface");
-            var i_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected interface name");
-            iface.value = i_tok.value;
+            iface.value = this.expect_name("interface name");
             node.else_ifs.push(iface); // reuse else_ifs for interfaces
             while (this.pair(TokenType.COMMA)) {
                 var i2: ASTNode = this.make_node("Interface");
-                var i2_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected interface name");
-                i2.value = i2_tok.value;
+                i2.value = this.expect_name("interface name");
                 node.else_ifs.push(i2);
             };
         };
@@ -531,6 +629,9 @@ class Parser {
         this.expect(TokenType.LBRACE, "Expected '{' to open class body");
 
         while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+            // doc comments before this member
+            var member_doc: str = this.collect_doc();
+
             // visibility modifier
             var visibility: str = "public";
             if (this.check(TokenType.PRIVATE)) {
@@ -546,6 +647,13 @@ class Parser {
             if (this.check(TokenType.SHARED)) {
                 this.advance();
                 is_shared = true;
+            };
+
+            // async
+            var member_async: bool = false;
+            if (this.check(TokenType.ASYNC)) {
+                this.advance();
+                member_async = true;
             };
 
             // field
@@ -569,6 +677,8 @@ class Parser {
                 method.kind = "MethodDecl";
                 method.extra = visibility;
                 method.flag1 = is_shared;
+                method.is_async = member_async;
+                method.doc_text = member_doc;
                 node.body.push(method);
             } else {
                 this.parse_error("Expected field or method in class body");
@@ -580,6 +690,7 @@ class Parser {
         this.pair(TokenType.SEMICOLON);
         return node;
     };
+
     function parse_interface() -> ASTNode {
         var node: ASTNode = this.make_node("InterfaceDecl");
         this.advance(); // consume 'interface'
@@ -605,8 +716,10 @@ class Parser {
                 };
             };
             this.expect(TokenType.RPAREN, "Expected ')' after parameters");
-            this.expect(TokenType.ARROW, "Expected '->' after parameters");
-            method.type_str = this.parse_type_str();
+            method.type_str = "null";
+            if (this.pair(TokenType.ARROW)) {
+                method.type_str = this.parse_type_str();
+            };
             this.expect(TokenType.SEMICOLON, "Expected ';' after interface method");
             node.body.push(method);
         };
@@ -645,10 +758,21 @@ class Parser {
         this.expect(TokenType.LBRACE, "Expected '{' to open extend body");
 
         while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
-            this.expect(TokenType.FUNCTION, "Expected 'function' in extend body");
-            var func: ASTNode = this.parse_function();
-            func.kind = "ExtendMethod";
-            node.body.push(func);
+            var member_doc: str = this.collect_doc();
+            var is_local: bool = false;
+            if (this.check(TokenType.LOCAL)) {
+                this.advance();
+                is_local = true;
+            };
+            if (this.check(TokenType.FUNCTION)) {
+                var func: ASTNode = this.parse_function();
+                func.kind = "ExtendMethod";
+                func.flag2 = is_local;
+                func.doc_text = member_doc;
+                node.body.push(func);
+            } else {
+                mocha_error("Parse error", "Only function declarations are currently supported in extend blocks, got '" + this.current().value + "'");
+            };
         };
 
         this.expect(TokenType.RBRACE, "Expected '}' to close extend");
@@ -695,41 +819,6 @@ class Parser {
         this.expect(TokenType.STAR, "Expected '*'");
         this.expect(TokenType.SEMICOLON, "Expected ';' after import");
         node.value = "*";
-        return node;
-    };
-
-    function parse_print() -> ASTNode {
-        var node: ASTNode = this.make_node("PrintStmt");
-        this.advance(); // consume 'print'
-        this.expect(TokenType.LPAREN, "Expected '(' after 'print'");
-
-        while (!this.check(TokenType.RPAREN) && !this.check(TokenType.EOF)) {
-            if (this.check(TokenType.NEWLINE_ARG)) {
-                this.advance();
-                this.expect(TokenType.ASSIGN, "Expected '=' after 'newLine'");
-                var nl_val: ASTNode = this.parse_expression();
-                var nl_node: ASTNode = this.make_node("PrintArg");
-                nl_node.value = "newLine";
-                nl_node.left = nl_val;
-                node.args.push(nl_node);
-            } else if (this.check(TokenType.START_ARG)) {
-                this.advance();
-                this.expect(TokenType.ASSIGN, "Expected '=' after 'start'");
-                var st_val: ASTNode = this.parse_expression();
-                var st_node: ASTNode = this.make_node("PrintArg");
-                st_node.value = "start";
-                st_node.left = st_val;
-                node.args.push(st_node);
-            } else {
-                node.args.push(this.parse_expression());
-            };
-            if (!this.check(TokenType.RPAREN)) {
-                this.expect(TokenType.COMMA, "Expected ',' between print arguments");
-            };
-        };
-
-        this.expect(TokenType.RPAREN, "Expected ')' after print arguments");
-        this.expect(TokenType.SEMICOLON, "Expected ';' after print statement");
         return node;
     };
 
@@ -973,11 +1062,42 @@ class Parser {
             // member access
             } else if (this.check(TokenType.DOT)) {
                 this.advance();
-                var mem_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected member name after '.'");
-                var node3: ASTNode = this.make_node("MemberAccess");
-                node3.left = expr;
-                node3.value = mem_tok.value;
-                expr = node3;
+                var mem_name: str = "";
+                if (this.check(TokenType.CONST_IDENT)) {
+                    mem_name = this.advance().value;
+                } else {
+                    mem_name = this.expect(TokenType.IDENTIFIER, "Expected member name after '.'").value;
+                };
+
+                if (expr.kind == "Identifier" && this.is_known_tag(expr.value) && !this.check(TokenType.DOT)) {
+                    // TagAccess: Color.RED
+                    var tag_node: ASTNode = this.make_node("TagAccess");
+                    tag_node.value = expr.value;
+                    tag_node.extra = mem_name;
+                    expr = tag_node;
+                } else if (expr.kind == "Identifier" && this.is_known_class(expr.value) && this.check(TokenType.DOT)) {
+                    // QualifiedMethodCall: Bird.p.breathe()
+                    this.advance(); // consume second '.'
+                    var qm_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected method name");
+                    this.expect(TokenType.LPAREN, "Expected '(' after method name");
+                    var qm_node: ASTNode = this.make_node("QualifiedMethodCall");
+                    qm_node.value = expr.value;
+                    qm_node.extra = mem_name;
+                    qm_node.type_str = qm_tok.value;
+                    while (!this.check(TokenType.RPAREN) && !this.check(TokenType.EOF)) {
+                        qm_node.args.push(this.parse_call_arg());
+                        if (!this.check(TokenType.RPAREN)) {
+                            this.expect(TokenType.COMMA, "Expected ',' between arguments");
+                        };
+                    };
+                    this.expect(TokenType.RPAREN, "Expected ')' after arguments");
+                    expr = qm_node;
+                } else {
+                    var node3: ASTNode = this.make_node("MemberAccess");
+                    node3.left = expr;
+                    node3.value = mem_name;
+                    expr = node3;
+                };
             // index access
             } else if (this.check(TokenType.LBRACKET)) {
                 this.advance();
@@ -1033,25 +1153,7 @@ class Parser {
                 var call_node: ASTNode = this.make_node("FunctionCall");
                 call_node.left = expr;
                 while (!this.check(TokenType.RPAREN) && !this.check(TokenType.EOF)) {
-                    if (this.check(TokenType.NEWLINE_ARG)) {
-                        this.advance();
-                        this.expect(TokenType.ASSIGN, "Expected '=' after 'newLine'");
-                        var nl_val: ASTNode = this.parse_expression();
-                        var nl_node: ASTNode = this.make_node("NamedArg");
-                        nl_node.value = "newLine";
-                        nl_node.left = nl_val;
-                        call_node.args.push(nl_node);
-                    } else if (this.check(TokenType.START_ARG)) {
-                        this.advance();
-                        this.expect(TokenType.ASSIGN, "Expected '=' after 'start'");
-                        var st_val: ASTNode = this.parse_expression();
-                        var st_node: ASTNode = this.make_node("NamedArg");
-                        st_node.value = "start";
-                        st_node.left = st_val;
-                        call_node.args.push(st_node);
-                    } else {
-                        call_node.args.push(this.parse_expression());
-                    };
+                    call_node.args.push(this.parse_call_arg());
                     if (!this.check(TokenType.RPAREN)) {
                         this.expect(TokenType.COMMA, "Expected ',' between arguments");
                     };
@@ -1162,6 +1264,11 @@ class Parser {
                 var ident_node: ASTNode = this.make_node("Identifier");
                 ident_node.value = tok.value;
                 return ident_node;
+            case TokenType.PRINT:
+                this.advance();
+                var print_name_node: ASTNode = this.make_node("Identifier");
+                print_name_node.value = tok.value;
+                return print_name_node;
             case TokenType.CONST_IDENT:
                 this.advance();
                 var const_node: ASTNode = this.make_node("Identifier");
@@ -1214,14 +1321,20 @@ class Parser {
             case TokenType.ALLOC:
                 this.advance();
                 var alloc_node: ASTNode = this.make_node("AllocArray");
-                alloc_node.value = this.parse_type_str();
-                this.expect(TokenType.LBRACKET, "Expected '[' after alloc type");
+                if (this.check(TokenType.TYPE_INT) || this.check(TokenType.TYPE_VAST) || this.check(TokenType.TYPE_FLOAT) || this.check(TokenType.TYPE_STR) || this.check(TokenType.TYPE_BOOL) || this.check(TokenType.TYPE_RESULT) || this.check(TokenType.NULL) || this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
+                    var alloc_tok: Token = this.current();
+                    this.advance();
+                    alloc_node.value = alloc_tok.value;
+                } else {
+                    mocha_error("Parse error", "Expected type after 'alloc'");
+                };
+                this.expect(TokenType.LBRACKET, "Expected '[' after type in alloc");
                 alloc_node.left = this.parse_expression();
-                this.expect(TokenType.RBRACKET, "Expected ']' after alloc size");
+                this.expect(TokenType.RBRACKET, "Expected ']'");
                 if (this.check(TokenType.LBRACKET)) {
                     this.advance();
                     alloc_node.right = this.parse_expression();
-                    this.expect(TokenType.RBRACKET, "Expected ']' after 2D alloc size");
+                    this.expect(TokenType.RBRACKET, "Expected ']'");
                 };
                 return alloc_node;
             case TokenType.OK:
@@ -1307,11 +1420,32 @@ class Parser {
         };
     };
 
+    function collect_doc() -> str {
+        var text: str = "";
+        var first: bool = true;
+        while (this.check(TokenType.DOC_COMMENT)) {
+            var dtok: Token = this.current();
+            this.advance();
+            if (first) {
+                text = dtok.value;
+                first = false;
+            } else {
+                text = text + "\n" + dtok.value;
+            };
+        };
+        return text;
+    };
+
     function parse() -> ASTNode {
         var prog: ASTNode = this.make_node("Program");
         var done: bool = this.check(TokenType.EOF);
         while (!done) {
-            prog.children.push(this.parse_statement());
+            var doc: str = this.collect_doc();
+            var stmt: ASTNode = this.parse_statement();
+            if (stmt.kind == "FunctionDecl" || stmt.kind == "ClassDecl") {
+                stmt.doc_text = doc;
+            };
+            prog.children.push(stmt);
             done = this.check(TokenType.EOF);
         };
         return prog;

@@ -79,6 +79,13 @@ if "%1"=="wasm" (
     exit /b
 )
 
+if /i not "%~x1"==".mch" (
+    echo Unknown command '%1'. Run 'mocha help' to see available commands.
+    exit /b 1
+)
+
+set INPUT=%~f1
+
 set INPUT=%~f1
 set OUTPUT=%~dpn1
 set EXTRA_FLAGS=

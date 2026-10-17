@@ -46,8 +46,7 @@ fi
 if [ "$1" = "execute" ]; then
     INPUT="$(realpath "$2")"
     OUTPUT="$(dirname "$INPUT")/$(basename "$INPUT" .mch)"
-    python3 "$COMPILER" "$INPUT" "$OUTPUT"
-    if [ $? -eq 0 ]; then
+    if python3 "$COMPILER" "$INPUT" "$OUTPUT"; then
         set +e
         "$OUTPUT"
         EXEC_EXIT=$?
@@ -81,6 +80,14 @@ if [ "$1" = "wasm" ]; then
     python3 "$COMPILER" --wasm "$INPUT" "$OUTPUT" "$@"
     exit 0
 fi
+
+case "$1" in
+    *.mch) ;;
+    *)
+        echo "Unknown command '$1'. Run 'mocha help' to see available commands."
+        exit 1
+        ;;
+esac
 
 INPUT="$(realpath "$1")"
 OUTPUT="$(dirname "$INPUT")/$(basename "$INPUT" .mch)"

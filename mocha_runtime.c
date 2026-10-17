@@ -356,6 +356,7 @@ static void mocha_print_backtrace(int skip) {
    For now, it masks gc, and is working for strings, 1D and 2D arrays, \
    tuples, sets, and dicts; Classes are remaining (Also Block scoping)
    =============================================================== */
+void mocha_stack_print(void); //Forward Declare
 
 #define RC_MAGIC_LIVE 0xA11C0FFEEBEEF001ULL
 #define RC_MAGIC_DEAD 0xDEADDEADDEADDEADULL
@@ -378,6 +379,7 @@ static MochaRCNode* rc_head = NULL;
 
 static void rc_die(const char* what, void* ptr) {
     fprintf(stderr, "\n[RC] FATAL: %s on %p\n", what, ptr);
+    mocha_stack_print();
     mocha_print_backtrace(1);
     fflush(stderr);
     _exit(97);
@@ -485,7 +487,7 @@ void mocha_rc_stats_if_enabled(void) {
 /* Forward declaration for exit override */
 void mocha_stack_print(void);
 
-#define exit(code) do { mocha_stack_print(); _Exit(code); } while(0)
+#define exit(code) do { fflush(NULL); mocha_stack_print(); _Exit(code); } while(0)
 
 /* ============================================================
  * TYPE DEFINITIONS
@@ -599,6 +601,13 @@ static inline char* mocha_strdup_safe(const char* s) {
 }
 #define strdup(s) mocha_strdup_safe(s)
 
+static inline void* mocha_calloc_safe(size_t n, size_t size) {
+    void* ptr = calloc(n, size);
+    MOCHA_OOM_CHECK(ptr);
+    return ptr;
+}
+#define calloc(n, size) mocha_calloc_safe(n, size)
+
 /* ---- Bounds Checking ---- */
 
 #define MOCHA_BOUNDS_CHECK_ROW(arr, row) \
@@ -650,7 +659,7 @@ double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
 ctype mocha_array_min_##suffix(MochaArray *arr) {                             \
     if (arr->length == 0) {                                                   \
         fprintf(stderr, "MochaRuntimeError: min() on empty array\n");        \
-        _exit(2);                                                             \
+        exit(2);                                                             \
     }                                                                         \
     ctype m;                                                                  \
     memcpy(&m, arr->data, sizeof(ctype));                                     \
@@ -664,7 +673,7 @@ ctype mocha_array_min_##suffix(MochaArray *arr) {                             \
 ctype mocha_array_max_##suffix(MochaArray *arr) {                             \
     if (arr->length == 0) {                                                   \
         fprintf(stderr, "MochaRuntimeError: max() on empty array\n");        \
-        _exit(2);                                                             \
+        exit(2);                                                             \
     }                                                                         \
     ctype m;                                                                  \
     memcpy(&m, arr->data, sizeof(ctype));                                     \
@@ -680,7 +689,7 @@ ctype mocha_array_max_##suffix(MochaArray *arr) {                             \
 ctype mocha_set_min_##suffix(MochaSet *s) {                                  \
     if (s->size == 0) {                                                       \
         fprintf(stderr, "MochaRuntimeError: min() on empty set\n");          \
-        _exit(2);                                                             \
+        exit(2);                                                             \
     }                                                                         \
     ctype m;                                                                  \
     memcpy(&m, s->data, sizeof(ctype));                                       \
@@ -694,7 +703,7 @@ ctype mocha_set_min_##suffix(MochaSet *s) {                                  \
 ctype mocha_set_max_##suffix(MochaSet *s) {                                  \
     if (s->size == 0) {                                                       \
         fprintf(stderr, "MochaRuntimeError: max() on empty set\n");          \
-        _exit(2);                                                             \
+        exit(2);                                                             \
     }                                                                         \
     ctype m;                                                                  \
     memcpy(&m, s->data, sizeof(ctype));                                       \
@@ -1486,7 +1495,7 @@ ARRAY_MINMAX(vast,  int64_t)
 char* mocha_array_min_str(MochaArray *arr) {
     if (arr->length == 0) {
         fprintf(stderr, "MochaRuntimeError: min() on empty array\n");
-        _exit(2);
+        exit(2);
     }
     char *m;
     memcpy(&m, arr->data, sizeof(char*));
@@ -1501,7 +1510,7 @@ char* mocha_array_min_str(MochaArray *arr) {
 char* mocha_array_max_str(MochaArray *arr) {
     if (arr->length == 0) {
         fprintf(stderr, "MochaRuntimeError: max() on empty array\n");
-        _exit(2);
+        exit(2);
     }
     char *m;
     memcpy(&m, arr->data, sizeof(char*));
@@ -2311,7 +2320,9 @@ MochaComplex* mocha_ext_float_inv_sech_c(double x) {
     if (arg >= 1.0)
         return mocha_complex_new(acosh(arg), 0.0);
     fprintf(stderr, "MochaWarning (inv_sech): argument %.6g is outside real domain (0 < x <= 1), returning complex result\n", x);
-    return mocha_complex_new(0.0, acos(arg));
+    if (arg >= -1.0)
+        return mocha_complex_new(0.0, acos(arg));        // x > 1 or x <= -1: purely imaginary
+    return mocha_complex_new(acosh(-arg), acos(-1.0));   // -1 < x < 0: acosh(|1/x|) + i*pi
 }
 
 double mocha_ext_float_inv_coth_c(double x) {
@@ -3013,7 +3024,6 @@ MochaSet* mocha_set_new(int32_t elem_type) {
     s->size      = 0;
     s->capacity  = 8;
     s->data      = malloc(s->elem_size * s->capacity);
-    MOCHA_OOM_CHECK(s->data);
     return s;
 }
 /* ---- Reference Counting ---- */
@@ -3117,6 +3127,8 @@ void mocha_set_retype(MochaSet *s, int32_t new_type) {
     s->size      = 0;
     s->elem_type = new_type;
     s->elem_size = set_elem_size(new_type);
+    s->data      = realloc(s->data, s->elem_size * s->capacity);
+    MOCHA_OOM_CHECK(s->data);
 }
 
 void mocha_set_negate(MochaSet *s) {
@@ -3210,6 +3222,8 @@ MochaSet* mocha_set_xor(MochaSet *s1, MochaSet *s2) {
         if (mocha_set_find(inter, elem) < 0)
             mocha_set_insert(r, elem);
     }
+    mocha_set_release(u);
+    mocha_set_release(inter);
     return r;
 }
 
@@ -3223,6 +3237,17 @@ MochaSet* mocha_set_rel_diff(MochaSet *s1, MochaSet *s2) {
     return r;
 }
 
+/* Proper subset: every element of a is in b, and b has strictly more. */
+int8_t mocha_set_subset(MochaSet *a, MochaSet *b) {
+    if (a->elem_type != b->elem_type) return 0;  /* can't compare different types */
+    if (a->size >= b->size) return 0;            /* proper subset needs b strictly bigger */
+    for (int32_t i = 0; i < a->size; i++) {
+        void *elem = (char *)a->data + i * a->elem_size;
+        if (mocha_set_find(b, elem) < 0) return 0;
+    }
+    return 1;
+}
+
 /* ---- Min / Max ---- */
 SET_MINMAX(int,   int32_t)
 SET_MINMAX(float, double)
@@ -3231,7 +3256,7 @@ SET_MINMAX(vast,  int64_t)
 char* mocha_set_min_str(MochaSet *s) {
     if (s->size == 0) {
         fprintf(stderr, "MochaRuntimeError: min() on empty set\n");
-        _exit(2);
+        exit(2);
     }
     char *m;
     memcpy(&m, s->data, sizeof(char*));
@@ -3247,7 +3272,7 @@ char* mocha_set_min_str(MochaSet *s) {
 char* mocha_set_max_str(MochaSet *s) {
     if (s->size == 0) {
         fprintf(stderr, "MochaRuntimeError: max() on empty set\n");
-        _exit(2);
+        exit(2);
     }
     char *m;
     memcpy(&m, s->data, sizeof(char*));

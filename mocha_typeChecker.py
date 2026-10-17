@@ -713,6 +713,8 @@ class TypeChecker:
                 return "null"
             if node.member == "has":
                 return "bool"
+            if node.member in ("subset", "superset"):
+                return "bool"
             if node.member in ("union", "intersect", "xor", "rel_diff"):
                 return obj_type  # returns same set type
             if node.member in ("min", "max"):
@@ -722,13 +724,13 @@ class TypeChecker:
                 if inner not in ("int", "float", "vast", "str"):
                     self.error(f"min()/max() not supported for set<{inner}>", node)
                 return inner  # min/max returns the element type
-            self.error(
-                f"'.{node.member}' is not a method on set. "
-                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff, .min, .max, .jaccard, .dice, and .overlap",
-                node
-            )
             if node.member in ("jaccard", "dice", "overlap"):
                 return "float"
+            self.error(
+                f"'.{node.member}' is not a method on set. "
+                f"Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff, .subset, .superset, .min, .max, .jaccard, .dice, and .overlap",
+                node
+            )
             return "unknown"
         
         # String built-ins
@@ -1157,6 +1159,24 @@ class TypeChecker:
                 if inner not in ("int", "float", "vast", "str"):
                     self.error(f"min()/max() not supported for set<{inner}>", node)
                 return inner
+            if func_name in ("subset", "superset"):
+                if node.args:
+                    arg_type = self.check_expr(node.args[0])
+                    if arg_type != obj_type:
+                        self.error(
+                            f"Cannot call '{func_name}' on '{obj_type}' with '{arg_type}'. "
+                            f"Both sets must be the same type.", node
+                        )
+                return "bool"
+            if func_name in ("jaccard", "dice", "overlap"):
+                if node.args:
+                    arg_type = self.check_expr(node.args[0])
+                    if arg_type != obj_type:
+                        self.error(
+                            f"Cannot call '{func_name}' on '{obj_type}' with '{arg_type}'. "
+                            f"Both sets must be the same type.", node
+                        )
+                return "float"
             if func_name in ("jaccard", "dice", "overlap"):
                 if node.args:
                     arg_type = self.check_expr(node.args[0])
