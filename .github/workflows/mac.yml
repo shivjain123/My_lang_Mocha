@@ -9,7 +9,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Look at the files
-        run: ls
-      - name: Try mocha help
-        run: bash ./mocha help
+      - name: Evil number 5 (should say EVIL)
+        run: echo 5 | bash ./mocha execute evil.mch
+      - name: Evil number 7 (should say NOT Evil)
+        run: echo 7 | bash ./mocha execute evil.mch
