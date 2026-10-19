@@ -1090,6 +1090,15 @@ class TypeChecker:
             if func_name in ("keys", "values"):
                 return "str[]"
             return "unknown"
+
+        # File method return types
+        if obj_type == "File":
+            if func_name in ("read", "readLine"):
+                return "str"
+            if func_name == "eof":
+                return "bool"
+            if func_name in ("write", "close", "free"):
+                return "null"
             
         # occs on 2D array — must specify row or col
         if func_name == "occs":
@@ -1326,12 +1335,30 @@ class TypeChecker:
                 f"Use a class or 2D array instead.",
                 node
             )
+
+        # Arrays of C-backed handle types are not supported: the array has no element
+        # size for them (File[] currently dies at runtime with a bogus out-of-memory error)
+        if node.type.endswith("[]") and node.type.split("[")[0] in ("File", "StringBuilder", "HashTable"):
+            handle_type = node.type.split("[")[0]
+            self.error(
+                f"Arrays of {handle_type} are not supported. "
+                f"Keep each {handle_type} in its own variable.",
+                node
+            )
             
         value_type = self.check_expr(node.value)
 
-        # Empty array literal [] is compatible with any array type
+        # Empty array literal [] is compatible with any 1D array type; a 2D type needs
+        # [[]] (one empty row) or alloc T[0][0], because [] is not built as a 2D array
         if value_type == "unknown[]" and node.type.endswith("[]"):
-            pass  # trust the declared type
+            if node.type.count("[") == 2:
+                base_type = node.type.split("[")[0]
+                self.error(
+                    f"'{node.name}' is a 2D array ('{node.type}') and cannot be initialised "
+                    f"with an empty '[]'. Write an empty 2D array as [[]] (one empty row) "
+                    f"or alloc {base_type}[0][0].",
+                    node
+                )
         elif not self.types_compatible(node.type, value_type):
             self.error(
                 f"Type mismatch in declaration of '{node.name}': "
@@ -1351,14 +1378,16 @@ class TypeChecker:
 
         #print(f"[ALIAS_DBG] name={node.name!r} type={node.type!r} in_class_nodes={node.type in self.class_nodes!r} value_is_identifier={isinstance(node.value, Identifier)!r} value_node={type(node.value).__name__}", file=sys.stderr)
 
-        # Class instances are move-only, not aliasable — reject
+        # Class instances and C-backed handle types are move-only, not aliasable — reject
         # `var p2: SomeClass = p;` where p is an existing variable
-        if node.type in self.class_nodes and isinstance(node.value, Identifier):
+        move_only_builtins = ("File", "StringBuilder", "HashTable")
+        if (node.type in self.class_nodes or node.type in move_only_builtins) and isinstance(node.value, Identifier):
+            kind = "class instance" if node.type in self.class_nodes else f"{node.type} handle"
             self.error(
-                f"Cannot alias class instance '{node.value.name}' into '{node.name}': "
-                f"class instances in Mocha are move-only, not copyable. "
+                f"Cannot alias {kind} '{node.value.name}' into '{node.name}': "
+                f"{kind}s in Mocha are move-only, not copyable. "
                 f"This prevents security issues and accidental mutations. "
-                f"Construct a new instance instead.",
+                f"Construct a new one instead.",
                 node
             )
 
@@ -1376,10 +1405,19 @@ class TypeChecker:
             )
             
         value_type = self.check_expr(node.value)
-
-        # Empty array literal [] is compatible with any array type
+        
+        # Empty array literal [] is compatible with any 1D array type; a 2D type needs
+        # [[]] (one empty row) or alloc T[0][0], because [] is not built as a 2D array
         if value_type == "unknown[]" and node.type.endswith("[]"):
-            pass  # trust the declared type
+            if node.type.count("[") == 2:
+                base_type = node.type.split("[")[0]
+                self.error(
+                    f"'{node.name}' is a 2D array ('{node.type}') and cannot be initialised "
+                    f"with an empty '[]'. Write an empty 2D array as [[]] (one empty row) "
+                    f"or alloc {base_type}[0][0].",
+                    node
+                )
+            # else: trust the declared type (1D)
         elif not self.types_compatible(node.type, value_type):
             self.error(
                 f"Type mismatch in constant '{node.name}': "
@@ -1546,6 +1584,16 @@ class TypeChecker:
             return
         
         value_type = self.check_expr(node.value)
+        # C-backed handle types have no RC: storing a variable of one into a field or an
+        # array/dict slot would leave two owners of one object
+        if not isinstance(node.target, Identifier) and isinstance(node.value, Identifier) \
+                and value_type in ("File", "StringBuilder", "HashTable"):
+            self.error(
+                f"Cannot store {value_type} handle '{node.value.name}' into a field or element: "
+                f"{value_type} handles in Mocha are move-only, not copyable. "
+                f"Construct a new one in place instead.",
+                node
+            )
         # Get target name and check it's not const
         if isinstance(node.target, Identifier):
             symbol = self.symbols.lookup_safe(node.target.name)
@@ -1559,6 +1607,19 @@ class TypeChecker:
                     self.error(
                         f"Type mismatch: cannot assign '{value_type}' "
                         f"to '{node.target.name}' which is '{symbol['type']}'", node
+                    )
+                # Class instances and C-backed handle types are move-only: `g = f;`
+                # would leave two variables owning one object
+                move_only_builtins = ("File", "StringBuilder", "HashTable")
+                if (symbol["type"] in self.class_nodes or symbol["type"] in move_only_builtins) \
+                        and isinstance(node.value, Identifier):
+                    kind = "class instance" if symbol["type"] in self.class_nodes else f"{symbol['type']} handle"
+                    self.error(
+                        f"Cannot alias {kind} '{node.value.name}' into '{node.target.name}': "
+                        f"{kind}s in Mocha are move-only, not copyable. "
+                        f"This prevents security issues and accidental mutations. "
+                        f"Construct a new one instead.",
+                        node
                     )
 
         elif isinstance(node.target, MemberAccess):

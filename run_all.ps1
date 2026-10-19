@@ -4,8 +4,9 @@ foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_a$c" 
 foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_b$c" }
 foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_c$c" }
 foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_d$c" }
+foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_e$c" }
 
-$limitMB = 15
+$limitMB = 9
 $bad = @()
 
 foreach ($n in $names) {

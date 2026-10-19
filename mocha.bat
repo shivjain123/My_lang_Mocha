@@ -32,12 +32,19 @@ echo   mocha doc ^<file.mch^>             Generate documentation
 echo   mocha repl                       Launch interactive REPL
 echo   mocha wasm ^<file.mch^> [fn ...]   Build a WebAssembly module
 echo   mocha help                       Show this message
-echo.
-echo Coming soon:
-echo   mocha update                     Pull latest compiler + libraries
+echo   mocha serve [page.html] [port]   Open a wasm page in the browser
+echo   mocha web ^<file.mch^> [fn ...]    Build as WebAssembly and open it in the browser
+echo   mocha update                     Pull the latest compiler + libraries
 exit /b
 
 :after_help
+
+if "%1"=="update" (
+    python "%MOCHA_DIR%mocha_update.py" update
+    exit /b
+)
+
+python "%MOCHA_DIR%mocha_update.py" check
 
 if "%1"=="repl" (
     python "%REPL%"
@@ -77,6 +84,25 @@ if "%1"=="wasm" (
     )
     python "%COMPILER%" --wasm "%~f2" "%~dpn2" %3 %4 %5 %6 %7 %8 %9
     exit /b
+)
+
+if "%1"=="serve" (
+    if "%2"=="" (
+        python "%MOCHA_DIR%mocha_serve.py"
+    ) else (
+        python "%MOCHA_DIR%mocha_serve.py" "%~f2" %3
+    )
+    exit /b
+)
+
+if "%1"=="web" (
+    if "%2"=="" (
+        echo Usage: mocha web ^<file.mch^> [function ...]
+        exit /b 1
+    )
+    python "%COMPILER%" --wasm "%~f2" "%~dpn2" %3 %4 %5 %6 %7 %8 %9
+    if !errorlevel!==0 python "%MOCHA_DIR%mocha_serve.py" "%~dpn2.html"
+    exit /b !errorlevel!
 )
 
 if /i not "%~x1"==".mch" (

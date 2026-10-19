@@ -345,28 +345,35 @@ class Dense {
     };
 
     function backward(dout: Tensor, lr: float) -> Tensor {
-        var dact: Tensor = dout;
-        var dact_is_new: bool = false;
-
         if (this.activation == Activation.RELU) {
-            dact = Tensor(dout.nrows, dout.ncols);
-            mocha_tensor_free(dact.ptr);
-            dact.ptr = mocha_tensor_relu_grad(dout.ptr, this.last_output.ptr);
-            dact_is_new = true;
+            var dact_relu: Tensor = Tensor(dout.nrows, dout.ncols);
+            mocha_tensor_free(dact_relu.ptr);
+            dact_relu.ptr = mocha_tensor_relu_grad(dout.ptr, this.last_output.ptr);
+            var din_relu: Tensor = this.backward_core(dact_relu, lr);
+            dact_relu.dispose();
+            return din_relu;
         };
         if (this.activation == Activation.SIGMOID) {
-            dact = Tensor(dout.nrows, dout.ncols);
-            mocha_tensor_free(dact.ptr);
-            dact.ptr = mocha_tensor_sigmoid_grad(dout.ptr, this.last_output.ptr);
-            dact_is_new = true;
+            var dact_sig: Tensor = Tensor(dout.nrows, dout.ncols);
+            mocha_tensor_free(dact_sig.ptr);
+            dact_sig.ptr = mocha_tensor_sigmoid_grad(dout.ptr, this.last_output.ptr);
+            var din_sig: Tensor = this.backward_core(dact_sig, lr);
+            dact_sig.dispose();
+            return din_sig;
         };
         if (this.activation == Activation.TANH) {
-            dact = Tensor(dout.nrows, dout.ncols);
-            mocha_tensor_free(dact.ptr);
-            dact.ptr = mocha_tensor_tanh_grad(dout.ptr, this.last_output.ptr);
-            dact_is_new = true;
+            var dact_tanh: Tensor = Tensor(dout.nrows, dout.ncols);
+            mocha_tensor_free(dact_tanh.ptr);
+            dact_tanh.ptr = mocha_tensor_tanh_grad(dout.ptr, this.last_output.ptr);
+            var din_tanh: Tensor = this.backward_core(dact_tanh, lr);
+            dact_tanh.dispose();
+            return din_tanh;
         };
+        // NONE / SOFTMAX: gradient passes straight through, dout is only borrowed
+        return this.backward_core(dout, lr);
+    };
 
+    function backward_core(dact: Tensor, lr: float) -> Tensor {
         var input_t: Tensor = this.last_input.transpose();
         var dw: Tensor = input_t.matmul(dact);
 
@@ -390,9 +397,6 @@ class Dense {
         dw.dispose();
         db.dispose();
         weights_t.dispose();
-        if (dact_is_new) {
-            dact.dispose();
-        };
 
         return din;
     };
@@ -467,8 +471,9 @@ class Network {
         };
 
         // backward pass — reverse through layers
-        var i: int = this.layers.length - 1;
-        var grad: Tensor = dout;
+        var last: int = this.layers.length - 1;
+        var grad: Tensor = this.layers[last].backward(dout, lr);
+        var i: int = last - 1;
         while (i >= 0) {
             var prev_grad: Tensor = this.layers[i].backward(grad, lr);
             grad = prev_grad;
@@ -482,8 +487,8 @@ class Network {
     };
 
     function predict(input: Tensor) -> Tensor {
-        var current: Tensor = input;
-        var i: int = 0;
+        var current: Tensor = this.layers[0].forward(input);
+        var i: int = 1;
         while (i < this.layers.length) {
             var next: Tensor = this.layers[i].forward(current);
             current = next;
@@ -2038,5 +2043,207 @@ class PositionalEncoding {
 
     function dispose() -> null {
         this.table.dispose();
+    };
+};
+
+//
+
+class BertClassifier {
+    var tok:     Tokenizer;
+    var emb:     Embedding;
+    var pe:      PositionalEncoding;
+    var bert:    BertLayer;
+    var head:    Dense;
+    var d_model: int;
+    var max_len: int;
+
+    function bc_fit(tk: Tokenizer, texts: str[]) -> null {
+        tk.fit(texts);
+    };
+
+    function bc_size(tk: Tokenizer) -> int {
+        return tk.size();
+    };
+
+    function bc_encode(tk: Tokenizer, text: str) -> int[] {
+        return tk.encode(text);
+    };
+
+    function bc_join(a: str[], b: str[]) -> str[] {
+        var out: str[] = [];
+        var i: int = 0;
+        while (i < a.length) {
+            out.push(a[i]);
+            i++;
+        };
+        var j: int = 0;
+        while (j < b.length) {
+            out.push(b[j]);
+            j++;
+        };
+        return out;
+    };
+
+    function bc_make_labels(n_pos: int, n_neg: int) -> float[] {
+        var out: float[] = [];
+        var i: int = 0;
+        while (i < n_pos) {
+            out.push(1.0);
+            i++;
+        };
+        var j: int = 0;
+        while (j < n_neg) {
+            out.push(0.0);
+            j++;
+        };
+        return out;
+    };
+
+    function bc_shuffled_order(n: int) -> int[] {
+        var order: int[] = [];
+        var i: int = 0;
+        while (i < n) {
+            order.push(i);
+            i++;
+        };
+        var j: int = n - 1;
+        while (j > 0) {
+            var r: int = rand_int(0, j);
+            var tmp: int = order[j];
+            order[j] = order[r];
+            order[r] = tmp;
+            j = j - 1;
+        };
+        return order;
+    };
+
+    function constructor(positive: str[], negative: str[], d_model: int, d_k: int, d_ff: int) -> null {
+        this.d_model = d_model;
+        this.max_len = 64;
+
+        var all: str[] = this.bc_join(positive, negative);
+        this.tok = Tokenizer();
+        this.bc_fit(this.tok, all);
+
+        this.emb  = Embedding(this.bc_size(this.tok), d_model);
+        this.pe   = PositionalEncoding(this.max_len, d_model);
+        this.bert = BertLayer(d_model, d_k, d_ff);
+        this.head = Dense(d_model, 1, Activation.SIGMOID);
+    };
+
+    function train(positive: str[], negative: str[], epochs: int, lr: float) -> null {
+        var texts: str[] = this.bc_join(positive, negative);
+        var labels: float[] = this.bc_make_labels(positive.length, negative.length);
+        this.train_labelled(texts, labels, epochs, lr);
+    };
+
+    function train_labelled(texts: str[], labels: float[], epochs: int, lr: float) -> null {
+        var epoch: int = 0;
+        while (epoch < epochs) {
+            var order: int[] = this.bc_shuffled_order(texts.length);
+            var total_loss: float = 0.0;
+            var i: int = 0;
+            while (i < texts.length) {
+                var k: int = order[i];
+                var ids: int[] = this.bc_encode(this.tok, texts[k]);
+
+                var embedded: Tensor = this.emb.forward(ids);
+                var encoded: Tensor = this.pe.encode(embedded);
+                embedded.dispose();
+
+                var seq_len: int = encoded.nrows;
+
+                var bert_out: Tensor = this.bert.forward(encoded);
+                var cls: Tensor = bert_out.get_row(0);
+                bert_out.dispose();
+
+                var pred: Tensor = this.head.forward(cls);
+
+                var label: Tensor = Tensor(1, 1);
+                label.put(0, 0, labels[k]);
+
+                var loss: float = mocha_tensor_mse_loss(pred.ptr, label.ptr);
+                total_loss = total_loss + loss;
+
+                var dout: Tensor = Tensor(1, 1);
+                mocha_tensor_free(dout.ptr);
+                dout.ptr = mocha_tensor_mse_grad(pred.ptr, label.ptr);
+
+                var dcls: Tensor = this.head.backward(dout, lr);
+                dout.dispose();
+
+                var denc_full: Tensor = Tensor(seq_len, this.d_model);
+                denc_full.zeros();
+                var col: int = 0;
+                while (col < this.d_model) {
+                    denc_full.put(0, col, dcls.at(0, col));
+                    col++;
+                };
+                dcls.dispose();
+
+                var denc: Tensor = this.bert.backward(denc_full, lr);
+                denc_full.dispose();
+
+                this.emb.backward(denc, ids, lr);
+                denc.dispose();
+
+                pred.dispose();
+                label.dispose();
+                cls.dispose();
+                encoded.dispose();
+
+                i++;
+            };
+
+            if (epoch % 100 == 0) {
+                var avg_loss: float = total_loss / (texts.length + 0.0);
+                print("Epoch ", epoch, " loss: ", avg_loss, "\n");
+            };
+            epoch++;
+        };
+    };
+
+    function predict(text: str) -> float {
+        var ids: int[] = this.bc_encode(this.tok, text);
+        var embedded: Tensor = this.emb.forward(ids);
+        var encoded:  Tensor = this.pe.encode(embedded);
+        embedded.dispose();
+        var bert_out: Tensor = this.bert.forward(encoded);
+        var cls: Tensor = bert_out.get_row(0);
+        bert_out.dispose();
+        encoded.dispose();
+        var pred: Tensor = this.head.forward(cls);
+        var score: float = pred.at(0, 0);
+        pred.dispose();
+        cls.dispose();
+        return score;
+    };
+
+    function accuracy(positive: str[], negative: str[]) -> float {
+        var correct: int = 0;
+        var i: int = 0;
+        while (i < positive.length) {
+            var sp: float = this.predict(positive[i]);
+            print("[pos] ", positive[i], " -> ", sp, "\n");
+            if (sp > 0.5) { correct++; };
+            i++;
+        };
+        var j: int = 0;
+        while (j < negative.length) {
+            var sn: float = this.predict(negative[j]);
+            print("[neg] ", negative[j], " -> ", sn, "\n");
+            if (sn < 0.5) { correct++; };
+            j++;
+        };
+        var total: int = positive.length + negative.length;
+        var acc: float = (correct + 0.0) / (total + 0.0);
+        print("Correct: ", correct, " / ", total, "\n");
+        return acc;
+    };
+
+    function dispose() -> null {
+        this.emb.dispose();
+        this.bert.dispose();
+        this.head.dispose();
     };
 };

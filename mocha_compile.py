@@ -1364,8 +1364,16 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
                 return False
         print(f"  📤 Exporting: {', '.join(wasm_exports)}")
         lib_lls = [os.path.splitext(o)[0] + ".ll" for o in link_objects]
-        return compile_wasm(ll_file, f"{output_name}.wasm", wasm_exports, lib_lls,
-                            zig_path=ZIG_PATH, zig_lib_dir=os.path.join(SCRIPT_DIR, "zig-lib"))
+        ok = compile_wasm(ll_file, f"{output_name}.wasm", wasm_exports, lib_lls,
+                          zig_path=ZIG_PATH, zig_lib_dir=os.path.join(SCRIPT_DIR, "zig-lib"))
+        if ok:
+            from mocha_wasm import write_html, get_signatures
+            sigs = get_signatures(source)
+            page_sigs = {n: sigs[n] for n in wasm_exports if n in sigs}
+            html_path = write_html(f"{output_name}.wasm", page_sigs)
+            if html_path:
+                print(f"  🌐 Wrote {html_path} (demo page)")
+        return ok
 
     print("Step 5: Compiling to executable...")
 

@@ -2976,7 +2976,8 @@ MochaDict* mocha_dict_copy(MochaDict *src) {
  * SET RUNTIME
  *
  * Ordered set of unique values. Supports int, float, str, bool.
- * Operations: insert, delete, has, union, intersect, xor, rel_diff, min and max.
+ * Operations: insert, delete, has, union, intersect, xor, 
+ *  subset, superset, rel_diff, min and max.
  * ============================================================ */
 
 /* ---- Internal helpers ---- */
@@ -4115,19 +4116,25 @@ int mocha_wren_dofile(void* vm, const char* filename) {
         return 1;
     }
 
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
+    long len = -1;
+    if (fseek(f, 0, SEEK_END) == 0) len = ftell(f);
+    if (len < 0) {
+        fclose(f);
+        fprintf(stderr, "WrenError: cannot read '%s': the file is not seekable "
+                        "(pipe or device), so its size is unknown\n", filename);
+        return 1;
+    }
     rewind(f);
 
-    char* src = (char*)malloc(len + 1);
+    char* src = (char*)malloc((size_t)len + 1);
     if (!src) {
         fclose(f);
         fprintf(stderr, "WrenError: out of memory reading '%s'\n", filename);
         return 1;
     }
 
-    fread(src, 1, len, f);
-    src[len] = '\0';
+    size_t got = fread(src, 1, (size_t)len, f);
+    src[got] = '\0';
     fclose(f);
 
     int r = mocha_wren_dostring(vm, filename, src);
@@ -4418,8 +4425,14 @@ char* mocha_file_read(MochaFile *f) {
         fprintf(stderr, "MochaRuntimeError: Cannot read from closed file '%s'.\n", f->path);
         exit(2);
     }
-    fseek(f->handle, 0, SEEK_END);
-    long size = ftell(f->handle);
+    long size = -1;
+    if (fseek(f->handle, 0, SEEK_END) == 0) size = ftell(f->handle);
+    if (size < 0) {
+        fprintf(stderr, "MochaRuntimeError: Cannot read() '%s': the file is not seekable "
+                        "(pipe or device), so its size is unknown.\n"
+                        "    Use readLine() instead.\n", f->path);
+        exit(2);
+    }
     fseek(f->handle, 0, SEEK_SET);
 
     char *buf = rc_alloc_string(size);   // was malloc(size + 1)
@@ -4466,6 +4479,19 @@ char* mocha_file_readline(MochaFile *f) {
     return result;
 }
 
+/* True when no more data can be read: peeks one character and puts it back.
+   Lets loops tell a blank line from the end of the file. */
+int8_t mocha_file_eof(MochaFile *f) {
+    if (!f->is_open) {
+        fprintf(stderr, "MochaRuntimeError: Cannot read from closed file '%s'.\n", f->path);
+        exit(2);
+    }
+    int ch = fgetc(f->handle);
+    if (ch == EOF) return 1;
+    ungetc(ch, f->handle);
+    return 0;
+}
+
 /* ---- Write operation ---- */ 
 void mocha_file_write(MochaFile *f, char *content) {
     if (!f->is_open) {
@@ -4480,12 +4506,22 @@ void mocha_file_write(MochaFile *f, char *content) {
 void mocha_file_close(MochaFile *f) {
     if (!f->is_open) return;
     fclose(f->handle);
-    free(f->path);
+    f->handle  = NULL;
     free(f->mode);
-    f->path    = NULL;
     f->mode    = NULL;
     f->is_open = 0;
-    free(f);          // NEW: struct itself was never freed
+    /* f and f->path stay alive on purpose: the Mocha variable still points at f,
+       and the closed-file errors read f->is_open and f->path. */
+}
+
+/* Free the File object. Closes the file first if it is still open.
+   After this the handle is invalid: using it again is a use-after-free,
+   same contract as mocha_sb_free and mocha_ht_free. */
+void mocha_file_free(MochaFile *f) {
+    if (f->is_open) fclose(f->handle);
+    free(f->path);
+    free(f->mode);   /* NULL after close(); free(NULL) is fine */
+    free(f);
 }
 
 /* Standalone Utility — no handle needed */

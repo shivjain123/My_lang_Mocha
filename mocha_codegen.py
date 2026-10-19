@@ -87,8 +87,10 @@ STRINGBUILDER_METHOD_MAP = {
 FILE_METHOD_MAP = {
     "read":     ("i8*",  "mocha_file_read"),
     "readLine": ("i8*",  "mocha_file_readline"),
+    "eof":      ("i8",   "mocha_file_eof"),
     "write":    ("void", "mocha_file_write"),
     "close":    ("void", "mocha_file_close"),
+    "free":     ("void", "mocha_file_free"),
 }
 
 HASHTABLE_METHOD_MAP = {
@@ -184,6 +186,7 @@ class CodeGen:
         ]
         self.method_return_types["File_read"]     = "i8*"
         self.method_return_types["File_readLine"] = "i8*"
+        self.method_return_types["File_eof"] = "i8"
         self.method_return_types["File_write"]    = "void"
         self.method_return_types["File_close"]    = "void"
 
@@ -492,7 +495,15 @@ class CodeGen:
         ret_type, c_func = method_map[member]
         args = self._collect_args(node)
         all_args = [(obj_reg, obj_llvm_type)] + args
-        return self._emit_call(ret_type, c_func, all_args)
+        result = self._emit_call(ret_type, c_func, all_args)
+        # RC (File only): mocha_file_write only fputs its string and never keeps it,
+        # so a fresh (non-borrowed) string temp is orphaned after the call.
+        if type_name == "File":
+            positional = [a for a in node.args if not isinstance(a, Assignment)]
+            for a_node, (a_reg, a_type) in zip(positional, args):
+                if a_type == "i8*" and not isinstance(a_node, (Identifier, MemberAccess, Index2DAccess)):
+                    self.emit(f"  call void @rc_release(i8* {a_reg})")
+        return result
     
     def compute_struct_size(self, class_name: str, visited=None) -> int:
         """
@@ -952,8 +963,10 @@ class CodeGen:
                 "declare %struct.MochaFile* @mocha_file_open(i8*, i8*)",
                 "declare i8*  @mocha_file_read(%struct.MochaFile*)",
                 "declare i8*  @mocha_file_readline(%struct.MochaFile*)",
+                "declare i8   @mocha_file_eof(%struct.MochaFile*)",
                 "declare void @mocha_file_write(%struct.MochaFile*, i8*)",
                 "declare void @mocha_file_close(%struct.MochaFile*)",
+                "declare void @mocha_file_free(%struct.MochaFile*)",
                 "declare i8   @mocha_file_exists(i8*)",
             ],
 
@@ -1252,6 +1265,10 @@ class CodeGen:
             if node.member == "size":
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call i32 @mocha_set_size(%MochaSet* {obj_reg})")
+                # RC: a set returned by a call is a fresh temporary we own; the size is a plain
+                # int that never points into it, so release it after the read
+                if isinstance(node.obj, FunctionCall):
+                    self.emit(f"  call void @mocha_set_release(%MochaSet* {obj_reg})")
                 return (tmp, "i32")
         
         if obj_type == "%struct.MochaComplex*" and node.member in ("real", "imag"):
@@ -2505,6 +2522,14 @@ class CodeGen:
                 self.local_mocha_types["__chain2d_tmp"] = "float[][]"
                 return self.gen_array2d_method_call(obj_reg, member, node, "__chain2d_tmp")
 
+            elif obj_type == "%MochaSet*":
+                # chained call on a set-returning call result, e.g. a.union(b).size()
+                result = self.gen_set_method_call(obj_reg, member, node)
+                # RC: the receiver is a fresh temporary set (a call result is owned by us)
+                # and no set method keeps a pointer to it, so release it after the call
+                self.emit(f"  call void @mocha_set_release(%MochaSet* {obj_reg})")
+                return result
+
             elif obj_type == "%struct.MochaComplex*":
                 return self._dispatch_struct_method(obj_reg, "%struct.MochaComplex*", COMPLEX_METHOD_MAP, "Complex", member, node)
 
@@ -2822,17 +2847,26 @@ class CodeGen:
             else:
                 self.emit(f"  {tmp} = call i8* @mocha_tell(i8* null)")
             return (tmp, "i8*")
+
         if func_name == "open":
-            path_reg, _ = args[0]
-            mode_reg, _ = args[1]
+            path_reg, path_type = args[0]
+            mode_reg, mode_type = args[1]
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call %struct.MochaFile* @mocha_file_open(i8* {path_reg}, i8* {mode_reg})")
+            # RC: mocha_file_open strdup's both strings and never keeps the originals,
+            # so a fresh (non-borrowed) string temp is orphaned after the call.
+            for a_node, a_reg, a_type in ((node.args[0], path_reg, path_type), (node.args[1], mode_reg, mode_type)):
+                if a_type == "i8*" and not isinstance(a_node, (Identifier, MemberAccess, Index2DAccess)):
+                    self.emit(f"  call void @rc_release(i8* {a_reg})")
             return (tmp, "%struct.MochaFile*")
 
         if func_name == "exists":
-            path_reg, _ = args[0]
+            path_reg, path_type = args[0]
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call i8 @mocha_file_exists(i8* {path_reg})")
+            # RC: mocha_file_exists only fopen's the path to test it, never keeps it.
+            if path_type == "i8*" and not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
+                self.emit(f"  call void @rc_release(i8* {path_reg})")
             return (tmp, "i8")
         
         # -------------------------------------------------------
@@ -5659,6 +5693,7 @@ class CodeGen:
             if val_type == "i8*" and not isinstance(node.args[0], (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {val_reg})")
             return ("void", "void")
+        
         elif member == "delete":
             val_reg, val_type = self.gen_expr(node.args[0])
             cast = self.box_value(val_reg, val_type)
