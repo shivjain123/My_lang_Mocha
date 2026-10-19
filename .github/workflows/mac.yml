@@ -1,0 +1,17 @@
+name: Mac check
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Say hello
+        run: |
+          uname -m
+          sw_vers
+          python3 --version
+          clang --version
