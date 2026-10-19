@@ -9,9 +9,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Say hello
-        run: |
-          uname -m
-          sw_vers
-          python3 --version
-          clang --version
+      - name: Look at the files
+        run: ls
+      - name: Try mocha help
+        run: bash ./mocha help
