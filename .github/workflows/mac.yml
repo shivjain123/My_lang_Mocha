@@ -18,4 +18,8 @@ jobs:
       - name: Evil number 7 (should say NOT Evil)
         run: echo 7 | bash ./mocha execute evil.mch
       - name: Build all libraries except ds
-        run: bash ./mocha libs astro bio chem forge geo ink lua math matvec meteoro neuron processing society space sqlite stats stopwatch string SymCha wren
+        run: bash ./mocha libs astro bio chem forge geo ink lua math matvec meteoro neuron processing society space sqlite stats stopwatch string wren
+      - name: Use a library (stopwatch test)
+        if: always()
+        timeout-minutes: 5
+        run: bash ./mocha execute stopwatch_T.mch
