@@ -23,3 +23,7 @@ jobs:
         if: always()
         timeout-minutes: 5
         run: bash ./mocha execute stopwatch_T.mch
+      - name: Native code test (Lua FFI)
+        if: always()
+        timeout-minutes: 5
+        run: bash ./mocha execute lua_ffi.mch
