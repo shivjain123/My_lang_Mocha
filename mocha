@@ -21,6 +21,7 @@ show_help() {
     echo "  mocha serve [page.html] [port]   Open a wasm page in the browser"
     echo "  mocha web <file.mch> [fn ...]    Build as WebAssembly and open it in the browser"
     echo "  mocha update                     Pull the latest compiler + libraries"
+    echo "  mocha libs [name ...]            Rebuild all libraries (or just the named ones)"
 }
 
 if [ $# -eq 0 ]; then
@@ -38,6 +39,12 @@ if [ "$1" = "update" ]; then
 fi
 
 python3 "$SCRIPT_DIR/mocha_update.py" check || true
+
+if [ "$1" = "libs" ]; then
+    shift
+    python3 "$SCRIPT_DIR/mocha_libs.py" "$@"
+    exit $?
+fi
 
 if [ "$1" = "repl" ]; then
     python3 "$REPL"
