@@ -17,3 +17,5 @@ jobs:
         run: echo 5 | bash ./mocha execute evil.mch
       - name: Evil number 7 (should say NOT Evil)
         run: echo 7 | bash ./mocha execute evil.mch
+      - name: Build all libraries except ds
+        run: bash ./mocha libs astro bio chem forge geo ink lua math matvec meteoro neuron processing society space sqlite stats stopwatch string SymCha wren
