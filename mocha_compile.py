@@ -1218,7 +1218,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.2")
+    print(f"🔥 Mocha Compiler v1.3")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):
@@ -1668,10 +1668,10 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
                 "-lbcrypt",
             ]
         else:
-            link_cmd += [
-                "-fuse-ld=lld",
-                "-lm",
-            ]
+            import sys
+            if sys.platform != "darwin":
+                link_cmd.append("-fuse-ld=lld")
+            link_cmd.append("-lm")
 
         if needs_lua:
             link_cmd.append(LUA_LIB)
@@ -1705,7 +1705,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
                 print(f"  ❌ linking failed:\n{result.stderr}\n{result.stdout}")
             return False
         else:
-            print(f"✅ Linking succeeded!")
+            print(f"    ✅ Linking succeeded!")
 
     # Sign the executable
     print("  🔏 Signing executable...")
