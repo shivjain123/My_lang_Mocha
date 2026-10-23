@@ -23,14 +23,14 @@ from "mocha-processing" import *;
 import mochaSymcha from "mocha-SymCha" as Sym;
 from "mocha-string" import *;
 
-function puts(s: str) -> int native puts;
+function print(s: str) -> int native print;
 
 // =============================================================================
 // SECTION 1 — Complex Numbers
 // =============================================================================
 
 function test_complex_basics( ) -> null {
-    puts("=== 1a. Complex basics ===");
+    print("=== 1a. Complex basics ===");
 
     var z1: Complex = 2+3im;
     var z2: Complex = 1+1im;
@@ -43,7 +43,7 @@ function test_complex_basics( ) -> null {
 };
 
 function test_complex_promotion() -> null {
-    puts("=== 1b. float -> Complex promotion ===");
+    print("=== 1b. float -> Complex promotion ===");
 
     var a: float = 2.0;
     var d: float = 5.0;
@@ -62,7 +62,7 @@ function test_complex_promotion() -> null {
 };
 
 function test_complex_str_set() -> null {
-    puts("=== 1c. str set dedup ===");
+    print("=== 1c. str set dedup ===");
 
     var s: set<str> = <>;
     s.insert("bag");
@@ -71,7 +71,7 @@ function test_complex_str_set() -> null {
 };
 
 function test_conjugate() -> null {
-    puts("=== 1d. Conjugate ===");
+    print("=== 1d. Conjugate ===");
 
     var z: Complex = 3 + 4im;
     var zc: Complex = z.conjugate();
@@ -89,37 +89,37 @@ function test_conjugate() -> null {
 // =============================================================================
 
 function test_set_operations() -> null {
-    puts("=== 2. Set operations ===");
+    print("=== 2. Set operations ===");
 
     var a: set<int> = <1, 2, 3, 4, 5>;
     var b: set<int> = <3, 4, 5, 6, 7>;
 
     var u: set<int> = a.union(b);
-    puts("--- union ---");
+    print("--- union ---");
     for each c in <u> {
         print(c, newLine=true);
     };
 
     var i: set<int> = a.intersect(b);
-    puts("--- intersect ---");
+    print("--- intersect ---");
     for each d in <i> {
         print(d, newLine=true);
     };
 
     var x: set<int> = a.xor(b);
-    puts("--- xor ---");
+    print("--- xor ---");
     for each el in <x> {
         print(el, newLine=true);
     };
 
     var rd: set<int> = a.rel_diff(b);
-    puts("--- rel_diff a-b ---");
+    print("--- rel_diff a-b ---");
     for each el1 in <rd> {
         print(el1, newLine=true);
     };
 
     var rd2: set<int> = b.rel_diff(a);
-    puts("--- rel_diff b-a ---");
+    print("--- rel_diff b-a ---");
     for each el2 in <rd2> {
         print(el2, newLine=true);
     };
@@ -131,7 +131,7 @@ function test_set_operations() -> null {
 // =============================================================================
 
 function test_dict_merge() -> null {
-    puts("=== 3a. Dict merge ===");
+    print("=== 3a. Dict merge ===");
 
     var d1: dict = {
         "name": "Shiv",
@@ -161,88 +161,88 @@ function test_dict_merge() -> null {
 };
 
 function runHashTableTests() -> null {
-    puts("=== 3b. HashTable ===");
-    puts("--- 1. Basic put / get / has ---");
+    print("=== 3b. HashTable ===");
+    print("--- 1. Basic put / get / has ---");
 
     var ht: HashTable = HashTable();
     ht.put("name", "Shiv");
     ht.put("lang", "Mocha");
     ht.put("version", "0.7");
 
-    puts(ht.get("name"));
-    puts(ht.get("lang"));
-    puts(ht.get("version"));
+    print(ht.get("name"));
+    print(ht.get("lang"));
+    print(ht.get("version"));
 
     if (ht.has("name")) {
-        puts("has name: true");
+        print("has name: true");
     };
     if (ht.has("missing") == false) {
-        puts("has missing: false");
+        print("has missing: false");
     };
 
-    puts("--- 2. Update existing key ---");
+    print("--- 2. Update existing key ---");
     ht.put("name", "Shiv Jain");
-    puts(ht.get("name"));  // Shiv Jain
-    puts(ht.get("lang"));  // Mocha
+    print(ht.get("name"));  // Shiv Jain
+    print(ht.get("lang"));  // Mocha
 
-    puts("--- 3. Remove + has after remove ---");
+    print("--- 3. Remove + has after remove ---");
     ht.put("temp", "delete me");
     if (ht.has("temp")) {
-        puts("has temp: true");
+        print("has temp: true");
     };
     ht.remove("temp");
     if (ht.has("temp") == false) {
-        puts("temp gone: true");
+        print("temp gone: true");
     };
-    puts(ht.get("name"));  // Shiv Jain
-    puts(ht.get("lang"));  // Mocha
+    print(ht.get("name"));  // Shiv Jain
+    print(ht.get("lang"));  // Mocha
 
-    puts("--- 4. size() ---");
+    print("--- 4. size() ---");
     var ht2: HashTable = HashTable();
-    puts(str(ht2.size()));  // 0
+    print(str(ht2.size()));  // 0
     ht2.put("a", "1");
-    puts(str(ht2.size()));  // 1
+    print(str(ht2.size()));  // 1
     ht2.put("b", "2");
     ht2.put("c", "3");
-    puts(str(ht2.size()));  // 3
+    print(str(ht2.size()));  // 3
     ht2.remove("b");
-    puts(str(ht2.size()));  // 2
+    print(str(ht2.size()));  // 2
     ht2.put("b", "back");
-    puts(str(ht2.size()));  // 3
+    print(str(ht2.size()));  // 3
 
-    puts("--- 5. clear() ---");
+    print("--- 5. clear() ---");
     var ht3: HashTable = HashTable();
     ht3.put("x", "1");
     ht3.put("y", "2");
     ht3.put("z", "3");
-    puts(str(ht3.size()));  // 3
+    print(str(ht3.size()));  // 3
     ht3.clear();
-    puts(str(ht3.size()));  // 0
+    print(str(ht3.size()));  // 0
     if (ht3.has("x") == false) {
-        puts("x gone after clear: true");
+        print("x gone after clear: true");
     };
     ht3.put("fresh", "start");
-    puts(ht3.get("fresh")); // start
-    puts(str(ht3.size()));  // 1
+    print(ht3.get("fresh")); // start
+    print(str(ht3.size()));  // 1
 
-    puts("--- 6. keys() and values() ---");
+    print("--- 6. keys() and values() ---");
     var ht4: HashTable = HashTable();
     ht4.put("apple",  "fruit");
     ht4.put("carrot", "vegetable");
     ht4.put("salmon", "fish");
-    puts(str(ht4.size()));  // 3
+    print(str(ht4.size()));  // 3
     var keys: str[] = ht4.keys();
-    puts(str(keys.length)); // 3
+    print(str(keys.length)); // 3
     for each k in keys {
-        puts(k);
+        print(k);
     };
     var vals: str[] = ht4.values();
-    puts(str(vals.length)); // 3
+    print(str(vals.length)); // 3
     for each v in vals {
-        puts(v);
+        print(v);
     };
 
-    puts("--- 7. Collision stress (20 keys, forces resize) ---");
+    print("--- 7. Collision stress (20 keys, forces resize) ---");
     var ht5: HashTable = HashTable();
     ht5.put("k0",  "v0");  ht5.put("k1",  "v1");  ht5.put("k2",  "v2");
     ht5.put("k3",  "v3");  ht5.put("k4",  "v4");  ht5.put("k5",  "v5");
@@ -251,45 +251,45 @@ function runHashTableTests() -> null {
     ht5.put("k12", "v12"); ht5.put("k13", "v13"); ht5.put("k14", "v14");
     ht5.put("k15", "v15"); ht5.put("k16", "v16"); ht5.put("k17", "v17");
     ht5.put("k18", "v18"); ht5.put("k19", "v19");
-    puts(str(ht5.size()));  // 20
-    puts(ht5.get("k0"));   // v0
-    puts(ht5.get("k5"));   // v5
-    puts(ht5.get("k10"));  // v10
-    puts(ht5.get("k15"));  // v15
-    puts(ht5.get("k19"));  // v19
+    print(str(ht5.size()));  // 20
+    print(ht5.get("k0"));   // v0
+    print(ht5.get("k5"));   // v5
+    print(ht5.get("k10"));  // v10
+    print(ht5.get("k15"));  // v15
+    print(ht5.get("k19"));  // v19
 
-    puts("--- 8. MARKED slot reuse ---");
+    print("--- 8. MARKED slot reuse ---");
     var ht6: HashTable = HashTable();
     ht6.put("alpha", "1");
     ht6.put("beta",  "2");
     ht6.put("gamma", "3");
     ht6.remove("beta");
-    puts(str(ht6.size()));  // 2
+    print(str(ht6.size()));  // 2
     ht6.put("beta", "new");
-    puts(str(ht6.size()));  // 3
-    puts(ht6.get("beta"));  // new
-    puts(ht6.get("alpha")); // 1
-    puts(ht6.get("gamma")); // 3
+    print(str(ht6.size()));  // 3
+    print(ht6.get("beta"));  // new
+    print(ht6.get("alpha")); // 1
+    print(ht6.get("gamma")); // 3
     ht6.remove("alpha");
     ht6.remove("beta");
     ht6.remove("gamma");
-    puts(str(ht6.size()));  // 0
+    print(str(ht6.size()));  // 0
     ht6.put("alpha", "back");
     ht6.put("beta",  "back");
     ht6.put("gamma", "back");
-    puts(str(ht6.size()));  // 3
-    puts(ht6.get("alpha")); // back
-    puts(ht6.get("beta"));  // back
-    puts(ht6.get("gamma")); // back
+    print(str(ht6.size()));  // 3
+    print(ht6.get("alpha")); // back
+    print(ht6.get("beta"));  // back
+    print(ht6.get("gamma")); // back
 
     // TEST 9 — Levenshtein hint (fatal — uncomment to test)
     // var ht7: HashTable = HashTable();
     // ht7.put("name", "Shiv");
     // ht7.put("lang", "Mocha");
-    // puts(ht7.get("naem"));  // MochaRuntimeError: Key 'naem' not found. Did you mean 'name'?
-    // puts(ht7.get("lnag"));  // MochaRuntimeError: Key 'lnag' not found. Did you mean 'lang'?
+    // print(ht7.get("naem"));  // MochaRuntimeError: Key 'naem' not found. Did you mean 'name'?
+    // print(ht7.get("lnag"));  // MochaRuntimeError: Key 'lnag' not found. Did you mean 'lang'?
 
-    puts("All HashTable tests done!");
+    print("All HashTable tests done!");
 };
 
 
@@ -298,7 +298,7 @@ function runHashTableTests() -> null {
 // =============================================================================
 
 function test_comprehension() -> null {
-    puts("=== 4. List Comprehension ===");
+    print("=== 4. List Comprehension ===");
 
     var nums: int[] = [1, 2, 3, 4, 5];
     var doubled: int[] = [x*2 for each x in nums];
@@ -351,55 +351,55 @@ tag Status {
 };
 
 function test_tags() -> null {
-    puts("=== 5. Tags ===");
+    print("=== 5. Tags ===");
 
-    puts("--- 1. Basic access + equality ---");
+    print("--- 1. Basic access + equality ---");
     var d: Direction = Direction.NORTH;
     if (d == Direction.NORTH) {
-        puts("NORTH correct");
+        print("NORTH correct");
     };
     if (d != Direction.SOUTH) {
-        puts("not SOUTH correct");
+        print("not SOUTH correct");
     };
 
-    puts("--- 2. Reassign ---");
+    print("--- 2. Reassign ---");
     var s: Status = Status.PENDING;
-    puts(s.name());   // PENDING
+    print(s.name());   // PENDING
     s = Status.RUNNING;
-    puts(s.name());   // RUNNING
+    print(s.name());   // RUNNING
     s = Status.DONE;
-    puts(s.name());   // DONE
+    print(s.name());   // DONE
 
-    puts("--- 3. Match ---");
+    print("--- 3. Match ---");
     var tok: TokenType = TokenType.PLUS;
     match(tok) {
-        case (TokenType.PLUS):       puts("plus");
-        case (TokenType.MINUS):      puts("minus");
-        case (TokenType.IDENTIFIER): puts("ident");
-        case (TokenType.INT_LIT):    puts("int lit");
-        default:                     puts("other");
+        case (TokenType.PLUS):       print("plus");
+        case (TokenType.MINUS):      print("minus");
+        case (TokenType.IDENTIFIER): print("ident");
+        case (TokenType.INT_LIT):    print("int lit");
+        default:                     print("other");
     };
 
     var tok2: TokenType = TokenType.IDENTIFIER;
     match(tok2) {
-        case (TokenType.PLUS):       puts("plus");
-        case (TokenType.MINUS):      puts("minus");
-        case (TokenType.IDENTIFIER): puts("ident");
-        case (TokenType.INT_LIT):    puts("int lit");
-        default:                     puts("other");
+        case (TokenType.PLUS):       print("plus");
+        case (TokenType.MINUS):      print("minus");
+        case (TokenType.IDENTIFIER): print("ident");
+        case (TokenType.INT_LIT):    print("int lit");
+        default:                     print("other");
     };
 
-    puts("--- 4. .name() ---");
+    print("--- 4. .name() ---");
     var n: Direction  = Direction.NORTH;
     var s2: Direction = Direction.SOUTH;
     var e: Direction  = Direction.EAST;
     var w: Direction  = Direction.WEST;
-    puts(n.name());   // NORTH
-    puts(s2.name());  // SOUTH
-    puts(e.name());   // EAST
-    puts(w.name());   // WEST
+    print(n.name());   // NORTH
+    print(s2.name());  // SOUTH
+    print(e.name());   // EAST
+    print(w.name());   // WEST
 
-    puts("--- 5. Tag in array ---");
+    print("--- 5. Tag in array ---");
     var tokens: TokenType[] = [
         TokenType.IDENTIFIER,
         TokenType.PLUS,
@@ -411,31 +411,31 @@ function test_tags() -> null {
     while (i < tokens.length) {
         var t: TokenType = tokens[i];
         match(t) {
-            case (TokenType.IDENTIFIER): puts("IDENTIFIER");
-            case (TokenType.PLUS):       puts("PLUS");
-            case (TokenType.INT_LIT):    puts("INT_LIT");
-            case (TokenType.SEMICOLON):  puts("SEMICOLON");
-            default:                     puts("OTHER");
+            case (TokenType.IDENTIFIER): print("IDENTIFIER");
+            case (TokenType.PLUS):       print("PLUS");
+            case (TokenType.INT_LIT):    print("INT_LIT");
+            case (TokenType.SEMICOLON):  print("SEMICOLON");
+            default:                     print("OTHER");
         };
         i++;
     };
 
-    puts("--- 6. Tag as function arg ---");
+    print("--- 6. Tag as function arg ---");
     var st: Status = Status.FAILED;
-    puts(st.name());  // FAILED
+    print(st.name());  // FAILED
 
-    puts("--- 7. Cross-variable equality ---");
+    print("--- 7. Cross-variable equality ---");
     var a: TokenType = TokenType.PLUS;
     var b: TokenType = TokenType.PLUS;
     var c: TokenType = TokenType.MINUS;
     if (a == b) {
-        puts("a == b correct");
+        print("a == b correct");
     };
     if (a != c) {
-        puts("a != c correct");
+        print("a != c correct");
     };
 
-    puts("All tag tests done!");
+    print("All tag tests done!");
 };
 
 
@@ -454,7 +454,7 @@ class Point {
 };
 
 function test_sort_objects() -> null {
-    puts("=== 6a. Lambda sort on objects ===");
+    print("=== 6a. Lambda sort on objects ===");
 
     var points: Point[] = [];
     points.push(Point(3, 9));
@@ -490,7 +490,7 @@ class Duck implements Speakable, Utterable {
 };
 
 function test_interface_diamond() -> null {
-    puts("=== 6b. Interface diamond ===");
+    print("=== 6b. Interface diamond ===");
     var duck: Duck = Duck();
     duck.speak();  // Quack!
 };
@@ -514,7 +514,7 @@ class ASTNode {
 };
 
 function test_self_referential() -> null {
-    puts("=== 6c. Self-referential class (ASTNode) ===");
+    print("=== 6c. Self-referential class (ASTNode) ===");
 
     var node: ASTNode = ASTNode();
     node.kind  = "IntLiteral";
@@ -536,54 +536,54 @@ function test_self_referential() -> null {
 // =============================================================================
 
 function test_tell() -> null {
-    puts("=== 7a. tell() ===");
+    print("=== 7a. tell() ===");
     var name: str = tell("What is your name? ");
     var age: str  = tell("Your age: ");
     print("Hello " + name + ", you are " + age, newLine=true);
 };
 
 function test_file_io() -> null {
-    puts("=== 7b. File I/O ===");
+    print("=== 7b. File I/O ===");
 
-    puts("--- Write ---");
+    print("--- Write ---");
     var w: File = open("test_io.txt", "write");
     w.write("Hello from Mocha!\n");
     w.write("Second line here.\n");
     w.write("Third line here.\n");
-    w.close();
-    puts("Written successfully.");
+    w.free();
+    print("Written successfully.");
 
-    puts("--- Exists ---");
+    print("--- Exists ---");
     if (exists("test_io.txt")) {
-        puts("test_io.txt exists!");
+        print("test_io.txt exists!");
     };
-    if (exists("ghost_file.txt") == false) {
-        puts("ghost_file.txt correctly not found.");
+    if (!exists("ghost_file.txt")) {
+        print("ghost_file.txt correctly not found.");
     };
 
-    puts("--- Read ---");
+    print("--- Read ---");
     var r: File = open("test_io.txt", "read");
     var content: str = r.read();
-    r.close();
-    puts(content);
+    r.free();
+    print(content);
 
-    puts("--- ReadLine ---");
+    print("--- ReadLine ---");
     var rl: File = open("test_io.txt", "read");
     var line: str = rl.readLine();
-    while (line != "") {
-        puts(line);
+    while (!rl.eof()) {
+        print(line);
         line = rl.readLine();
     };
-    rl.close();
+    rl.free();
 
-    puts("--- Append ---");
+    print("--- Append ---");
     var a: File = open("test_io.txt", "append");
     a.write("Appended line.\n");
-    a.close();
+    a.free();
     var r2: File = open("test_io.txt", "read");
     var content2: str = r2.read();
-    r2.close();
-    puts(content2);
+    r2.free();
+    print(content2);
 };
 
 
@@ -592,14 +592,14 @@ function test_file_io() -> null {
 // =============================================================================
 
 function test_substring() -> null {
-    puts("=== 8a. Substring (inclusive, Lua-style) ===");
+    print("=== 8a. Substring (inclusive, Lua-style) ===");
     var s: str = "Hello";
     var sub: str = s.substring(1, 3);  // inclusive both ends
     print(sub, newLine=true);           // Hel
 };
 
 function test_string_builder() -> null {
-    puts("=== 8b. StringBuilder ===");
+    print("=== 8b. StringBuilder ===");
 
     var sb: StringBuilder = StringBuilder();
     sb.append("Mocha");
@@ -622,7 +622,7 @@ function test_string_builder() -> null {
 // =============================================================================
 
 function test_distances() -> null {
-    puts("=== 9a. Distances ===");
+    print("=== 9a. Distances ===");
 
     var a: float[] = [0.0, 0.0];
     var b: float[] = [3.0, 4.0];
@@ -659,7 +659,7 @@ function test_distances() -> null {
 };
 
 function test_stats() -> null {
-    puts("=== 9b. Statistical functions ===");
+    print("=== 9b. Statistical functions ===");
 
     var data: float[] = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
 
@@ -724,21 +724,21 @@ function test_stats() -> null {
 // =============================================================================
 
 function test_scalers() -> null {
-    puts("=== 10. Scalers ===");
+    print("=== 10. Scalers ===");
 
     var train: float[] = [1.0, 2.0, 3.0, 4.0, 5.0];
     var test: float[]  = [0.0, 3.0, 6.0];
 
-    puts("--- StandardScaler ---");
+    print("--- StandardScaler ---");
     var ss: StandardScaler = StandardScaler();
     var ss_train: float[]  = ss.fit_transform(train);
-    puts("Transformed train:");
+    print("Transformed train:");
     var i: int = 0;
     while (i < ss_train.length) {
         print(ss_train[i], newLine=true);
         i++;
     };
-    puts("Transformed test:");
+    print("Transformed test:");
     var ss_test: float[] = ss.transform(test);
     i = 0;
     while (i < ss_test.length) {
@@ -746,16 +746,16 @@ function test_scalers() -> null {
         i++;
     };
 
-    puts("--- MinMaxScaler ---");
+    print("--- MinMaxScaler ---");
     var mms: MinMaxScaler  = MinMaxScaler();
     var mms_train: float[] = mms.fit_transform(train);
-    puts("Transformed train:");
+    print("Transformed train:");
     i = 0;
     while (i < mms_train.length) {
         print(mms_train[i], newLine=true);
         i++;
     };
-    puts("Transformed test:");
+    print("Transformed test:");
     var mms_test: float[] = mms.transform(test);
     i = 0;
     while (i < mms_test.length) {
@@ -763,11 +763,11 @@ function test_scalers() -> null {
         i++;
     };
 
-    puts("--- RobustScaler (with outlier 100.0) ---");
+    print("--- RobustScaler (with outlier 100.0) ---");
     var outlier_data: float[] = [1.0, 2.0, 3.0, 4.0, 5.0, 100.0];
     var rs: RobustScaler      = RobustScaler();
     var rs_train: float[]     = rs.fit_transform(outlier_data);
-    puts("Transformed:");
+    print("Transformed:");
     i = 0;
     while (i < rs_train.length) {
         print(rs_train[i], newLine=true);
@@ -781,7 +781,7 @@ function test_scalers() -> null {
 // =============================================================================
 
 function test_sym_diff() -> null {
-    puts("=== 11. Symbolic differentiation ===");
+    print("=== 11. Symbolic differentiation ===");
 
     // d/dx(x/x) should simplify to 0
     var expr: Expr = Sym.div_e(Sym.var_e("x"), Sym.var_e("x"));

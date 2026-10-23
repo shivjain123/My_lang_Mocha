@@ -27,8 +27,6 @@
 // FFI DECLARATIONS
 // ============================================================
 
-// C stdlib
-function puts(s: str) -> int native puts;
 
 // C++ FFI
 function cpp_add(a: int, b: int) -> int native mocha_cpp_add;
@@ -64,19 +62,19 @@ function sqlite3_close(db: null) -> null native mocha_sqlite3_close;
 // ============================================================
 
 function section_cpp() -> null {
-    puts("--- 1. C++ FFI ---");
+    print("--- 1. C++ FFI ---");
 
     var sum: int = cpp_add(21, 21);
-    puts(str(sum));           // 42
+    print(str(sum));           // 42
 
     var p: float = cpp_power(2.0, 10.0);
-    puts(str(p));             // 1024.0
+    print(str(p));             // 1024.0
 
     var greeting: str = cpp_greet("Mocha");
-    puts(greeting);           // Hello from C++!
+    print(greeting);           // Hello from C++!
 
     var len: int = cpp_strlen("Hello Mocha!");
-    puts(str(len));           // 12
+    print(str(len));           // 12
 };
 
 
@@ -85,29 +83,29 @@ function section_cpp() -> null {
 // ============================================================
 
 function section_lua() -> null {
-    puts("--- 2. Lua FFI ---");
+    print("--- 2. Lua FFI ---");
 
     var state: null = lua_new();
 
     // Arithmetic
     var r1: int = lua_dostring(state, "x = 6 * 7");
-    puts(str(r1));            // 0 (success)
+    print(str(r1));            // 0 (success)
     var x: float = lua_getnumber(state, "x");
-    puts(str(x));             // 42.0
+    print(str(x));             // 42.0
 
     // String
     var r2: int = lua_dostring(state, "msg = 'Hello from Lua!'");
     var msg: str = lua_getstring(state, "msg");
-    puts(msg);                // Hello from Lua!
+    print(msg);                // Hello from Lua!
 
     // Fibonacci in Lua
     var r3: int = lua_dostring(state,
         "function fib(n) if n <= 1 then return n end return fib(n-1) + fib(n-2) end result = fib(20)");
     var result: float = lua_getnumber(state, "result");
-    puts(str(result));        // 6765.0
+    print(str(result));        // 6765.0
 
     lua_close(state);
-    puts("Done!");
+    print("Done!");
 };
 
 
@@ -116,12 +114,12 @@ function section_lua() -> null {
 // ============================================================
 
 function section_rust() -> null {
-    puts("--- 3. Rust FFI ---");
+    print("--- 3. Rust FFI ---");
 
-    puts(str(rust_add(21, 21)));        // 42
-    puts(str(rust_multiply(6, 7)));     // 42
-    puts(str(rust_fibonacci(40)));      // 102334155
-    puts(str(rust_factorial(10)));      // 3628800
+    print(str(rust_add(21, 21)));        // 42
+    print(str(rust_multiply(6, 7)));     // 42
+    print(str(rust_fibonacci(40)));      // 102334155
+    print(str(rust_factorial(10)));      // 3628800
 };
 
 
@@ -130,13 +128,13 @@ function section_rust() -> null {
 // ============================================================
 
 function section_shell() -> null {
-    puts("--- 4. Shell ---");
+    print("--- 4. Shell ---");
 
     var r1: int = system("echo Hello from Mocha via shell!");
-    puts(str(r1));    // 0 (success) — echo output appears before this
+    print(str(r1));    // 0 (success) — echo output appears before this
 
     var r2: int = system("dir /b *.mch");
-    puts(str(r2));    // 0 (success) — dir listing appears before this
+    print(str(r2));    // 0 (success) — dir listing appears before this
 };
 
 
@@ -145,24 +143,24 @@ function section_shell() -> null {
 // ============================================================
 
 function section_sqlite_write() -> null {
-    puts("--- 5. SQLite3 Write ---");
+    print("--- 5. SQLite3 Write ---");
 
     var db: null = sqlite3_open("mocha_test.db");
 
     var r1: int = sqlite3_exec(db,
         "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT);");
-    puts(str(r1));    // 0 (success)
+    print(str(r1));    // 0 (success)
 
     var r2: int = sqlite3_exec(db,
         "INSERT INTO users (name) VALUES ('Mocha');");
-    puts(str(r2));    // 0
+    print(str(r2));    // 0
 
     var r3: int = sqlite3_exec(db,
         "INSERT INTO users (name) VALUES ('Shiv');");
-    puts(str(r3));    // 0
+    print(str(r3));    // 0
 
     sqlite3_close(db);
-    puts("Done!");
+    print("Done!");
 };
 
 
@@ -171,15 +169,15 @@ function section_sqlite_write() -> null {
 // ============================================================
 
 function section_sqlite_read() -> null {
-    puts("--- 6. SQLite3 Read ---");
+    print("--- 6. SQLite3 Read ---");
 
     var db: null = sqlite3_open("mocha_test.db");
 
     var r1: int = sqlite3_query(db, "SELECT * FROM users;");
-    puts(str(r1));    // 0 — rows printed by callback before this
+    print(str(r1));    // 0 — rows printed by callback before this
 
     sqlite3_close(db);
-    puts("Done!");
+    print("Done!");
 };
 
 
@@ -188,8 +186,8 @@ function section_sqlite_read() -> null {
 // ============================================================
 
 function runFFITests(didLoad) -> null {
-    puts("Mocha v0.5 — FFI Tests");
-    puts("==========================");
+    print("Mocha v0.5 — FFI Tests");
+    print("==========================");
 
     section_cpp();
     section_lua();
@@ -198,6 +196,6 @@ function runFFITests(didLoad) -> null {
     section_sqlite_write();
     section_sqlite_read();
 
-    puts("==========================");
-    puts("All FFI Tests Complete!");
+    print("==========================");
+    print("All FFI Tests Complete!");
 };

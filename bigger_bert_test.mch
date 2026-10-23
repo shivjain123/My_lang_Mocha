@@ -43,22 +43,8 @@ function main(didLoad) -> null {
     var model: BertClassifier = BertClassifier(positive, negative, 32, 16, 64);
     model.train(positive, negative, 2000, 0.0001);
 
-    var correct: int = 0;
-    var i: int = 0;
-    while (i < pos_test.length) {
-        var sp: float = model.predict(pos_test[i]);
-        print("[pos] ", pos_test[i], " -> ", sp, "\n");
-        if (sp > 0.5) { correct++; };
-        i++;
-    };
-    var j: int = 0;
-    while (j < neg_test.length) {
-        var sn: float = model.predict(neg_test[j]);
-        print("[neg] ", neg_test[j], " -> ", sn, "\n");
-        if (sn < 0.5) { correct++; };
-        j++;
-    };
-    print("Correct: ", correct, " / 12\n");
+    var acc: float = model.accuracy(pos_test, neg_test);
+    print("Accuracy: ", acc, "\n");
 
     model.dispose();
 };

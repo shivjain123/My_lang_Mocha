@@ -1,17 +1,27 @@
-$names = @()
-foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_$c" }
-foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_a$c" }
-foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_b$c" }
-foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_c$c" }
-foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_d$c" }
-foreach ($c in [char[]]([int][char]'a'..[int][char]'z')) { $names += "test_e$c" }
+param([switch]$SkipLibs)
+
+# --- 1. libraries ---
+$libsOk = $true
+if (-not $SkipLibs) {
+    Write-Host "=== Rebuilding libraries ===" -ForegroundColor Cyan
+    & mocha libs
+    $libsOk = ($LASTEXITCODE -eq 0)
+    Write-Host ""
+    Write-Host "=== Running tests ===" -ForegroundColor Cyan
+}
+
+# --- 2. find tests: test_a..test_z, then test_aa..test_zz (shortest name first, then alphabetical) ---
+$names = Get-ChildItem -Filter "test_*.mch" |
+    Where-Object { $_.BaseName -match '^test_[a-z]{1,2}$' } |
+    Sort-Object @{ Expression = { $_.BaseName.Length } }, BaseName |
+    ForEach-Object { $_.BaseName }
+
+if (-not $names) { Write-Host "No test_*.mch files found in this folder." -ForegroundColor Yellow }
 
 $limitMB = 9
 $bad = @()
 
 foreach ($n in $names) {
-    if (-not (Test-Path "$n.mch")) { Write-Host "$n  (no .mch, skipped)"; continue }
-
     & mocha "$n.mch" *> $null
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$n.exe")) {
         Write-Host "$n  COMPILE FAIL" -ForegroundColor Red
@@ -42,5 +52,6 @@ foreach ($n in $names) {
 }
 
 Write-Host ""
-if ($bad.Count -eq 0) { Write-Host "ALL CLEAN" -ForegroundColor Green }
-else { Write-Host ("PROBLEMS: " + ($bad -join ", ")) -ForegroundColor Red }
+if (-not $libsOk) { Write-Host "LIBRARIES: some failed to build (see the list above)" -ForegroundColor Red }
+if ($bad.Count -eq 0 -and $libsOk) { Write-Host "ALL CLEAN" -ForegroundColor Green }
+elseif ($bad.Count -gt 0) { Write-Host ("PROBLEMS: " + ($bad -join ", ")) -ForegroundColor Red }

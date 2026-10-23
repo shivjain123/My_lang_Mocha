@@ -1,4 +1,5 @@
 //Zig Test
+//On the RHS, mocha_zig_* is needed. compiler does lazy linking by ir content
 function zig_add(a: int, b: int) -> int native mocha_zig_add;
 function zig_multiply(a: int, b: int) -> int native mocha_zig_multiply;
 function zig_fibonacci(n: int) -> int native mocha_zig_fibonacci;

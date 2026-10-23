@@ -25,6 +25,7 @@ const DENSITY_FACTOR: float = 1.6605;
 ~~ Computes Richter local magnitude (ML) from peak Wood-Anderson amplitude
 ~~ and epicentral distance. amplitude_mm in mm, distance_km in km.
 function richter_magnitude(amplitude_mm: float, distance_km: float) -> float {
+    if (amplitude_mm <= 0.0) { c_print_err("MochaLibError (mocha-geo): Amplitude cannot be negative"); c_exit(2); };
     const LOG10_A: float = amplitude_mm.log10().real;
     const LOG10_D: float = distance_km.log10().real;
     return LOG10_A + 1.11 * LOG10_D + 0.00189 * distance_km - 2.09;
@@ -155,6 +156,12 @@ function unit_cell_volume(a: float, b: float, c: float, alpha: float, beta: floa
     const CG2: float = COS_G * COS_G;
     const CROSS: float = 2.0 * COS_A * COS_B * COS_G;
     const INNER: float = 1.0 - CA2 - CB2 - CG2 + CROSS;
+    print(INNER);
+    // GUARD: INNER must be non-negative (impossible geometry check)
+    if (INNER < 1E-10) {
+        c_print_err("MochaLibError (mocha-geo): Invalid lattice angles — cell geometry impossible.");
+        c_exit(2);
+    };
     const SQRT_INNER: float = INNER.sqrt().real;
     const ABC: float = a * b * c;
     return ABC * SQRT_INNER;
@@ -408,7 +415,15 @@ function porosity(void_volume: float, total_volume: float) -> float {
 ~~ Open-channel flow velocity in m/s via Manning's equation.
 ~~ manning_n = roughness coefficient (dimensionless), hydraulic_radius in m, slope as decimal.
 function manning_velocity(manning_n: float, hydraulic_radius: float, slope: float) -> float {
-    const R_EXP: float = float(c_pow(hydraulic_radius, 0.666667));
+    if (slope < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Slope cannot be negative.");
+        c_exit(2);
+    };
+    if (manning_n <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Manning's n must be positive.");
+        c_exit(2);
+    };
+    const R_EXP: float = float(c_pow(hydraulic_radius, (2.0/3.0)));
     const S_SQRT: float = slope.sqrt().real;
     return (1.0 / manning_n) * R_EXP * S_SQRT;
 };
@@ -429,10 +444,14 @@ function reynolds_number_pipe(velocity: float, diameter: float, kinematic_viscos
 ~~ Q in m³/s, T = transmissivity in m²/s, t in seconds, r in m, S = storativity (dimensionless).
 ~~ Valid for large t / small r (u < 0.01).
 function cooper_jacob_drawdown(q: float, t_aquifer: float, time_s: float, r: float, storativity: float) -> float {
-    const COEF: float = (2.3 * q) / (4.0 * PI * t_aquifer);
+    const COEF: float = ((10.0).log().real * q) / (4.0 * PI * t_aquifer);
     const NUMERATOR: float = 2.25 * t_aquifer * time_s;
     const DENOM: float = r * r * storativity;
     const LOG_ARG: float = NUMERATOR / DENOM;
+    if (LOG_ARG <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Log argument must be positive — check T, t, r, S.");
+        c_exit(2);
+    };
     const LOG10_VAL: float = LOG_ARG.log10().real;
     return COEF * LOG10_VAL;
 };
@@ -458,6 +477,10 @@ tag RockType {
 ~~ volume_km3 in cubic kilometers. Coarse approximation from Newhall & Self (1982) volume boundaries.
 ~~ VEI = floor(log10(V_m3)) - 3, clamped to [0, 8].
 function volcanic_explosivity_index_estimate(volume_km3: float) -> int {
+    if (volume_km3 <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Tephra volume must be positive.");
+        c_exit(2);
+    };
     const V_M3: float = volume_km3 * 1000000000.0;
     const LOG10_V: float = V_M3.log10().real;
     const VEI_RAW: float = LOG10_V - 3.0;
@@ -474,6 +497,10 @@ function volcanic_explosivity_index_estimate(volume_km3: float) -> int {
 ~~ Eruption column height in km from mass eruption rate, via the Sparks et al. scaling law.
 ~~ mass_rate_kgs in kg/s. H = 0.236 * Q^0.25.
 function eruption_column_height(mass_rate_kgs: float) -> float {
+    if (mass_rate_kgs <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Mass eruption rate must be positive.");
+        c_exit(2);
+    };
     const Q_POW: float = float(c_pow(mass_rate_kgs, 0.25));
     return 0.236 * Q_POW;
 };
@@ -481,6 +508,10 @@ function eruption_column_height(mass_rate_kgs: float) -> float {
 ~~ Mass eruption rate in kg/s from eruption column height (inverse Sparks scaling).
 ~~ height_km in km. Q = (H/0.236)^4.
 function mass_eruption_rate(height_km: float) -> float {
+    if (height_km <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Eruption column height must be positive.");
+        c_exit(2);
+    };
     const BASE: float = height_km / 0.236;
     return float(c_pow(BASE, 4.0));
 };
@@ -489,6 +520,18 @@ function mass_eruption_rate(height_km: float) -> float {
 ~~ pressure_gradient in Pa, radius in m, viscosity in Pa·s, conduit_length in m.
 ~~ v = ΔP·r² / (8·η·L).
 function magma_ascent_velocity(pressure_gradient: float, radius: float, viscosity: float, conduit_length: float) -> float {
+    if (radius <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Conduit radius must be positive.");
+        c_exit(2);
+    };
+    if (viscosity <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Magma viscosity must be positive.");
+        c_exit(2);
+    };
+    if (conduit_length <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Conduit length must be positive.");
+        c_exit(2);
+    };
     const NUMERATOR: float = pressure_gradient * radius * radius;
     const DENOM: float = 8.0 * viscosity * conduit_length;
     return NUMERATOR / DENOM;
@@ -497,6 +540,10 @@ function magma_ascent_velocity(pressure_gradient: float, radius: float, viscosit
 ~~ Effusion rate in m³/s from erupted lava volume and eruption duration.
 ~~ volume_km3 in cubic kilometers, duration_days in days.
 function effusion_rate(volume_km3: float, duration_days: float) -> float {
+    if (duration_days <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Eruption duration must be positive.");
+        c_exit(2);
+    };
     const VOL_M3: float = volume_km3 * 1000000000.0;
     const TIME_S: float = duration_days * 86400.0;
     return VOL_M3 / TIME_S;
@@ -512,6 +559,22 @@ function lava_volume_from_effusion(effusion_rate_m3s: float, duration_s: float) 
 ~~ melt_viscosity in Pa·s, crystal_fraction and max_packing_fraction as decimals (0-1).
 ~~ η_suspension = η_melt * (1 - φ/φmax)^(-2.5·φmax).
 function magma_viscosity_suspension(melt_viscosity: float, crystal_fraction: float, max_packing_fraction: float) -> float {
+    if (melt_viscosity <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Melt viscosity must be positive.");
+        c_exit(2);
+    };
+    if (max_packing_fraction <= 0.0 || max_packing_fraction > 1.0) {
+        c_print_err("MochaLibError (mocha-geo): Max packing fraction must be in (0, 1].");
+        c_exit(2);
+    };
+    if (crystal_fraction < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Crystal fraction cannot be negative.");
+        c_exit(2);
+    };
+    if (crystal_fraction >= max_packing_fraction) {
+        c_print_err("MochaLibError (mocha-geo): Crystal fraction must be below max packing fraction.");
+        c_exit(2);
+    };
     const RATIO: float = crystal_fraction / max_packing_fraction;
     const BASE: float = 1.0 - RATIO;
     const EXPONENT: float = -2.5 * max_packing_fraction;
@@ -523,6 +586,10 @@ function magma_viscosity_suspension(melt_viscosity: float, crystal_fraction: flo
 ~~ tensile_strength in Pa, rock_density and magma_density in kg/m³, depth in m.
 ~~ ΔPc = σt + (ρrock - ρmagma)·g·depth.
 function magma_chamber_overpressure(tensile_strength: float, rock_density: float, magma_density: float, depth: float) -> float {
+    if (rock_density <= magma_density) {
+        c_print_err("MochaLibError (mocha-geo): Rock density must exceed magma density for buoyancy-driven overpressure.");
+        c_exit(2);
+    };
     const G: float = 9.80665;
     const DENSITY_DIFF: float = rock_density - magma_density;
     const BUOYANCY_TERM: float = DENSITY_DIFF * G * depth;
@@ -532,6 +599,18 @@ function magma_chamber_overpressure(tensile_strength: float, rock_density: float
 ~~ Tephra deposit thickness in cm at a given distance from vent, via the Pyle (1989) exponential thinning model.
 ~~ t0 = thickness at vent (cm), decay_constant per km, distance_km from vent.
 function tephra_fallout_thickness(t0: float, decay_constant: float, distance_km: float) -> float {
+    if (t0 <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Vent thickness must be positive.");
+        c_exit(2);
+    };
+    if (decay_constant <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Decay constant must be positive.");
+        c_exit(2);
+    };
+    if (distance_km < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Distance from vent cannot be negative.");
+        c_exit(2);
+    };
     const EXPONENT: float = -decay_constant * distance_km;
     const EXP_VAL: float = float(c_exp(EXPONENT));
     return t0 * EXP_VAL;
@@ -540,6 +619,10 @@ function tephra_fallout_thickness(t0: float, decay_constant: float, distance_km:
 ~~ Classifies volcanic rock type from silica content using standard TAS-adjacent thresholds.
 ~~ sio2_wt_pct in weight percent. Basalt <52%, Andesite 52-63%, Dacite 63-70%, Rhyolite >70%.
 function silica_classification_index(sio2_wt_pct: float) -> RockType {
+    if (sio2_wt_pct < 0.0 || sio2_wt_pct > 100.0) {
+        c_print_err("MochaLibError (mocha-geo): SiO2 weight percent must be between 0 and 100.");
+        c_exit(2);
+    };
     var result: RockType = RockType.BASALT;
     if (sio2_wt_pct < 52.0) {
         result = RockType.BASALT;
@@ -568,6 +651,10 @@ function silica_classification_index(sio2_wt_pct: float) -> RockType {
 
 ~~ Decay constant in Myr⁻¹ from half-life in Myr. λ = ln(2)/t_half.
 function decay_constant_myr(half_life_myr: float) -> float {
+    if (half_life_myr <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Half-life must be positive.");
+        c_exit(2);
+    };
     const LN2: float = 2.0.log().real;
     return LN2 / half_life_myr;
 };
@@ -576,6 +663,18 @@ function decay_constant_myr(half_life_myr: float) -> float {
 ~~ lambda in Myr⁻¹, daughter_excess and parent_remaining in same units (e.g. mol, or isotope ratio).
 ~~ age = (1/λ) * ln(1 + D/P).
 function parent_daughter_age(lambda_myr: float, daughter_excess: float, parent_remaining: float) -> float {
+    if (lambda_myr <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Decay constant must be positive.");
+        c_exit(2);
+    };
+    if (parent_remaining <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Parent isotope amount must be positive.");
+        c_exit(2);
+    };
+    if (daughter_excess < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Daughter isotope amount cannot be negative.");
+        c_exit(2);
+    };
     const RATIO: float = daughter_excess / parent_remaining;
     const LN_TERM: float = (1.0 + RATIO).log().real;
     return LN_TERM / lambda_myr;
@@ -617,6 +716,14 @@ function sm147_nd143_age(nd143_excess: float, sm147_remaining: float) -> float {
 ~~ ar40_excess and k40_remaining in same units. Uses Steiger & Jäger (1977) constants:
 ~~ λtotal = 5.543e-4/Myr, λε = 0.581e-4/Myr.
 function k40_ar40_age(ar40_excess: float, k40_remaining: float) -> float {
+    if (k40_remaining <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): K-40 remaining must be positive.");
+        c_exit(2);
+    };
+    if (ar40_excess < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Ar-40 excess cannot be negative.");
+        c_exit(2);
+    };
     const LAMBDA_TOTAL: float = 0.0005543;
     const LAMBDA_E: float = 0.0000581;
     const BRANCH_RATIO: float = LAMBDA_TOTAL / LAMBDA_E;
@@ -628,17 +735,41 @@ function k40_ar40_age(ar40_excess: float, k40_remaining: float) -> float {
 ~~ Sediment deposition rate in m/kyr from layer thickness and time elapsed.
 ~~ thickness_m in meters, time_kyr in thousands of years.
 function deposition_rate(thickness_m: float, time_kyr: float) -> float {
+    if (thickness_m < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Thickness cannot be negative.");
+        c_exit(2);
+    };
+    if (time_kyr <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Time must be positive.");
+        c_exit(2);
+    };
     return thickness_m / time_kyr;
 };
 
 ~~ Sediment age in kyr from burial depth and deposition rate.
 ~~ depth_m in meters, rate in m/kyr.
 function sediment_age_from_depth(depth_m: float, rate: float) -> float {
+    if (depth_m < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Depth cannot be negative.");
+        c_exit(2);
+    };
+    if (rate <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Deposition rate must be positive.");
+        c_exit(2);
+    };
     return depth_m / rate;
 };
 
 ~~ Luminescence (OSL/TL) age in kyr from paleodose and environmental dose rate.
 ~~ paleodose_gy in Gray (Gy), dose_rate in Gy/kyr.
 function luminescence_age(paleodose_gy: float, dose_rate: float) -> float {
+    if (paleodose_gy < 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Paleodose cannot be negative.");
+        c_exit(2);
+    };
+    if (dose_rate <= 0.0) {
+        c_print_err("MochaLibError (mocha-geo): Dose rate must be positive.");
+        c_exit(2);
+    };
     return paleodose_gy / dose_rate;
 };

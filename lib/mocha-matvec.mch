@@ -1746,4 +1746,84 @@ extend float[][] {
         };
         return vals;
     };
+
+    function solve(b: float[]) -> float[] {
+        var n: int = this.rows;
+        var a: float[][] = alloc float[n][n];
+        var x: float[] = alloc float[n];
+        var i: int = 0;
+        while (i < n) {
+            x[i] = b[i];
+            var j: int = 0;
+            while (j < n) {
+                a[i][j] = this[i][j];
+                j++;
+            };
+            i++;
+        };
+
+        var k: int = 0;
+        while (k < n) {
+            // find the row (from k down) with the biggest number in column k
+            var best: int = k;
+            var best_abs: float = a[k][k];
+            if (best_abs < 0.0) { best_abs = 0.0 - best_abs; };
+            var r: int = k + 1;
+            while (r < n) {
+                var v: float = a[r][k];
+                if (v < 0.0) { v = 0.0 - v; };
+                if (v > best_abs) {
+                    best_abs = v;
+                    best = r;
+                };
+                r++;
+            };
+            if (best_abs < 0.000000000001) {
+                c_print_err("MochaLibError (mocha-matvec): solve() called on a singular matrix (no unique solution).");
+                c_exit(2);
+            };
+
+            // swap that row into position k
+            if (best != k) {
+                var c: int = 0;
+                while (c < n) {
+                    var tmp: float = a[k][c];
+                    a[k][c] = a[best][c];
+                    a[best][c] = tmp;
+                    c++;
+                };
+                var tb: float = x[k];
+                x[k] = x[best];
+                x[best] = tb;
+            };
+
+            // subtract multiples of row k from the rows below it
+            var ei: int = k + 1;
+            while (ei < n) {
+                var factor: float = a[ei][k] / a[k][k];
+                var ej: int = k;
+                while (ej < n) {
+                    a[ei][ej] = a[ei][ej] - (factor * a[k][ej]);
+                    ej++;
+                };
+                x[ei] = x[ei] - (factor * x[k]);
+                ei++;
+            };
+            k++;
+        };
+
+        // work backwards to read off the answers
+        var bi: int = n - 1;
+        while (bi >= 0) {
+            var sum: float = x[bi];
+            var bj: int = bi + 1;
+            while (bj < n) {
+                sum = sum - (a[bi][bj] * x[bj]);
+                bj++;
+            };
+            x[bi] = sum / a[bi][bi];
+            bi--;
+        };
+        return x;
+    };
 };

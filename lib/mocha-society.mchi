@@ -5,6 +5,8 @@
 
 // mocha-lib-deps: mocha-math
 
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
 function c_exp(x: float) -> float native mocha_wrap_exp;
 const DEG_TO_RAD: float = 0.01745329251994;
 const RAD_TO_DEG: float = 57.29577951308232;
@@ -35,6 +37,8 @@ function gallagher_index(vote_shares: float[], seat_shares: float[]) -> float;
 function seat_vote_deviation(vote_share: float, seat_share: float) -> float;
 function banzhaf_power_index_3player(w1: float, w2: float, w3: float, quota: float) -> (float, 3);
 function shapley_shubik_power_index_3player(w1: float, w2: float, w3: float, quota: float) -> (float, 3);
+function validate_adjacency(adjacency: int[][]) -> int;
+function validate_node_index(node_index: int, n: int) -> int;
 function node_degree(adjacency: int[][], node_index: int) -> int;
 function degree_centrality(adjacency: int[][], node_index: int) -> float;
 function network_density(adjacency: int[][]) -> float;
@@ -52,6 +56,9 @@ function shannon_diversity_index(counts: float[]) -> float;
 function shannon_evenness_index(counts: float[]) -> float;
 function cultural_distance_index(differing_traits: int, total_traits: int) -> float;
 function cultural_similarity_index(differing_traits: int, total_traits: int) -> float;
+function validate_proportion(p: float, name: str) -> float;
+function validate_positive(x: float, name: str) -> float;
+function validate_non_negative(x: float, name: str) -> float;
 function cronbachs_alpha(item_variances: float[], total_variance: float) -> float;
 function cohens_kappa(observed_agreement: float, expected_agreement: float) -> float;
 function standard_error_of_proportion(p: float, n: float) -> float;

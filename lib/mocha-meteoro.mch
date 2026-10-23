@@ -104,18 +104,18 @@ local function validate_wind_kmh(v: float) -> null {
 ~~ SECTION 1 — THERMODYNAMICS
 ~~ ════════════════════════════════════════════════════
 
-~~ Saturation vapour pressure (mb) — Buck equation
+~~ Saturation vapour pressure (mb) — Buck equation. Requires t_c in [-90, 60].
 function sat_vapour_pressure(t_c: float) -> float {
     validate_temp_c(t_c);
     return c_sat_vp(t_c);
 };
 
-~~ Saturation vapour pressure from Fahrenheit input
+~~ Saturation vapour pressure from Fahrenheit input.
 function sat_vapour_pressure_f(t_f: float) -> float {
     return sat_vapour_pressure(fahrenheit_to_celsius(t_f));
 };
 
-~~ Dew point temperature (C) from temp and relative humidity
+~~ Dew point temperature (C) from temp and relative humidity. Requires t_c in range, rh in [0, 100].
 function dewpoint(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
@@ -126,14 +126,14 @@ function dewpoint_f(t_f: float, rh: float) -> float {
     return celsius_to_fahrenheit(dewpoint(fahrenheit_to_celsius(t_f), rh));
 };
 
-~~ Dew point depression — how far temp is above dew point
+~~ Dew point depression — how far temp is above dew point (C).
 function dewpoint_depression(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
     return t_c - c_dewpoint(t_c, rh);
 };
 
-~~ Wet bulb temperature (C) — Stull 2011
+~~ Wet bulb temperature (C) — Stull 2011.
 function wetbulb(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
@@ -144,8 +144,8 @@ function wetbulb_f(t_f: float, rh: float) -> float {
     return celsius_to_fahrenheit(wetbulb(fahrenheit_to_celsius(t_f), rh));
 };
 
-~~ Heat index (C) — Rothfusz NWS regression
-~~ Valid for t >= 27C and rh >= 40%
+~~ Heat index (C) — Rothfusz NWS regression. Valid for t >= 27C and rh >= 40%.
+~~ Below threshold: warns and returns actual temperature.
 function heat_index(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
@@ -164,8 +164,8 @@ function heat_index_f(t_f: float, rh: float) -> float {
     return celsius_to_fahrenheit(heat_index(fahrenheit_to_celsius(t_f), rh));
 };
 
-~~ Wind chill (C) — NWS 2001
-~~ Valid for t <= 10C and wind >= 4.8 km/h
+~~ Wind chill (C) — NWS 2001. Valid for t <= 10C and wind >= 4.8 km/h.
+~~ Above threshold: warns and returns actual temperature.
 function wind_chill(t_c: float, speed_kmh: float) -> float {
     validate_temp_c(t_c);
     validate_wind_kmh(speed_kmh);
@@ -188,7 +188,8 @@ function wind_chill_knots(t_c: float, speed_knots: float) -> float {
     return wind_chill(t_c, knots_to_kmh(speed_knots));
 };
 
-~~ Feels like — combined apparent temperature
+~~ Feels like — combined apparent temperature (heat index or wind chill, whichever applies).
+~~ Delegates to C; the underlying implementation handles the valid ranges internally.
 function feels_like(t_c: float, rh: float, speed_kmh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
@@ -200,24 +201,29 @@ function feels_like_f(t_f: float, rh: float, speed_kmh: float) -> float {
     return celsius_to_fahrenheit(feels_like(fahrenheit_to_celsius(t_f), rh, speed_kmh));
 };
 
-~~ Potential temperature theta (C) — dry adiabatic reference
+~~ Potential temperature theta (C) — dry adiabatic reference.
 function potential_temp(t_c: float, pressure_mb: float) -> float {
     validate_temp_c(t_c);
     validate_pressure_mb(pressure_mb);
     return c_potential_temp(t_c, pressure_mb);
 };
 
-~~ Virtual temperature (C) — moisture-corrected temperature
+~~ Virtual temperature (C) — moisture-corrected temperature.
+~~ Requires mixing_ratio_gkg in [0, 50] (0-50 g/kg covers all realistic Earth atmospheric values).
 function virtual_temp(t_c: float, mixing_ratio_gkg: float) -> float {
     validate_temp_c(t_c);
     if (mixing_ratio_gkg < 0.0) {
         c_print_err("MeteroError: Mixing ratio cannot be negative.");
         c_exit(2);
     };
+    if (mixing_ratio_gkg > 50.0) {
+        c_print_err("MeteroError: Mixing ratio exceeds 50 g/kg — unphysical for Earth atmosphere.");
+        c_exit(2);
+    };
     return c_virtual_temp(t_c, mixing_ratio_gkg);
 };
 
-~~ Equivalent potential temperature (C) — Bolton 1980
+~~ Equivalent potential temperature (C) — Bolton 1980.
 function equiv_potential_temp(t_c: float, dewpoint_c: float, pressure_mb: float) -> float {
     validate_temp_c(t_c);
     validate_temp_c(dewpoint_c);
@@ -229,7 +235,7 @@ function equiv_potential_temp(t_c: float, dewpoint_c: float, pressure_mb: float)
     return c_equiv_potential_temp(t_c, dewpoint_c, pressure_mb);
 };
 
-~~ Lifting condensation level temperature (C)
+~~ Lifting condensation level temperature (C).
 function lcl_temp(t_c: float, dewpoint_c: float) -> float {
     validate_temp_c(t_c);
     validate_temp_c(dewpoint_c);
@@ -240,7 +246,7 @@ function lcl_temp(t_c: float, dewpoint_c: float) -> float {
     return c_lcl_temp(t_c, dewpoint_c);
 };
 
-~~ Lifting condensation level pressure (mb)
+~~ Lifting condensation level pressure (mb).
 function lcl_pressure(t_c: float, dewpoint_c: float, pressure_mb: float) -> float {
     validate_temp_c(t_c);
     validate_temp_c(dewpoint_c);
@@ -252,8 +258,11 @@ function lcl_pressure(t_c: float, dewpoint_c: float, pressure_mb: float) -> floa
     return c_lcl_pressure(t_c, dewpoint_c, pressure_mb);
 };
 
-~~ Temperature lapse rate between two levels (C per 100m)
+~~ Temperature lapse rate between two levels (C per 100m).
+~~ Requires both temperatures in valid range, height_diff_m > 0.
 function lapse_rate(t_upper_c: float, t_lower_c: float, height_diff_m: float) -> float {
+    validate_temp_c(t_upper_c);
+    validate_temp_c(t_lower_c);
     if (height_diff_m <= 0.0) {
         c_print_err("MeteroError: Height difference must be positive.");
         c_exit(2);
@@ -261,20 +270,27 @@ function lapse_rate(t_upper_c: float, t_lower_c: float, height_diff_m: float) ->
     return (t_lower_c - t_upper_c) / height_diff_m * 100.0;
 };
 
-~~ Is atmosphere unstable? (lapse rate > dry adiabatic 9.8 C/km)
+~~ Absolute instability check: lapse rate > dry adiabatic (9.8 C/km = 0.98 C/100m).
+~~ For conditional instability (between wet and dry adiabatic), use a more complete criterion.
 function is_unstable(lapse_rate_per_100m: float) -> bool {
     return lapse_rate_per_100m > 0.98;
 };
 
-~~ Frost point (C) — temperature at which frost forms
-~~ Valid for sub-zero dewpoints
+~~ Frost point (C) — temperature at which frost forms.
+~~ Valid for sub-zero dewpoints. Returns the dew point itself if above freezing.
+~~ Uses the standard approximation: frost point is slightly higher than dew point below 0C.
+~~ NOTE: correction factor is empirical and modest; for high-precision work, use full vapour-pressure-over-ice calculation.
 function frost_point(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
     var dp: float = c_dewpoint(t_c, rh);
-    //Frost point slightly higher than dew point below 0C
-    if (dp >= 0.0) { return dp; };
-    return dp + 0.15 * (0.0 - dp) * 0.01;
+    if (dp >= 0.0) {
+        return dp;
+    };
+    // Empirical correction: frost point is slightly higher than dew point below 0C
+    // (vapour pressure over ice is lower than over water at same T)
+    var correction: float = 0.0 - dp;
+    return dp + (0.1 * correction);
 };
 
 ~~ ── Humidity C helpers ──

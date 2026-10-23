@@ -352,9 +352,7 @@ static void mocha_print_backtrace(int skip) {
 
 /* ===============================================================
    Mocha Reference Counting (This is also partially working since \
-   full was not possible yet.) \
-   For now, it masks gc, and is working for strings, 1D and 2D arrays, \
-   tuples, sets, and dicts; Classes are remaining (Also Block scoping)
+   full has not yet been done)
    =============================================================== */
 void mocha_stack_print(void); //Forward Declare
 
@@ -465,6 +463,7 @@ void mocha_rc_shutdown() {
 static char* rc_alloc_string(size_t len) {
     return (char*)rc_alloc(len + 1);
 }
+
 
 void mocha_rc_stats() {
     size_t count = 0;
@@ -719,6 +718,13 @@ ctype mocha_set_max_##suffix(MochaSet *s) {                                  \
  * STRING OPERATIONS
  * ============================================================ */
 
+/* User-facing word for non-finite floats, or NULL for ordinary numbers. */
+static const char* mocha_float_special(double f) {
+    if (isinf(f)) return f > 0 ? "POS Infinity" : "NEG Infinity";
+    if (isnan(f)) return "the result is undefined";
+    return NULL;
+}
+
 /* ---- Core (alloc, concat, compare) ---- */
 
 char* mocha_str_literal(char *src) {
@@ -786,7 +792,12 @@ char* mocha_int_to_str(int32_t n) {
 
 char* mocha_float_to_str(double f) {
     char *dest = rc_alloc_string(32);
-    snprintf(dest, 32, "%g", f);
+    const char *special = mocha_float_special(f);
+    if (special) {
+        snprintf(dest, 32, "%s", special);
+    } else {
+        snprintf(dest, 32, "%g", f);
+    }
     return dest;
 }
 
@@ -1171,17 +1182,28 @@ MochaComplex* mocha_complex_conjugate(MochaComplex* c) {
  * my \n is unique. it precees the string not suceeds it
  * ============================================================ */
 
-void mocha_print_str(char *s, int8_t newline) {
+static int8_t mocha_has_printed = 0;
+
+void mocha_output_finalize(void) {
+    if (mocha_has_printed) {
+        printf("\n");
+        fflush(stdout);
+    }
+}
+
+ void mocha_print_str(char *s, int8_t newline) {
     if (!s) s = "";
     if (newline) printf("\n");
     printf("%s", s);
     fflush(stdout);
+    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
 }
 
 void mocha_print_int(int32_t n, int8_t newline) {
     if (newline) printf("\n");
     printf("%d", n);
     fflush(stdout);
+    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
 }
 
 void mocha_print_float(double f, int8_t newline) {
@@ -1189,25 +1211,28 @@ void mocha_print_float(double f, int8_t newline) {
     if (isinf(f)) {
         printf("%s", f > 0 ? "POS Infinity" : "NEG Infinity");
     } else if (isnan(f)) {
-        printf("From C's NaN: Number does exist.");
+        printf("The result is undefined");
     } else if (f == (int64_t)f && f >= -1e15 && f <= 1e15) {
         printf("%.1f", f);
     } else {
         printf("%g", f);
     }
     fflush(stdout);
+    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
 }
 
 void mocha_print_bool(int8_t b, int8_t newline) {
     if (newline) printf("\n");
     printf("%s", b ? "true" : "false");
     fflush(stdout);
+    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
 }
 
 void mocha_print_vast(int64_t n, int8_t newline) {
     if (newline) printf("\n");
     printf("%lld", (long long)n);
     fflush(stdout);
+    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
 }
 
 /* ============================================================
@@ -1253,8 +1278,9 @@ double mocha_float_sub(double a, double b) {
 }
 
 double mocha_float_mul(double a, double b) {
-    if (fabs(a * b) > 1e14) {
-        return a * b;  // raw IEEE 754 fallback — product too large for safe __int128 scaling
+    double p = a * b;
+    if (!isfinite(p) || fabs(p) > 1e14 || fabs(a) > 1e25 || fabs(b) > 1e25) {
+        return p;  // raw IEEE 754 fallback: inf/nan, product too large for safe __int128 scaling, or an operand too large to scale
     }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
@@ -1263,8 +1289,8 @@ double mocha_float_mul(double a, double b) {
 
 double mocha_float_div(double a, double b) {
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
-    if (fabs(a) > 1e14) {
-        return a / b;  // raw IEEE 754 fallback — numerator too large for safe __int128 scaling
+    if (!isfinite(a) || !isfinite(b) || fabs(a) > 1e14 || fabs(b) < 1e-12) {
+        return a / b;  // raw IEEE 754 fallback — inf/nan, huge numerator, or divisor below fixed-point resolution
     }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
@@ -1273,8 +1299,8 @@ double mocha_float_div(double a, double b) {
 
 double mocha_float_mod(double a, double b) {
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
-    if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
-        return fmod(a, b);  // raw IEEE 754 fallback for large numbers
+    if (!isfinite(a) || !isfinite(b) || a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25 || fabs(b) < 1e-12) {
+        return fmod(a, b);  // raw IEEE 754 fallback — large/non-finite values, or divisor below fixed-point resolution
     }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
@@ -1600,6 +1626,19 @@ void mocha_array2d_release(MochaArray2D *arr) {
          * RC'd MochaArray* structs) before the 2D struct itself is freed */
         for (int32_t r = 0; r < arr->rows; r++) {
             mocha_array_release(arr->data[r], arr->elem_is_str);
+        }
+        free(arr->data);
+    }
+    rc_release(arr);
+}
+
+/* Like mocha_array2d_release, but the elements are RC class instances: each row is
+   released through mocha_array_release_objs, so every element gets its class release. */
+void mocha_array2d_release_objs(MochaArray2D *arr, void (*rel)(void *)) {
+    if (!arr) return;
+    if (rc_count(arr) == 1) {
+        for (int32_t r = 0; r < arr->rows; r++) {
+            mocha_array_release_objs(arr->data[r], rel);
         }
         free(arr->data);
     }
@@ -2864,16 +2903,28 @@ MochaArray* mocha_dict_allkeys(MochaDict *d) {
     return arr;
 }
 
+char* mocha_dict_to_display_str(MochaDict *d); // forward declare
 MochaArray* mocha_dict_allvalues(MochaDict *d) {
     MochaArray *arr = mocha_array_new(d->size, 8, 1);
     for (int32_t i=0; i<d->size; i++) {
         char *buf = rc_alloc_string(63);   // was malloc(64) — rc_alloc_string(len) allocates len+1, so 63→64 bytes, same capacity as before
         switch (d->entries[i].value_type) {
             case MOCHA_DICT_INT:    snprintf(buf,64,"%d",  *(int32_t*)d->entries[i].value); break;
-            case MOCHA_DICT_FLOAT:  snprintf(buf,64,"%g",  *(double*)d->entries[i].value);  break;
+            case MOCHA_DICT_FLOAT: {
+                double fv = *(double*)d->entries[i].value;
+                const char *sp = mocha_float_special(fv);
+                if (sp) snprintf(buf, 64, "%s", sp);
+                else    snprintf(buf, 64, "%g", fv);
+                break;
+            }
             case MOCHA_DICT_STR:    snprintf(buf,64,"%s",  (char*)d->entries[i].value);      break;
             case MOCHA_DICT_BOOL:   snprintf(buf,64,"%s",  *(int8_t*)d->entries[i].value?"true":"false"); break;
-            case MOCHA_DICT_DICT:   snprintf(buf,64,"[dict]");   break;
+            case MOCHA_DICT_DICT: {
+                char *shown = mocha_dict_to_display_str((MochaDict*)d->entries[i].value);
+                rc_release(buf);   /* the fixed 64-byte buffer is replaced */
+                buf = shown;
+                break;
+            }
             case MOCHA_DICT_OBJECT: snprintf(buf,64,"[object]"); break;
             case MOCHA_DICT_VAST:   snprintf(buf, 64, "%lld", *(int64_t*)d->entries[i].value); break;
         }
@@ -2882,6 +2933,7 @@ MochaArray* mocha_dict_allvalues(MochaDict *d) {
     return arr;
 }
 
+MochaDict* mocha_dict_copy(MochaDict *src); // Forward declare
 static void* mocha_dict_dup_value(void *val, int vt) {
     switch (vt) {
         case MOCHA_DICT_INT: {
@@ -2907,8 +2959,7 @@ static void* mocha_dict_dup_value(void *val, int vt) {
         case MOCHA_DICT_STR:
             return rc_strdup((char*)val);
         case MOCHA_DICT_DICT:
-            mocha_dict_retain((MochaDict*)val);
-            return val;
+            return mocha_dict_copy((MochaDict*)val);
         default:
             rc_retain(val); //for OBJECT
             return val;
@@ -2948,16 +2999,23 @@ MochaDict* mocha_dict_merge(MochaDict *a, MochaDict *b, int8_t override) {
 
 /* ---- Output ---- */
 
+void mocha_dict_print(MochaDict *d, int8_t newline); // forward
 void mocha_dict_print_value(MochaDict *d, char *key, int8_t newline) {
     int idx = mocha_dict_find(d, key);
     if (idx < 0) { fprintf(stderr, "MochaRuntimeError: Key '%s' not found.\n", key); exit(2); }
     if (newline) printf("\n");
     switch (d->entries[idx].value_type) {
         case MOCHA_DICT_INT:    printf("%d",  *(int32_t*)d->entries[idx].value); break;
-        case MOCHA_DICT_FLOAT:  printf("%g",  *(double*)d->entries[idx].value);  break;
+        case MOCHA_DICT_FLOAT: {
+            double fv = *(double*)d->entries[idx].value;
+            const char *sp = mocha_float_special(fv);
+            if (sp) printf("%s", sp);
+            else    printf("%g", fv);
+            break;
+        }
         case MOCHA_DICT_STR:    printf("%s",  (char*)d->entries[idx].value);      break;
         case MOCHA_DICT_BOOL:   printf("%s",  *(int8_t*)d->entries[idx].value?"true":"false"); break;
-        case MOCHA_DICT_DICT:   printf("[dict]");   break;
+        case MOCHA_DICT_DICT:   mocha_dict_print((MochaDict*)d->entries[idx].value, 0); break;
         case MOCHA_DICT_OBJECT: printf("[object]"); break;
         case MOCHA_DICT_VAST: printf("%lld", *(int64_t*)d->entries[idx].value); break;
     }
@@ -2970,6 +3028,197 @@ MochaDict* mocha_dict_copy(MochaDict *src) {
         dict_set_entry(d, src->entries[i].key, new_val, src->entries[i].value_type);
     }
     return d;
+}
+
+/* ---- JSON output ---- */
+typedef struct { char *data; int32_t len, cap; } MochaJsonBuf;
+
+static void json_put(MochaJsonBuf *b, const char *s, int32_t n) {
+    while (b->len + n + 1 > b->cap) {
+        b->cap *= 2;
+        b->data = realloc(b->data, b->cap);
+        MOCHA_OOM_CHECK(b->data);
+    }
+    memcpy(b->data + b->len, s, n);
+    b->len += n;
+    b->data[b->len] = '\0';
+}
+
+static void json_puts(MochaJsonBuf *b, const char *s) {
+    json_put(b, s, (int32_t)strlen(s));
+}
+
+static void json_put_string(MochaJsonBuf *b, const char *s) {
+    json_put(b, "\"", 1);
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        switch (*p) {
+            case '"':  json_puts(b, "\\\""); break;
+            case '\\': json_puts(b, "\\\\"); break;
+            case '\n': json_puts(b, "\\n");  break;
+            case '\r': json_puts(b, "\\r");  break;
+            case '\t': json_puts(b, "\\t");  break;
+            default:
+                if (*p < 0x20) {
+                    char esc[8];
+                    snprintf(esc, sizeof esc, "\\u%04x", *p);
+                    json_puts(b, esc);
+                } else {
+                    json_put(b, (const char *)p, 1);
+                }
+        }
+    }
+    json_put(b, "\"", 1);
+}
+
+static void json_put_dict(MochaJsonBuf *b, MochaDict *d) {
+    json_put(b, "{", 1);
+    for (int32_t i = 0; i < d->size; i++) {
+        char *key = d->entries[i].key;
+        void *v   = d->entries[i].value;
+        if (i > 0) json_put(b, ",", 1);
+        json_put_string(b, key);
+        json_put(b, ":", 1);
+        switch (d->entries[i].value_type) {
+            case MOCHA_DICT_INT: {
+                char t[16];
+                snprintf(t, sizeof t, "%d", *(int32_t*)v);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_VAST: {
+                char t[32];
+                snprintf(t, sizeof t, "%lld", (long long)*(int64_t*)v);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_FLOAT: {
+                double f = *(double*)v;
+                if (!isfinite(f)) {
+                    fprintf(stderr, "MochaRuntimeError: jsonify() cannot write key '%s': the value is infinite or undefined, which JSON cannot represent.\n", key);
+                    exit(2);
+                }
+                char t[40];
+                if (fabs(f) <= 1e15 && f == (double)(int64_t)f) snprintf(t, sizeof t, "%.1f", f);
+                else snprintf(t, sizeof t, "%.15g", f);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_BOOL:
+                json_puts(b, *(int8_t*)v ? "true" : "false");
+                break;
+            case MOCHA_DICT_STR:
+                json_put_string(b, (char*)v);
+                break;
+            case MOCHA_DICT_DICT:
+                json_put_dict(b, (MochaDict*)v);
+                break;
+            default:
+                fprintf(stderr, "MochaRuntimeError: jsonify() cannot write key '%s': values of this kind (objects and arrays) are not supported yet.\n", key);
+                exit(2);
+        }
+    }
+    json_put(b, "}", 1);
+}
+
+char* mocha_dict_jsonify(MochaDict *d) {
+    MochaJsonBuf b;
+    b.cap  = 256;
+    b.len  = 0;
+    b.data = malloc(b.cap);
+    MOCHA_OOM_CHECK(b.data);
+    b.data[0] = '\0';
+    json_put_dict(&b, d);
+    char *result = rc_alloc_string(b.len);
+    memcpy(result, b.data, b.len);
+    result[b.len] = '\0';
+    free(b.data);
+    return result;
+}
+
+/* Human output: quoted, but the text itself is printed raw (no escapes) */
+static void dict_put_raw_string(MochaJsonBuf *b, const char *s) {
+    json_put(b, "\"", 1);
+    json_puts(b, s);
+    json_put(b, "\"", 1);
+}
+
+/* ---- Human-readable dict output (used by print and allValues) ---- */
+static void dict_render(MochaJsonBuf *b, MochaDict *d) {
+    json_put(b, "{", 1);
+    for (int32_t i = 0; i < d->size; i++) {
+        void *v = d->entries[i].value;
+        if (i > 0) json_puts(b, ", ");
+        dict_put_raw_string(b, d->entries[i].key);
+        json_puts(b, ": ");
+        switch (d->entries[i].value_type) {
+            case MOCHA_DICT_INT: {
+                char t[16];
+                snprintf(t, sizeof t, "%d", *(int32_t*)v);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_VAST: {
+                char t[32];
+                snprintf(t, sizeof t, "%lld", (long long)*(int64_t*)v);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_FLOAT: {
+                double f = *(double*)v;
+                const char *sp = mocha_float_special(f);
+                char t[40];
+                if (sp) snprintf(t, sizeof t, "%s", sp);
+                else if (f >= -1e15 && f <= 1e15 && f == (double)(int64_t)f) snprintf(t, sizeof t, "%.1f", f);
+                else snprintf(t, sizeof t, "%g", f);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_BOOL:
+                json_puts(b, *(int8_t*)v ? "true" : "false");
+                break;
+            case MOCHA_DICT_STR:
+                dict_put_raw_string(b, (char*)v);
+                break;
+            case MOCHA_DICT_DICT:
+                dict_render(b, (MochaDict*)v);
+                break;
+            default:
+                json_puts(b, "[object]");
+                break;
+        }
+    }
+    json_put(b, "}", 1);
+}
+
+/* print(d): newline goes BEFORE the value, like every other print */
+void mocha_dict_print(MochaDict *d, int8_t newline) {
+    MochaJsonBuf b;
+    b.cap  = 256;
+    b.len  = 0;
+    b.data = malloc(b.cap);
+    MOCHA_OOM_CHECK(b.data);
+    b.data[0] = '\0';
+    dict_render(&b, d);
+    if (newline) printf("\n");
+    printf("%s", b.data);
+    fflush(stdout);
+    free(b.data);
+}
+
+/* Same text as an RC string (for allValues and friends) */
+char* mocha_dict_to_display_str(MochaDict *d) {
+    MochaJsonBuf b;
+    b.cap  = 256;
+    b.len  = 0;
+    b.data = malloc(b.cap);
+    MOCHA_OOM_CHECK(b.data);
+    b.data[0] = '\0';
+    dict_render(&b, d);
+    char *result = rc_alloc_string(b.len);
+    memcpy(result, b.data, b.len);
+    result[b.len] = '\0';
+    free(b.data);
+    return result;
 }
 
 /* ============================================================
@@ -4354,8 +4603,8 @@ char* mocha_tell(char *prompt) {
     }
 
     int32_t capacity = 128;
-    char   *buf      = malloc(capacity);
-    MOCHA_OOM_CHECK(buf);
+    char   *scratch  = malloc(capacity);   /* internal scratch only */
+    MOCHA_OOM_CHECK(scratch);
 
     int32_t len = 0;
     int     ch;
@@ -4364,13 +4613,26 @@ char* mocha_tell(char *prompt) {
     while ((ch = getchar()) != '\n' && ch != EOF) {
         if (len + 1 >= capacity) {
             capacity *= 2;
-            buf = realloc(buf, capacity);
-            MOCHA_OOM_CHECK(buf);
+            scratch = realloc(scratch, capacity);
+            MOCHA_OOM_CHECK(scratch);
         }
-        buf[len++] = (char)ch;
+        scratch[len++] = (char)ch;
     }
-    buf[len] = '\0';
-    return buf;
+
+    if (ch == EOF && len == 0) {
+        free(scratch);
+        fprintf(stderr, "MochaRuntimeError: tell() reached the end of input; there is nothing left to read.\n"
+                        "    The input ended (Ctrl+Z / Ctrl+D was pressed, or a redirected file ran out of lines).\n");
+        exit(2);
+    }
+
+    if (len > 0 && scratch[len - 1] == '\r') len--;      /* strip Windows line ending */
+
+    char *result = rc_alloc_string(len);
+    memcpy(result, scratch, len);
+    result[len] = '\0';
+    free(scratch);
+    return result;
 }
 
 /* ============================================================
@@ -4381,9 +4643,10 @@ char* mocha_tell(char *prompt) {
  *
  * open(path, mode)  → MochaFile*
  * f.read()          → str  (entire file)
- * f.readLine()      → str  (one line, "" at EOF)
+ * f.readLine()      → str  (one line, use eof() to check for EOF)
  * f.write(str)      → void
  * f.close()         → void
+ * f.free()
  * f.exists(path)    → bool (static — no handle needed)
  * ============================================================ */
 
@@ -4433,7 +4696,10 @@ char* mocha_file_read(MochaFile *f) {
                         "    Use readLine() instead.\n", f->path);
         exit(2);
     }
-    fseek(f->handle, 0, SEEK_SET);
+    if (fseek(f->handle, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "MochaRuntimeError: Cannot seek to start of '%s'.\n", f->path);
+        exit(2);
+    };
 
     char *buf = rc_alloc_string(size);   // was malloc(size + 1)
     size_t read_bytes = fread(buf, 1, size, f->handle);
@@ -4498,12 +4764,20 @@ void mocha_file_write(MochaFile *f, char *content) {
         fprintf(stderr, "MochaRuntimeError: Cannot write to closed file '%s'.\n", f->path);
         exit(2);
     }
-    fputs(content, f->handle);
+    if (fputs(content, f->handle) == EOF) {
+        fprintf(stderr, "MochaRuntimeError: Failed to write to '%s'.\n", f->path);
+        exit(2);
+    };
+    if (fflush(f->handle) == EOF) {
+        fprintf(stderr, "MochaRuntimeError: Failed to flush '%s' (disk full or IO error).\n", f->path);
+        exit(2);
+    };
     fflush(f->handle);
 }
 
 /* ---- Destruction ---- */
 void mocha_file_close(MochaFile *f) {
+    if (!f) return;
     if (!f->is_open) return;
     fclose(f->handle);
     f->handle  = NULL;
@@ -4518,9 +4792,10 @@ void mocha_file_close(MochaFile *f) {
    After this the handle is invalid: using it again is a use-after-free,
    same contract as mocha_sb_free and mocha_ht_free. */
 void mocha_file_free(MochaFile *f) {
+    if (!f) return;
     if (f->is_open) fclose(f->handle);
     free(f->path);
-    free(f->mode);   /* NULL after close(); free(NULL) is fine */
+    free(f->mode);
     free(f);
 }
 

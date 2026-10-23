@@ -216,6 +216,7 @@ class CodeGen:
         self.owned_set_locals = []
         self.owned_dict_locals = []
         self.owned_arr2d_locals = []
+        self.arr2d_elem_class = {}   # ptr name -> class name, for owned 2D locals whose elements are RC class instances
         self.owned_complex_locals = []
         self.owned_class_locals = []   # list of (ptr, class_name)
 
@@ -601,7 +602,15 @@ class CodeGen:
         for ptr in self.owned_arr2d_locals:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = load %MochaArray2D*, %MochaArray2D** {ptr}")
-            self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {tmp})")
+            self.emit_array2d_release_call(tmp, self.arr2d_elem_class.get(ptr))
+
+    def emit_array2d_release_call(self, arr_reg, elem_cls=None):
+        """Release a 2D array; elem_cls is a class name when its elements are RC class instances."""
+        if elem_cls:
+            cb = f"bitcast (void (%struct.{elem_cls}*)* @{elem_cls}_release to void (i8*)*)"
+            self.emit(f"  call void @mocha_array2d_release_objs(%MochaArray2D* {arr_reg}, void (i8*)* {cb})")
+        else:
+            self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {arr_reg})")
 
     def emit_release_owned_tuple_locals(self):
         for name in self.owned_tuple_locals:
@@ -667,7 +676,7 @@ class CodeGen:
             elif "[" in mtype[:mtype.rfind("[")]:
                 # 2D array field
                 self.emit(f"  {val} = load %MochaArray2D*, %MochaArray2D** {gep}")
-                self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {val})")
+                self.emit_array2d_release_call(val, self.array2d_elem_class(mtype))
             else:
                 # 1D array field
                 elem_is_str = 1 if self.is_str_array_type(mtype) else 0
@@ -716,6 +725,13 @@ class CodeGen:
         base = mocha_type[:mocha_type.rfind("[")]
         if "[" in base:
             return None
+        return base if base in self.rc_classes else None
+
+    def array2d_elem_class(self, mocha_type):
+        """Class name if mocha_type is a 2D array of a Mocha-defined RC class (T[][] or T[N][M]), else None."""
+        if not mocha_type or mocha_type.count("[") != 2:
+            return None
+        base = mocha_type[:mocha_type.find("[")]
         return base if base in self.rc_classes else None
 
     def emit_array_release_call(self, arr_reg, elem_kind):
@@ -777,6 +793,7 @@ class CodeGen:
                 "declare void @mocha_print_float(double, i8)",
                 "declare void @mocha_print_bool(i8, i8)",
                 "declare void @mocha_print_vast(i64, i8)",
+                "declare void @mocha_output_finalize()",
             ],
 
             "Fixed-Point Float Arithmetic": [
@@ -833,6 +850,7 @@ class CodeGen:
                 "declare %MochaArray2D* @mocha_array2d_new(i32, i32, i32, i32, i32, i32)",
                 "declare void @mocha_array2d_retain(%MochaArray2D*)",
                 "declare void @mocha_array2d_release(%MochaArray2D*)",
+                "declare void @mocha_array2d_release_objs(%MochaArray2D*, void (i8*)*)",
                 "declare void @mocha_array2d_set(%MochaArray2D*, i32, i32, i8*)",
                 "declare void @mocha_array2d_get(%MochaArray2D*, i32, i32, i8*)",
                 "declare void @mocha_array2d_resize(%MochaArray2D*, i32, i32, i32)",
@@ -893,6 +911,9 @@ class CodeGen:
                 "declare i32 @mocha_dict_length(%MochaDict*)",
                 "declare %MochaArray* @mocha_dict_allkeys(%MochaDict*)",
                 "declare %MochaArray* @mocha_dict_allvalues(%MochaDict*)",
+                "declare i8* @mocha_dict_jsonify(%MochaDict*)",
+                "declare void @mocha_dict_print(%MochaDict*, i8)",
+                "declare i8* @mocha_dict_to_display_str(%MochaDict*)",
                 "declare %MochaDict* @mocha_dict_get_dict(%MochaDict*, i8*)",
                 "declare void @mocha_dict_print_value(%MochaDict*, i8*, i8)",
                 "declare i64 @mocha_str_to_vast(i8*)",
@@ -1221,6 +1242,10 @@ class CodeGen:
         if obj_type == "i8*" and node.member == "length":
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call i32 @mocha_str_length(i8* {obj_reg})")
+            # RC: a fresh string temporary (call result, concat, literal, cast) is ours to release
+            # once its length is read; variables, fields and 2D elements are borrowed
+            if not isinstance(node.obj, (Identifier, MemberAccess, Index2DAccess)):
+                self.emit(f"  call void @rc_release(i8* {obj_reg})")
             return (tmp, "i32")
         
         # String charAt
@@ -1232,6 +1257,12 @@ class CodeGen:
             if node.member == "length":
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call i32 @mocha_array_length(%MochaArray* {obj_reg})")
+                # RC: an array returned by a plain function call is a fresh temporary we own.
+                # The element kind of a call result is unknown here (infer_mocha_type returns ""
+                # for calls), so release with kind 0: this frees the array and its buffer but not
+                # element references, so str[] / class[] temporaries still leak their elements.
+                if isinstance(node.obj, FunctionCall) and isinstance(node.obj.name, Identifier):
+                    self.emit_array_release_call(obj_reg, 0)
                 return (tmp, "i32")
             # push and pop handled in gen_function_call, not here
 
@@ -1250,6 +1281,9 @@ class CodeGen:
             if node.member == "length":
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call i32 @mocha_dict_length(%MochaDict* {obj_reg})")
+                # RC: a dict returned by a call is a fresh temporary we own; the length is a plain int
+                if isinstance(node.obj, FunctionCall):
+                    self.emit(f"  call void @mocha_dict_release(%MochaDict* {obj_reg})")
                 return (tmp, "i32")
             if node.member == "allKeys":
                 tmp = self.fresh_temp()
@@ -1259,6 +1293,10 @@ class CodeGen:
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call %MochaArray* @mocha_dict_allvalues(%MochaDict* {obj_reg})")
                 return (tmp, "%MochaArray*")
+            if node.member == "jsonify":
+                tmp = self.fresh_temp()
+                self.emit(f"  {tmp} = call i8* @mocha_dict_jsonify(%MochaDict* {obj_reg})")
+                return (tmp, "i8*")
             
         # Set built-ins
         if obj_type == "%MochaSet*":
@@ -1277,6 +1315,11 @@ class CodeGen:
             tmp_val = self.fresh_temp()
             self.emit(f"  {tmp_ptr} = getelementptr %struct.MochaComplex, %struct.MochaComplex* {obj_reg}, i32 0, i32 {idx}")
             self.emit(f"  {tmp_val} = load double, double* {tmp_ptr}")
+            # RC: a Complex returned by a call (Complex(...), z.sqrt(), a user function) is a fresh
+            # temporary we own; the double just read never points into it, so release it now.
+            # Variables, fields and elements are borrowed and are left alone.
+            if isinstance(node.obj, FunctionCall):
+                self.emit(f"  call void @mocha_complex_release(%struct.MochaComplex* {obj_reg})")
             return (tmp_val, "double")
 
         # Extract class name from "%struct.BankAccount*"
@@ -2246,9 +2289,12 @@ class CodeGen:
             ret_llvm = ret_type
             # compile args
             args = [f"i8* {s_reg}"]  # this is always first arg
+            fresh_str_args = []      # RC: string args built for this call (not variables/fields/2D elements)
             for arg in node.args:
                 arg_reg, arg_type = self.gen_expr(arg)
                 args.append(f"{arg_type} {arg_reg}")
+                if arg_type == "i8*" and not isinstance(arg, (Identifier, MemberAccess, Index2DAccess)):
+                    fresh_str_args.append(arg_reg)
             arg_str = ", ".join(args)
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call {ret_llvm} @{func_name}({arg_str})")
@@ -2258,6 +2304,12 @@ class CodeGen:
             # it if we don't. Fixes leak on chained calls like a.trimLeft().trimRight()
             if not isinstance(node.name.obj, (Identifier, MemberAccess, Index2DAccess)):
                 self.emit(f"  call void @rc_release(i8* {s_reg})")
+
+            # RC: same for fresh string arguments (literals, concats, call results):
+            # the method only reads them (a returned string is retained by gen_return),
+            # so each one is orphaned after the call unless we release it here
+            for ar in fresh_str_args:
+                self.emit(f"  call void @rc_release(i8* {ar})")
 
             return (tmp, ret_llvm)
 
@@ -2828,7 +2880,7 @@ class CodeGen:
             else:
                 reg, typ = self.gen_expr(arg)
                 args.append((reg, typ))
-                if typ == "i8*" and isinstance(arg, (StrLiteral, BinaryOp)):
+                if typ == "i8*" and not isinstance(arg, (Identifier, MemberAccess, Index2DAccess)):
                     fresh_str_args.append(reg)
 
         # -------------------------------------------------------
@@ -2916,11 +2968,10 @@ class CodeGen:
             obj, struct_ptr_type = self.emit_class_alloc(func_name)
 
             constructor_name = f"{func_name}_constructor"
-            if node.args:
-                arg_vals = []
-                for arg in node.args:
-                    val, typ = self.gen_expr(arg)
-                    arg_vals.append((val, typ))
+            # the arguments were already compiled in Step 2 (args); compiling node.args again
+            # would evaluate them twice (leaking the first set and repeating any side effects)
+            arg_vals = list(args)
+            if arg_vals:
                 param_types = ", ".join([struct_ptr_type] + [t for _, t in arg_vals])
                 declare = f"declare void @{constructor_name}({param_types})"
                 arg_str = ", ".join(f"{t} {v}" for v, t in [(obj, struct_ptr_type)] + arg_vals)
@@ -2931,6 +2982,10 @@ class CodeGen:
             if declare not in self.extra_declares:
                 self.extra_declares.append(declare)
             self.emit(f"  call void @{constructor_name}({arg_str})")
+            # RC: same as the branch above: the constructor retains what it stores, so the
+            # string temporaries built for this call are orphaned unless released here
+            for r in fresh_str_args:
+                self.emit(f"  call void @rc_release(i8* {r})")
 
             return (obj, struct_ptr_type)
 
@@ -3012,8 +3067,11 @@ class CodeGen:
             # dict access special case for ALL args, not just first
             print_arg = positional_nodes[i]
             if isinstance(print_arg, Index2DAccess):
-                if isinstance(print_arg.obj, Identifier):
-                    mocha_type = self.local_mocha_types.get(print_arg.obj.name, "")
+                if isinstance(print_arg.obj, (Identifier, MemberAccess)):
+                    if isinstance(print_arg.obj, Identifier):
+                        mocha_type = self.local_mocha_types.get(print_arg.obj.name, "")
+                    else:
+                        mocha_type = self.infer_mocha_type(print_arg.obj)
                     if mocha_type == "dict":
                         dict_reg, _ = self.gen_expr(print_arg.obj)
                         key1_reg, _ = self.gen_expr(print_arg.row)
@@ -3065,7 +3123,16 @@ class CodeGen:
                 "i8":     "mocha_print_bool",
                 "i1":     "mocha_print_bool",
             }
-            fn = print_fns.get(val_type, "mocha_print_str")
+            if val_type == "%MochaDict*":
+                self.emit(f"  call void @mocha_dict_print(%MochaDict* {val_reg}, i8 {nl})")
+                continue
+            fn = print_fns.get(val_type)
+            if fn is None:
+                raise MochaCodeGenError(
+                    f"Cannot print value of type '{val_type}'. "
+                    f"print() supports: int, vast, float, bool, str.",
+                    node.line, node.col
+                )
 
             if val_type == "i8*":
                 self.emit(f"  call void @{fn}(i8* {val_reg}, i8 {nl})")
@@ -3415,13 +3482,16 @@ class CodeGen:
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
 
                 self.alloca_at_entry("%MochaArray2D*", ptr, init_null=True)
+                elem_cls2d = self.array2d_elem_class(node.type)                                   # NEW
                 # RC: release the previous value (null on the first pass) so a 2D array declared in a loop doesn't leak
                 old_arr2d_reg = self.fresh_temp()
                 self.emit(f"  {old_arr2d_reg} = load %MochaArray2D*, %MochaArray2D** {ptr}")
-                self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old_arr2d_reg})")
+                self.emit_array2d_release_call(old_arr2d_reg, elem_cls2d)                         # CHANGED
                 self.emit(f"  store %MochaArray2D* {val_reg}, %MochaArray2D** {ptr}")
                 self.locals[node.name] = (ptr, "%MochaArray2D*")
                 self.owned_arr2d_locals.append(ptr)
+                if elem_cls2d:                                                                    # NEW
+                    self.arr2d_elem_class[ptr] = elem_cls2d                                       # NEW
             else:
                 if self.is_borrowed_expr(node.value):
                     self.emit(f"  call void @mocha_array_retain(%MochaArray* {val_reg})")
@@ -3720,7 +3790,7 @@ class CodeGen:
                     self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
                 old_arr2d_reg = self.fresh_temp()
                 self.emit(f"  {old_arr2d_reg} = load %MochaArray2D*, %MochaArray2D** {ptr}")
-                self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old_arr2d_reg})")
+                self.emit_array2d_release_call(old_arr2d_reg, self.array2d_elem_class(target_mocha_type))
 
             if is_complex_target:
                 if self.is_borrowed_expr(node.value):
@@ -3826,7 +3896,7 @@ class CodeGen:
                             if borrowed:
                                 self.emit(f"  call void @mocha_array2d_retain(%MochaArray2D* {val_reg})")
                             self.emit(f"  {old} = load %MochaArray2D*, %MochaArray2D** {ptr}")
-                            self.emit(f"  call void @mocha_array2d_release(%MochaArray2D* {old})")
+                            self.emit_array2d_release_call(old, self.array2d_elem_class(field_mocha_type))
 
                     self.emit(f"  store {llvm_ftype} {val_reg}, {llvm_ftype}* {ptr}")
                     break
@@ -5291,13 +5361,14 @@ class CodeGen:
             return (result, elem_llvm)
     
     def gen_index2d_access(self, node):
-        arr_reg, _ = self.gen_expr(node.obj)
+        arr_reg, arr_type = self.gen_expr(node.obj)
         row_reg, _ = self.gen_expr(node.row)
         col_reg, _ = self.gen_expr(node.col)
 
-        # Chained dict access: d["person"]["name"]
-        if isinstance(node.obj, Identifier):
-            mocha_type = self.local_mocha_types.get(node.obj.name, "")
+        # Chained dict access: d["person"]["name"] (outer may be a variable or a field like this.d)
+        if arr_type == "%MochaDict*" or (isinstance(node.obj, Identifier) and
+                self.local_mocha_types.get(node.obj.name, "") == "dict"):
+            mocha_type = "dict"
             if mocha_type == "dict":
                 # First access: d["person"] -> i8*
                 inner_tmp = self.fresh_temp()
@@ -5425,10 +5496,49 @@ class CodeGen:
         self.emit(f"  call void @mocha_array_set(%MochaArray* {arr_reg}, i32 {idx_reg}, i8* {cast})")
 
     def gen_index2d_assign(self, node):
-        arr_reg, _ = self.gen_expr(node.target.obj)
+        arr_reg, arr_type = self.gen_expr(node.target.obj)
         row_reg, _ = self.gen_expr(node.target.row)
         col_reg, _ = self.gen_expr(node.target.col)
         val_reg, val_type = self.gen_expr(node.value)
+
+        # Nested dict write: d["a"]["b"] = v (parsed as Index2DAccess).
+        # Fetch the inner dict, then do the normal dict write on it.
+        # Detect the dict by the LLVM type gen_expr returned, so this.d[...] works too.
+        if arr_type == "%MochaDict*":
+            outer_type = "dict"
+            if outer_type == "dict":
+                inner_raw = self.fresh_temp()
+                self.emit(f"  {inner_raw} = call i8* @mocha_dict_get(%MochaDict* {arr_reg}, i8* {row_reg})")
+                inner = self.fresh_temp()
+                self.emit(f"  {inner} = bitcast i8* {inner_raw} to %MochaDict*")
+                if val_type == "i32":
+                    self.emit(f"  call void @mocha_dict_set_int(%MochaDict* {inner}, i8* {col_reg}, i32 {val_reg})")
+                elif val_type == "double":
+                    self.emit(f"  call void @mocha_dict_set_float(%MochaDict* {inner}, i8* {col_reg}, double {val_reg})")
+                elif val_type == "i8":
+                    self.emit(f"  call void @mocha_dict_set_bool(%MochaDict* {inner}, i8* {col_reg}, i8 {val_reg})")
+                elif val_type == "i64":
+                    self.emit(f"  call void @mocha_dict_set_vast(%MochaDict* {inner}, i8* {col_reg}, i64 {val_reg})")
+                elif val_type == "%MochaDict*":
+                    if self.is_borrowed_expr(node.value):
+                        self.emit(f"  call void @mocha_dict_retain(%MochaDict* {val_reg})")
+                    self.emit(f"  call void @mocha_dict_set_dict(%MochaDict* {inner}, i8* {col_reg}, %MochaDict* {val_reg})")
+                elif val_type.startswith("%struct."):
+                    cast = self.fresh_temp()
+                    self.emit(f"  {cast} = bitcast {val_type} {val_reg} to i8*")
+                    self.emit(f"  call void @mocha_dict_set_object(%MochaDict* {inner}, i8* {col_reg}, i8* {cast})")
+                    if not self.is_borrowed_expr(node.value):
+                        self.emit(f"  call void @rc_release(i8* {cast})")
+                else:
+                    self.emit(f"  call void @mocha_dict_set_str(%MochaDict* {inner}, i8* {col_reg}, i8* {val_reg})")
+                    if not self.is_borrowed_expr(node.value):
+                        self.emit(f"  call void @rc_release(i8* {val_reg})")
+                # fresh (non-borrowed) keys are orphaned after use
+                if not self.is_borrowed_expr(node.target.row):
+                    self.emit(f"  call void @rc_release(i8* {row_reg})")
+                if not self.is_borrowed_expr(node.target.col):
+                    self.emit(f"  call void @rc_release(i8* {col_reg})")
+                return
 
         # RC: str elements need the dedicated row-level string setter, same
         # as 1D array index-assignment — releases the old value and retains
@@ -5445,6 +5555,30 @@ class CodeGen:
             # extra retain immediately after use.
             self.emit(f"  call void @mocha_array_release(%MochaArray* {row_arr_reg}, i32 1)")
             return
+
+        # RC: a 2D array slot owns a reference; a borrowed class value must be retained
+        if val_type.startswith("%struct.") and self.is_borrowed_expr(node.value):
+            raw_obj = self.fresh_temp()
+            self.emit(f"  {raw_obj} = bitcast {val_type} {val_reg} to i8*")
+            self.emit(f"  call void @rc_retain(i8* {raw_obj})")
+
+        # RC: overwriting a filled slot must release the old occupant (after the retain above,
+        # so g[0][0] = g[0][0] can't free its own value). Name_release is null-safe.
+        if val_type.startswith("%struct."):
+            slot_cls = val_type[len("%struct."):].rstrip("*")
+            if slot_cls in self.rc_classes:
+                row_arr_reg = self.fresh_temp()
+                self.emit(f"  {row_arr_reg} = call %MochaArray* @mocha_array2d_get_row(%MochaArray2D* {arr_reg}, i32 {row_reg})")
+                old_slot = self.alloca_at_entry(val_type)
+                self.emit(f"  store {val_type} null, {val_type}* {old_slot}")
+                old_cast = self.fresh_temp()
+                self.emit(f"  {old_cast} = bitcast {val_type}* {old_slot} to i8*")
+                self.emit(f"  call void @mocha_array_get(%MochaArray* {row_arr_reg}, i32 {col_reg}, i8* {old_cast})")
+                old_obj = self.fresh_temp()
+                self.emit(f"  {old_obj} = load {val_type}, {val_type}* {old_slot}")
+                self.emit(f"  call void @{slot_cls}_release({val_type} {old_obj})")
+                # get_row retained the row; it was only used transiently here
+                self.emit(f"  call void @mocha_array_release(%MochaArray* {row_arr_reg}, i32 0)")
 
         slot = self.alloca_at_entry(val_type)
         self.emit(f"  store {val_type} {val_reg}, {val_type}* {slot}")
@@ -5609,6 +5743,10 @@ class CodeGen:
             tmp = self.fresh_temp()
             self.emit(f"  {tmp} = call %MochaArray* @mocha_dict_allvalues(%MochaDict* {d_reg})")
             return (tmp, "%MochaArray*")
+        elif member == "jsonify":
+            tmp = self.fresh_temp()
+            self.emit(f"  {tmp} = call i8* @mocha_dict_jsonify(%MochaDict* {d_reg})")
+            return (tmp, "i8*")
         elif member == "merge":
             # extract override flag
             override = 0
@@ -6354,6 +6492,7 @@ class CodeGen:
 
             self.emit("  call void @mocha_rc_stats_if_enabled()")
             self.emit("  call void @mocha_rc_shutdown()")
+            self.emit("  call void @mocha_output_finalize()")
             self.emit("  ret i32 0")
             self.emit("}")
 

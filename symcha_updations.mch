@@ -125,6 +125,9 @@ function main(didLoad) -> null {
     var e24: Expr = mul(x, ln_e(x));
     print("lim x→0 x·ln(x): ", newLine=true);
     print(sym_limit(e24, "x", 0.0), newLine=true);  // 0.0
+    var e24b: Expr = mul(ln_e(x), x);
+    print("lim x→0 ln(x)·x: ", newLine=true);
+    print(sym_limit(e24b, "x", 0.0), newLine=true);  // 0.0
 
     // ── Numerical fallback ──
 

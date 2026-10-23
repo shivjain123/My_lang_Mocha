@@ -5,6 +5,8 @@
 
 // mocha-lib-deps: mocha-math
 
+function c_print_err(msg: str) -> null native mocha_print_stderr;
+function c_exit(code: int) -> null native mocha_exit;
 const PRECESSION_RATE_DEG_YEAR: float = 0.0139552354;
 const LAHIRI_AYANAMSA_2000: float = 23.85675;
 const KP_AYANAMSA_2000: float = 23.71799;

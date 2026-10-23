@@ -150,6 +150,7 @@ class RBTree function inorder_node(n: RBNode) -> null;
 class RBTree function height_node(n: RBNode) -> int;
 class RBTree function successor_node(n: RBNode, key: DSValue, best: RBNode) -> RBNode;
 class RBTree function predecessor_node(n: RBNode, key: DSValue, best: RBNode) -> RBNode;
+class RBTree function insert_parent(x: RBNode, parent: RBNode, key: DSValue) -> RBNode;
 class RBTree function insert(key: DSValue) -> null;
 class RBTree function remove(key: DSValue) -> null;
 class RBTree function contains(key: DSValue) -> bool;

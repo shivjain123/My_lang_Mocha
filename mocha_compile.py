@@ -1668,7 +1668,6 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
                 "-lbcrypt",
             ]
         else:
-            import sys
             if sys.platform != "darwin":
                 link_cmd.append("-fuse-ld=lld")
             link_cmd.append("-lm")
@@ -1679,6 +1678,14 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
             link_cmd.append(WREN_OBJ)
         if needs_rust:
             link_cmd.append(RUST_LIB)
+        if needs_rust:
+            link_cmd += [
+                "-lntdll",
+                "-lws2_32",
+                "-luserenv",
+                "-ladvapi32",
+                "-ldbghelp",
+            ]
         if needs_zig:
             link_cmd.append(ZIG_LIB)
 

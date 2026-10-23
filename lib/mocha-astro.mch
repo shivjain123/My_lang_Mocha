@@ -14,6 +14,9 @@
 
 // mocha-lib-deps: mocha-math
 
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
+
 const PRECESSION_RATE_DEG_YEAR: float = 0.0139552354;
 const LAHIRI_AYANAMSA_2000: float = 23.85675;
 const KP_AYANAMSA_2000: float = 23.71799;
@@ -27,7 +30,20 @@ const RAMAN_OFFSET: float = 0.6167;
 ~~ Julian Day Number from a Gregorian calendar date and UT hour.
 ~~ year, month, day = calendar date, hour = UT time as decimal hours (e.g. 12.5 = 12:30).
 ~~ Standard astronomical algorithm (Meeus). Reference: JD(2000-01-01 12:00 UT) = 2451545.0.
+~~ Requires month in [1, 12], day in [1, 31], hour in [0, 24).
 function julian_day_number(year: int, month: int, day: int, hour: float) -> float {
+    if (month < 1 || month > 12) {
+        c_print_err("MochaLibError (mocha-astro): Month must be in [1, 12].");
+        c_exit(2);
+    };
+    if (day < 1 || day > 31) {
+        c_print_err("MochaLibError (mocha-astro): Day must be in [1, 31].");
+        c_exit(2);
+    };
+    if (hour < 0.0 || hour >= 24.0) {
+        c_print_err("MochaLibError (mocha-astro): Hour must be in [0, 24). Use next day for hour=24.");
+        c_exit(2);
+    };
     var y: int = year;
     var m: int = month;
     if (m <= 2) {
@@ -47,8 +63,12 @@ function julian_day_number(year: int, month: int, day: int, hour: float) -> floa
 
 ~~ Decimal (fractional) year from a Gregorian calendar date.
 ~~ year, month, day = calendar date. E.g. 2024-07-04 -> ~2024.505.
-~~ Used as input to the ayanamsa functions below.
+~~ Requires month in [1, 12] and day valid for that month/year (leap-aware).
 function fractional_year(year: int, month: int, day: int) -> float {
+    if (month < 1 || month > 12) {
+        c_print_err("MochaLibError (mocha-astro): Month must be in [1, 12].");
+        c_exit(2);
+    };
     var days_in_months: int[] = alloc int[12];
     days_in_months[0] = 31;
     days_in_months[1] = 28;
@@ -74,6 +94,11 @@ function fractional_year(year: int, month: int, day: int) -> float {
         days_in_months[1] = 29;
     };
 
+    if (day < 1 || day > days_in_months[month - 1]) {
+        c_print_err("MochaLibError (mocha-astro): Day out of range for that month and year.");
+        c_exit(2);
+    };
+
     var doy: int = 0;
     var i: int = 0;
     while (i < month - 1) {
@@ -90,7 +115,7 @@ function fractional_year(year: int, month: int, day: int) -> float {
     return float(year) + (float(doy - 1) / days_in_year);
 };
 
-~~ Normalizes an angle in degrees to the range [0, 360).
+~~ Normalizes an angle in degrees to the range [0, 360). Works for any real input.
 function normalize_degrees(angle: float) -> float {
     var a: float = angle;
     var n: float = a / 360.0;
@@ -103,40 +128,65 @@ function normalize_degrees(angle: float) -> float {
 };
 
 ~~ Lahiri (Chitrapaksha) ayanamsa in degrees for a given decimal year.
-~~ The official ayanamsa of the Indian government. Linear mean model.
+~~ Official ayanamsa of the Indian government. Linear mean model.
+~~ Valid approximately for years 1800-2200; beyond that, the linear model drifts by arcminutes to degrees.
 function lahiri_ayanamsa(year: float) -> float {
+    if (year < 1800.0 || year > 2200.0) {
+        c_print_err("MochaLibError (mocha-astro): Lahiri ayanamsa linear model valid only for years 1800-2200.");
+        c_exit(2);
+    };
     return LAHIRI_AYANAMSA_2000 + (year - 2000.0) * PRECESSION_RATE_DEG_YEAR;
 };
 
 ~~ B.V. Raman ayanamsa in degrees for a given decimal year.
-~~ Approximated as Lahiri ayanamsa with a documented constant offset.
+~~ Approximated as Lahiri ayanamsa with documented constant offset. Same valid range as Lahiri.
 function raman_ayanamsa(year: float) -> float {
+    if (year < 1800.0 || year > 2200.0) {
+        c_print_err("MochaLibError (mocha-astro): Raman ayanamsa linear model valid only for years 1800-2200.");
+        c_exit(2);
+    };
     const LAHIRI: float = lahiri_ayanamsa(year);
     return LAHIRI - RAMAN_OFFSET;
 };
 
 ~~ KP (Krishnamurti Paddhati) ayanamsa in degrees for a given decimal year.
-~~ Nearly identical to Lahiri, using a slightly different reference epoch value.
+~~ Nearly identical to Lahiri, using a slightly different J2000 reference value. Same valid range.
 function kp_ayanamsa(year: float) -> float {
+    if (year < 1800.0 || year > 2200.0) {
+        c_print_err("MochaLibError (mocha-astro): KP ayanamsa linear model valid only for years 1800-2200.");
+        c_exit(2);
+    };
     return KP_AYANAMSA_2000 + (year - 2000.0) * PRECESSION_RATE_DEG_YEAR;
 };
 
 ~~ Fagan-Bradley ayanamsa in degrees for a given decimal year.
-~~ The standard ayanamsa of Western sidereal astrology.
+~~ Standard ayanamsa of Western sidereal astrology. Linear model, valid ~1650-2150 (centered on 1950 reference).
 function fagan_bradley_ayanamsa(year: float) -> float {
+    if (year < 1650.0 || year > 2150.0) {
+        c_print_err("MochaLibError (mocha-astro): Fagan-Bradley ayanamsa linear model valid only for years 1650-2150.");
+        c_exit(2);
+    };
     return FAGAN_BRADLEY_1950 + (year - 1950.0) * PRECESSION_RATE_DEG_YEAR;
 };
 
 ~~ Converts a tropical (Western) ecliptic longitude to sidereal (Vedic) longitude.
-~~ tropical_longitude and ayanamsa in degrees. sidereal = tropical - ayanamsa.
+~~ sidereal = tropical - ayanamsa. Requires ayanamsa in [0, 30).
 function tropical_to_sidereal(tropical_longitude: float, ayanamsa: float) -> float {
+    if (ayanamsa < 0.0 || ayanamsa >= 30.0) {
+        c_print_err("MochaLibError (mocha-astro): Ayanamsa must be in [0, 30) degrees — value out of plausible range.");
+        c_exit(2);
+    };
     const RAW: float = tropical_longitude - ayanamsa;
     return normalize_degrees(RAW);
 };
 
 ~~ Converts a sidereal (Vedic) ecliptic longitude to tropical (Western) longitude.
-~~ sidereal_longitude and ayanamsa in degrees. tropical = sidereal + ayanamsa.
+~~ tropical = sidereal + ayanamsa. Requires ayanamsa in [0, 30).
 function sidereal_to_tropical(sidereal_longitude: float, ayanamsa: float) -> float {
+    if (ayanamsa < 0.0 || ayanamsa >= 30.0) {
+        c_print_err("MochaLibError (mocha-astro): Ayanamsa must be in [0, 30) degrees — value out of plausible range.");
+        c_exit(2);
+    };
     const RAW: float = sidereal_longitude + ayanamsa;
     return normalize_degrees(RAW);
 };
@@ -157,12 +207,22 @@ const DEG_TO_RAD: float = 0.01745329251994;
 const RAD_TO_DEG: float = 57.29577951308232;
 
 ~~ Julian centuries elapsed since epoch J2000.0 (JD 2451545.0). The universal time variable T for all formulas below.
+~~ Requires jd > 0 (positive Julian Day). Recommended valid range: JD 2305447.5-2488070.0 (1600-2200 CE).
 function centuries_since_j2000(jd: float) -> float {
+    if (jd <= 0.0) {
+        c_print_err("MochaLibError (mocha-astro): Julian Day must be positive.");
+        c_exit(2);
+    };
     return (jd - 2451545.0) / 36525.0;
 };
 
 ~~ Quadrant-aware arctangent (atan2 equivalent), returning degrees in [0, 360).
+~~ Requires x and y not both zero (undefined angle).
 function atan2_degrees(y: float, x: float) -> float {
+    if (x == 0.0 && y == 0.0) {
+        c_print_err("MochaLibError (mocha-astro): atan2 undefined when both x and y are zero.");
+        c_exit(2);
+    };
     var result: float = 0.0;
     if (x > 0.0) {
         var ratio: float = y / x;
@@ -182,9 +242,7 @@ function atan2_degrees(y: float, x: float) -> float {
             if (y > 0.0) {
                 result = 90.0;
             } else {
-                if (y < 0.0) {
-                    result = -90.0;
-                };
+                result = -90.0;
             };
         };
     };
@@ -192,27 +250,46 @@ function atan2_degrees(y: float, x: float) -> float {
 };
 
 ~~ Solves Kepler's equation (M = E - e*sin(E)) for eccentric anomaly via Newton-Raphson iteration.
-~~ mean_anomaly_deg in degrees, eccentricity as decimal (0-1). Returns eccentric anomaly in degrees.
+~~ mean_anomaly_deg in degrees, eccentricity as decimal in [0, 1). Returns eccentric anomaly in degrees.
+~~ Uses 15 iterations with convergence check (tolerance 1E-10 rad). Errors if not converged.
 function solve_kepler_equation(mean_anomaly_deg: float, eccentricity: float) -> float {
+    if (eccentricity < 0.0 || eccentricity >= 1.0) {
+        c_print_err("MochaLibError (mocha-astro): Eccentricity must be in [0, 1) for Kepler solver.");
+        c_exit(2);
+    };
     var m_norm: float = normalize_degrees(mean_anomaly_deg);
     var m_rad: float = m_norm * DEG_TO_RAD;
     var e_val: float = m_rad;
     var i: int = 0;
-    while (i < 8) {
+    var converged: bool = false;
+    while (i < 15) {
         var sin_e: float = e_val.sin(RAD);
         var cos_e: float = e_val.cos(RAD);
         var f: float = e_val - eccentricity * sin_e - m_rad;
         var f_prime: float = 1.0 - eccentricity * cos_e;
-        e_val = e_val - (f / f_prime);
+        var d_e: float = f / f_prime;
+        e_val = e_val - d_e;
+        if (abs(d_e) < 1E-10) {
+            converged = true;
+            i = 15;
+        };
         i++;
+    };
+    if (!converged) {
+        c_print_err("MochaLibError (mocha-astro): Kepler solver did not converge in 15 iterations.");
+        c_exit(2);
     };
     var e_deg: float = e_val * RAD_TO_DEG;
     return normalize_degrees(e_deg);
 };
 
 ~~ True anomaly from eccentric anomaly via the half-angle relation.
-~~ eccentric_anomaly_deg in degrees, eccentricity as decimal.
+~~ eccentric_anomaly_deg in degrees, eccentricity as decimal in [0, 1).
 function true_anomaly_from_eccentric(eccentric_anomaly_deg: float, eccentricity: float) -> float {
+    if (eccentricity < 0.0 || eccentricity >= 1.0) {
+        c_print_err("MochaLibError (mocha-astro): Eccentricity must be in [0, 1) for true anomaly.");
+        c_exit(2);
+    };
     var e_norm: float = normalize_degrees(eccentric_anomaly_deg);
     var half_e: float = e_norm / 2.0;
     var tan_half_e: float = half_e.tan(DEG);
@@ -230,28 +307,39 @@ function true_anomaly_from_eccentric(eccentric_anomaly_deg: float, eccentricity:
 };
 
 ~~ Heliocentric distance in AU from semi-major axis, eccentric anomaly, and eccentricity.
-~~ r = a(1 - e*cos(E)).
+~~ r = a(1 - e*cos(E)). Requires a > 0 and 0 <= e < 1.
 function heliocentric_distance(semi_major_axis: float, eccentric_anomaly_deg: float, eccentricity: float) -> float {
+    if (semi_major_axis <= 0.0) {
+        c_print_err("MochaLibError (mocha-astro): Semi-major axis must be positive.");
+        c_exit(2);
+    };
+    if (eccentricity < 0.0 || eccentricity >= 1.0) {
+        c_print_err("MochaLibError (mocha-astro): Eccentricity must be in [0, 1) for heliocentric distance.");
+        c_exit(2);
+    };
     var cos_e: float = eccentric_anomaly_deg.cos(DEG);
     return semi_major_axis * (1.0 - eccentricity * cos_e);
 };
 
 ~~ Heliocentric ecliptic longitude from true anomaly and longitude of perihelion.
+~~ Both in degrees. No constraints (pure angle addition + normalization).
 function heliocentric_longitude(true_anomaly_deg: float, perihelion_longitude_deg: float) -> float {
     return normalize_degrees(true_anomaly_deg + perihelion_longitude_deg);
 };
 
 ~~ Mean longitude at time T from J2000 reference value and rate per Julian century.
+~~ No constraints (pure linear extrapolation).
 function mean_longitude_at_time(l0: float, l_rate_per_century: float, t: float) -> float {
     return normalize_degrees(l0 + l_rate_per_century * t);
 };
 
-~~ Mean anomaly from mean longitude and longitude of perihelion.
+~~ Mean anomaly from mean longitude and longitude of perihelion. No constraints.
 function mean_anomaly_from_elements(mean_longitude_deg: float, perihelion_longitude_deg: float) -> float {
     return normalize_degrees(mean_longitude_deg - perihelion_longitude_deg);
 };
 
 ~~ Earth's heliocentric distance in AU from the Sun's mean anomaly (Meeus simplified formula).
+~~ Valid for realistic Sun mean anomaly values (any real input works, but model is only good for actual Earth orbit).
 function earth_heliocentric_distance(sun_mean_anomaly_deg: float) -> float {
     var cos_m: float = sun_mean_anomaly_deg.cos(DEG);
     var two_m: float = 2.0 * sun_mean_anomaly_deg;
@@ -260,7 +348,17 @@ function earth_heliocentric_distance(sun_mean_anomaly_deg: float) -> float {
 };
 
 ~~ Geocentric ecliptic longitude of a planet from both bodies' heliocentric distance/longitude (2D vector method, assumes coplanar orbits).
+~~ r_planet and r_earth in AU (>0); longitudes in degrees.
+~~ Errors if planet and Earth are at the same position (impossible — collision).
 function geocentric_longitude_from_heliocentric(r_planet: float, l_planet_deg: float, r_earth: float, l_earth_deg: float) -> float {
+    if (r_planet <= 0.0) {
+        c_print_err("MochaLibError (mocha-astro): Planet heliocentric distance must be positive.");
+        c_exit(2);
+    };
+    if (r_earth <= 0.0) {
+        c_print_err("MochaLibError (mocha-astro): Earth heliocentric distance must be positive.");
+        c_exit(2);
+    };
     var cos_lp: float = l_planet_deg.cos(DEG);
     var sin_lp: float = l_planet_deg.sin(DEG);
     var cos_le: float = l_earth_deg.cos(DEG);
@@ -553,8 +651,12 @@ function pluto_ecliptic_longitude(t: float) -> float {
 // diurnal rotation, not the slow zodiacal direction), not a typo.
 
 ~~ Local Sidereal Time in degrees from Julian Day and observer's longitude (east positive, west negative).
-~~ LST = GMST(JD) + longitude. Uses the standard Meeus GMST formula.
+~~ LST = GMST(JD) + longitude. Uses standard Meeus GMST formula. Requires jd > 0.
 function local_sidereal_time(jd: float, longitude_east_deg: float) -> float {
+    if (jd <= 0.0) {
+        c_print_err("MochaLibError (mocha-astro): Julian Day must be positive.");
+        c_exit(2);
+    };
     var t: float = centuries_since_j2000(jd);
     var d: float = jd - 2451545.0;
     var gmst_raw: float = 280.46061837 + 360.98564736629 * d + 0.000387933 * t * t - (t * t * t) / 38710000.0;
@@ -562,9 +664,13 @@ function local_sidereal_time(jd: float, longitude_east_deg: float) -> float {
     return normalize_degrees(gmst + longitude_east_deg);
 };
 
-~~ Converts a right ascension to ecliptic longitude, for a point known to lie on the ecliptic.
-~~ ra_deg = right ascension in degrees, obliquity_deg = obliquity of the ecliptic.
+~~ Converts a right ascension to ecliptic longitude for a point known to lie on the ecliptic.
+~~ ra_deg = right ascension in degrees, obliquity_deg = obliquity of the ecliptic in [20, 30).
 function ecliptic_longitude_from_ra(ra_deg: float, obliquity_deg: float) -> float {
+    if (obliquity_deg < 20.0 || obliquity_deg >= 30.0) {
+        c_print_err("MochaLibError (mocha-astro): Obliquity must be in [20, 30) degrees — value out of plausible range.");
+        c_exit(2);
+    };
     var sin_ra: float = ra_deg.sin(DEG);
     var cos_ra: float = ra_deg.cos(DEG);
     var cos_obl: float = obliquity_deg.cos(DEG);
@@ -573,15 +679,23 @@ function ecliptic_longitude_from_ra(ra_deg: float, obliquity_deg: float) -> floa
     return atan2_degrees(y, x);
 };
 
-~~ Midheaven (MC) ecliptic longitude — the point where the ecliptic crosses the local meridian.
-~~ lst_deg = local sidereal time in degrees, obliquity_deg = obliquity of the ecliptic.
+~~ Midheaven (MC) ecliptic longitude — point where ecliptic crosses local meridian.
+~~ lst_deg = local sidereal time in degrees, obliquity_deg in [20, 30).
 function midheaven_longitude(lst_deg: float, obliquity_deg: float) -> float {
     return ecliptic_longitude_from_ra(lst_deg, obliquity_deg);
 };
 
-~~ Ascendant (Lagna) ecliptic longitude — the point of the ecliptic rising on the eastern horizon.
-~~ lst_deg = local sidereal time, latitude_deg = observer's geographic latitude, obliquity_deg = obliquity of the ecliptic.
+~~ Ascendant (Lagna) ecliptic longitude — point of ecliptic rising on eastern horizon.
+~~ lst_deg = local sidereal time, latitude_deg in (-90, 90), obliquity_deg in [20, 30).
 function ascendant_longitude(lst_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
+    if (latitude_deg <= -90.0 || latitude_deg >= 90.0) {
+        c_print_err("MochaLibError (mocha-astro): Geographic latitude must be strictly in (-90, 90) degrees.");
+        c_exit(2);
+    };
+    if (obliquity_deg < 20.0 || obliquity_deg >= 30.0) {
+        c_print_err("MochaLibError (mocha-astro): Obliquity must be in [20, 30) degrees.");
+        c_exit(2);
+    };
     var cos_lst: float = lst_deg.cos(DEG);
     var sin_lst: float = lst_deg.sin(DEG);
     var cos_obl: float = obliquity_deg.cos(DEG);
@@ -593,58 +707,100 @@ function ascendant_longitude(lst_deg: float, latitude_deg: float, obliquity_deg:
 };
 
 ~~ The point diametrically opposite a given ecliptic longitude (e.g. IC from MC, Descendant from Ascendant).
+~~ No constraints.
 function opposite_point(longitude_deg: float) -> float {
     return normalize_degrees(longitude_deg + 180.0);
 };
 
 ~~ Equal House cusp — each house is exactly 30° from the Ascendant.
-~~ ascendant_deg = Ascendant longitude, house_number = 1-12.
+~~ ascendant_deg = Ascendant longitude, house_number must be in [1, 12].
 function equal_house_cusp(ascendant_deg: float, house_number: int) -> float {
+    if (house_number < 1 || house_number > 12) {
+        c_print_err("MochaLibError (mocha-astro): House number must be in [1, 12].");
+        c_exit(2);
+    };
     var offset: float = 30.0 * float(house_number - 1);
     return normalize_degrees(ascendant_deg + offset);
 };
 
 ~~ Whole Sign House cusp — house 1 begins at 0° of the Ascendant's zodiac sign.
-~~ ascendant_deg = Ascendant longitude, house_number = 1-12.
+~~ ascendant_deg = Ascendant longitude, house_number must be in [1, 12].
 function whole_sign_cusp(ascendant_deg: float, house_number: int) -> float {
+    if (house_number < 1 || house_number > 12) {
+        c_print_err("MochaLibError (mocha-astro): House number must be in [1, 12].");
+        c_exit(2);
+    };
     var sign_index: float = float(int(ascendant_deg / 30.0));
     var sign_begin: float = sign_index * 30.0;
     var offset: float = 30.0 * float(house_number - 1);
     return normalize_degrees(sign_begin + offset);
 };
 
-~~ Semi-diurnal arc in degrees — half the time (as an hour angle) a point spends above the horizon.
-~~ declination_deg = point's declination, latitude_deg = observer's geographic latitude.
+~~ Semi-diurnal arc in degrees — half the time (as an hour angle) a point spends above horizon.
+~~ declination_deg = point's declination, latitude_deg in (-90, 90).
+~~ Errors if point is circumpolar at this latitude (|cos(SDA)| > 1 before clamp).
 function semi_diurnal_arc(declination_deg: float, latitude_deg: float) -> float {
+    if (latitude_deg <= -90.0 || latitude_deg >= 90.0) {
+        c_print_err("MochaLibError (mocha-astro): Geographic latitude must be strictly in (-90, 90) degrees.");
+        c_exit(2);
+    };
     var tan_lat: float = latitude_deg.tan(DEG);
     var tan_decl: float = declination_deg.tan(DEG);
     var cos_sda: float = -tan_lat * tan_decl;
-    if (cos_sda > 0.9999) {
-        cos_sda = 0.9999;
-    };
-    if (cos_sda < -0.9999) {
-        cos_sda = -0.9999;
+    if (cos_sda >= 1.0 || cos_sda <= -1.0) {
+        c_print_err("MochaLibError (mocha-astro): Point is circumpolar at this latitude — no finite semi-diurnal arc.");
+        c_exit(2);
     };
     var sda_rad: float = cos_sda.inv_cos().real;
     return sda_rad * RAD_TO_DEG;
 };
 
 ~~ General Placidus intermediate cusp solver via semi-arc trisection (iterative fixed-point method).
-~~ ramc_deg = right ascension of MC (= LST), latitude_deg = observer's latitude, obliquity_deg = ecliptic obliquity,
-~~ fraction = 1/3 or 2/3 (trisection point), sign = -1.0 for the Asc-MC quadrant (cusps 11,12), +1.0 for the MC-Desc quadrant (cusps 9,8).
+~~ ramc_deg = right ascension of MC (= LST), latitude_deg in (-66, 66) for Placidus validity,
+~~ obliquity_deg in [20, 30), fraction in (0, 1), sign = -1.0 (Asc-MC quadrant) or +1.0 (MC-Desc quadrant).
+~~ Errors if iteration does not converge in 25 steps.
 function placidus_intermediate_cusp(ramc_deg: float, latitude_deg: float, obliquity_deg: float, fraction: float, sign: float) -> float {
+    if (latitude_deg <= -66.0 || latitude_deg >= 66.0) {
+        c_print_err("MochaLibError (mocha-astro): Placidus house system undefined beyond ±66° latitude. Use whole_sign_cusp or equal_house_cusp for polar latitudes.");
+        c_exit(2);
+    };
+    if (obliquity_deg < 20.0 || obliquity_deg >= 30.0) {
+        c_print_err("MochaLibError (mocha-astro): Obliquity must be in [20, 30) degrees.");
+        c_exit(2);
+    };
+    if (fraction <= 0.0 || fraction >= 1.0) {
+        c_print_err("MochaLibError (mocha-astro): Trisection fraction must be in (0, 1).");
+        c_exit(2);
+    };
+    if (sign != -1.0 && sign != 1.0) {
+        c_print_err("MochaLibError (mocha-astro): Sign must be +1.0 or -1.0.");
+        c_exit(2);
+    };
     var lamb_da: float = normalize_degrees(ramc_deg + sign * fraction * 90.0);
     var iter: int = 0;
+    var converged: bool = false;
+    var prev_lamb_da: float = lamb_da;
     while (iter < 25) {
         var sin_lamb_da: float = lamb_da.sin(DEG);
         var sin_obl: float = obliquity_deg.sin(DEG);
         var sin_delta: float = sin_lamb_da * sin_obl;
+        if (sin_delta > 1.0) { sin_delta = 1.0; };
+        if (sin_delta < -1.0) { sin_delta = -1.0; };
         var delta_rad: float = sin_delta.inv_sin().real;
         var delta: float = delta_rad * RAD_TO_DEG;
         var sda: float = semi_diurnal_arc(delta, latitude_deg);
         var target_alpha: float = normalize_degrees(ramc_deg + sign * fraction * sda);
         lamb_da = ecliptic_longitude_from_ra(target_alpha, obliquity_deg);
+        if (abs(lamb_da - prev_lamb_da) < 1E-6) {
+            converged = true;
+            iter = 25;
+        };
+        prev_lamb_da = lamb_da;
         iter++;
+    };
+    if (!converged) {
+        c_print_err("MochaLibError (mocha-astro): Placidus cusp solver did not converge in 25 iterations.");
+        c_exit(2);
     };
     return lamb_da;
 };
@@ -669,25 +825,25 @@ function placidus_cusp_8(ramc_deg: float, latitude_deg: float, obliquity_deg: fl
     return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 2.0 / 3.0, 1.0);
 };
 
-~~ Placidus house 2 cusp — the point opposite house 8.
+~~ Placidus house 2 cusp — point opposite house 8.
 function placidus_cusp_2(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
     var c8: float = placidus_cusp_8(ramc_deg, latitude_deg, obliquity_deg);
     return opposite_point(c8);
 };
 
-~~ Placidus house 3 cusp — the point opposite house 9.
+~~ Placidus house 3 cusp — point opposite house 9.
 function placidus_cusp_3(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
     var c9: float = placidus_cusp_9(ramc_deg, latitude_deg, obliquity_deg);
     return opposite_point(c9);
 };
 
-~~ Placidus house 5 cusp — the point opposite house 11.
+~~ Placidus house 5 cusp — point opposite house 11.
 function placidus_cusp_5(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
     var c11: float = placidus_cusp_11(ramc_deg, latitude_deg, obliquity_deg);
     return opposite_point(c11);
 };
 
-~~ Placidus house 6 cusp — the point opposite house 12.
+~~ Placidus house 6 cusp — point opposite house 12.
 function placidus_cusp_6(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
     var c12: float = placidus_cusp_12(ramc_deg, latitude_deg, obliquity_deg);
     return opposite_point(c12);
@@ -700,26 +856,49 @@ function placidus_cusp_6(ramc_deg: float, latitude_deg: float, obliquity_deg: fl
 // standard method for aspect calculations in classical Vedic texts,
 // independent of whichever house system (Placidus etc.) is used for cusps.
 
-~~ Zodiac sign index (0-11, 0=Aries) from an ecliptic longitude.
+~~ Zodiac sign index (0-11, 0=Aries) from an ecliptic longitude in [0, 360).
+~~ Longitudes outside [0, 360) are rejected — use normalize_degrees() first if needed.
 function zodiac_sign_index(longitude_deg: float) -> int {
+    if (longitude_deg < 0.0 || longitude_deg >= 360.0) {
+        c_print_err("MochaLibError (mocha-astro): Ecliptic longitude must be in [0, 360).");
+        c_exit(2);
+    };
     return int(longitude_deg / 30.0);
 };
 
 ~~ House position (1-12) of a target sign counted from a reference sign, using whole-sign counting.
 ~~ from_sign and to_sign are 0-11 indices. Same sign = 1 (conjunction), 6 signs away = 7 (opposition).
 function house_position(from_sign: int, to_sign: int) -> int {
+    if (from_sign < 0 || from_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): from_sign must be in [0, 11] (zodiac sign index).");
+        c_exit(2);
+    };
+    if (to_sign < 0 || to_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): to_sign must be in [0, 11] (zodiac sign index).");
+        c_exit(2);
+    };
     var diff: int = to_sign - from_sign + 12;
     var wrapped: int = diff % 12;
     return wrapped + 1;
 };
 
 ~~ Checks whether a house distance qualifies for the universal 7th-house aspect (every planet aspects its 7th).
+~~ house_distance must be in [1, 12].
 function has_seventh_aspect(house_distance: int) -> bool {
+    if (house_distance < 1 || house_distance > 12) {
+        c_print_err("MochaLibError (mocha-astro): House distance must be in [1, 12].");
+        c_exit(2);
+    };
     return house_distance == 7;
 };
 
 ~~ Checks whether a house distance qualifies for Mars's special aspects (4th, 7th, 8th).
+~~ house_distance must be in [1, 12].
 function has_mars_special_aspect(house_distance: int) -> bool {
+    if (house_distance < 1 || house_distance > 12) {
+        c_print_err("MochaLibError (mocha-astro): House distance must be in [1, 12].");
+        c_exit(2);
+    };
     if (house_distance == 4 || house_distance == 7 || house_distance == 8) {
         return true;
     };
@@ -727,7 +906,12 @@ function has_mars_special_aspect(house_distance: int) -> bool {
 };
 
 ~~ Checks whether a house distance qualifies for Jupiter's special aspects (5th, 7th, 9th).
+~~ house_distance must be in [1, 12].
 function has_jupiter_special_aspect(house_distance: int) -> bool {
+    if (house_distance < 1 || house_distance > 12) {
+        c_print_err("MochaLibError (mocha-astro): House distance must be in [1, 12].");
+        c_exit(2);
+    };
     if (house_distance == 5 || house_distance == 7 || house_distance == 9) {
         return true;
     };
@@ -735,7 +919,12 @@ function has_jupiter_special_aspect(house_distance: int) -> bool {
 };
 
 ~~ Checks whether a house distance qualifies for Saturn's special aspects (3rd, 7th, 10th).
+~~ house_distance must be in [1, 12].
 function has_saturn_special_aspect(house_distance: int) -> bool {
+    if (house_distance < 1 || house_distance > 12) {
+        c_print_err("MochaLibError (mocha-astro): House distance must be in [1, 12].");
+        c_exit(2);
+    };
     if (house_distance == 3 || house_distance == 7 || house_distance == 10) {
         return true;
     };
@@ -743,12 +932,17 @@ function has_saturn_special_aspect(house_distance: int) -> bool {
 };
 
 ~~ Checks whether a house distance qualifies for Rahu/Ketu's special aspects, using the widely-adopted
-~~ convention of treating the lunar nodes like Saturn (5th, 7th, 9th). Not universal across all classical texts.
+~~ convention of treating the lunar nodes like Jupiter (5th, 7th, 9th). Not universal across all classical texts.
+~~ house_distance must be in [1, 12].
 function has_rahu_ketu_special_aspect(house_distance: int) -> bool {
+    if (house_distance < 1 || house_distance > 12) {
+        c_print_err("MochaLibError (mocha-astro): House distance must be in [1, 12].");
+        c_exit(2);
+    };
     return has_jupiter_special_aspect(house_distance);
 };
 
-~~ Shortest angular separation between two ecliptic longitudes, in degrees (0-180).
+~~ Shortest angular separation between two ecliptic longitudes in degrees (0-180). No constraints.
 function angular_separation(lon1: float, lon2: float) -> float {
     var diff: float = normalize_degrees(lon1 - lon2);
     if (diff > 180.0) {
@@ -758,8 +952,12 @@ function angular_separation(lon1: float, lon2: float) -> float {
 };
 
 ~~ Checks whether a planet is combust (too close to the Sun to be visible/effective).
-~~ planet_lon and sun_lon in degrees, orb_deg = the combustion orb threshold (varies by planet and text).
+~~ planet_lon and sun_lon in degrees, orb_deg = combustion orb threshold in [0, 180) — typically 3-15° by planet and text.
 function is_combust(planet_lon: float, sun_lon: float, orb_deg: float) -> bool {
+    if (orb_deg < 0.0 || orb_deg >= 180.0) {
+        c_print_err("MochaLibError (mocha-astro): Combustion orb must be in [0, 180) degrees.");
+        c_exit(2);
+    };
     var separation: float = angular_separation(planet_lon, sun_lon);
     return separation <= orb_deg;
 };
@@ -793,7 +991,9 @@ function dasha_years(lord: DashaLord) -> float {
         case DashaLord.JUPITER: result = 16.0;
         case DashaLord.SATURN:  result = 19.0;
         case DashaLord.MERCURY: result = 17.0;
-        default:                result = 0.0;
+        default:
+            c_print_err("MochaLibError (mocha-astro): Unrecognized dasha lord in dasha_years.");
+            c_exit(2);
     };
     return result;
 };
@@ -811,12 +1011,14 @@ function index_from_dasha_lord(lord: DashaLord) -> int {
         case DashaLord.JUPITER: result = 6;
         case DashaLord.SATURN:  result = 7;
         case DashaLord.MERCURY: result = 8;
-        default:                result = 0;
+        default:
+            c_print_err("MochaLibError (mocha-astro): Unrecognized dasha lord in index_from_dasha_lord.");
+            c_exit(2);
     };
     return result;
 };
 
-~~ Dasha lord at a given position (0-8) in the Vimshottari sequence, wrapping automatically.
+~~ Dasha lord at a given position (0-8) in the Vimshottari sequence, wrapping automatically for any integer.
 function dasha_lord_from_index(idx: int) -> DashaLord {
     var i: int = idx % 9;
     if (i < 0) {
@@ -839,20 +1041,31 @@ function next_dasha_lord(current: DashaLord) -> DashaLord {
     return dasha_lord_from_index(idx + 1);
 };
 
-~~ Nakshatra index (0-26) from the Moon's sidereal ecliptic longitude. Each nakshatra spans 13°20'.
+~~ Nakshatra index (0-26) from the Moon's sidereal ecliptic longitude in [0, 360).
+~~ Each nakshatra spans 13°20'. Longitudes outside [0, 360) are rejected.
 function nakshatra_index(moon_longitude_deg: float) -> int {
+    if (moon_longitude_deg < 0.0 || moon_longitude_deg >= 360.0) {
+        c_print_err("MochaLibError (mocha-astro): Moon longitude must be in [0, 360).");
+        c_exit(2);
+    };
     const NAK_WIDTH: float = 360.0 / 27.0;
     return int(moon_longitude_deg / NAK_WIDTH);
 };
 
 ~~ The dasha lord ruling at birth, determined by the Moon's nakshatra at birth.
+~~ moon_longitude_deg must be in [0, 360).
 function dasha_lord_at_birth(moon_longitude_deg: float) -> DashaLord {
     var nak_idx: int = nakshatra_index(moon_longitude_deg);
     return dasha_lord_from_index(nak_idx);
 };
 
 ~~ Remaining years of the first (birth) mahadasha, based on how far the Moon has progressed through its nakshatra.
+~~ moon_longitude_deg must be in [0, 360).
 function dasha_balance_years(moon_longitude_deg: float) -> float {
+    if (moon_longitude_deg < 0.0 || moon_longitude_deg >= 360.0) {
+        c_print_err("MochaLibError (mocha-astro): Moon longitude must be in [0, 360).");
+        c_exit(2);
+    };
     const NAK_WIDTH: float = 360.0 / 27.0;
     var nak_idx: int = nakshatra_index(moon_longitude_deg);
     var nak_begin: float = float(nak_idx) * NAK_WIDTH;
@@ -865,8 +1078,16 @@ function dasha_balance_years(moon_longitude_deg: float) -> float {
 };
 
 ~~ Duration in years of an antardasha (sub-period) within a mahadasha.
-~~ antar_lord = the sub-period's ruling planet, maha_years = the full mahadasha duration in years.
+~~ antar_lord = sub-period's ruling planet, maha_years = full mahadasha duration in (0, 20] years.
 function antardasha_duration(antar_lord: DashaLord, maha_years: float) -> float {
+    if (maha_years <= 0.0) {
+        c_print_err("MochaLibError (mocha-astro): Mahadasha duration must be positive.");
+        c_exit(2);
+    };
+    if (maha_years > 20.0) {
+        c_print_err("MochaLibError (mocha-astro): Mahadasha duration exceeds 20 years — Vimshottari maximum is Venus at 20.");
+        c_exit(2);
+    };
     var antar_years: float = dasha_years(antar_lord);
     return maha_years * (antar_years / 120.0);
 };
@@ -879,25 +1100,52 @@ function antardasha_duration(antar_lord: DashaLord, maha_years: float) -> float 
 // and strength analysis), not a sub-degree position within that sign.
 
 ~~ Which part (0 to division_count-1) of its current sign a longitude falls into, for a given varga division.
+~~ longitude_deg must be in [0, 360). division_count must be a positive integer.
 function varga_part_index(longitude_deg: float, division_count: int) -> int {
+    if (longitude_deg < 0.0 || longitude_deg >= 360.0) {
+        c_print_err("MochaLibError (mocha-astro): Ecliptic longitude must be in [0, 360).");
+        c_exit(2);
+    };
+    if (division_count < 1) {
+        c_print_err("MochaLibError (mocha-astro): Division count must be a positive integer.");
+        c_exit(2);
+    };
     var position_in_sign: float = longitude_deg % 30.0;
     var part_width: float = 30.0 / float(division_count);
     return int(position_in_sign / part_width);
 };
 
 ~~ Modality of a sign: 0 = movable/cardinal, 1 = fixed, 2 = dual/mutable.
+~~ sign_index must be in [0, 11].
 function sign_modality(sign_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
     return sign_index % 3;
 };
 
 ~~ Whether a sign is classically "odd" (Aries, Gemini, Leo, Libra, Sagittarius, Aquarius).
+~~ sign_index must be in [0, 11].
 function is_odd_sign(sign_index: int) -> bool {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
     return sign_index % 2 == 0;
 };
 
 ~~ D2 Hora (wealth) chart sign. Odd signs: 1st half -> Leo (Sun), 2nd half -> Cancer (Moon). Even signs: reversed.
-~~ sign_index = birth sign (0-11), part_index = 0 or 1 (from varga_part_index with division_count=2).
+~~ sign_index in [0, 11], part_index in [0, 1].
 function hora_sign_d2(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 1) {
+        c_print_err("MochaLibError (mocha-astro): D2 part index must be in [0, 1].");
+        c_exit(2);
+    };
     var odd: bool = is_odd_sign(sign_index);
     if (odd) {
         if (part_index == 0) {
@@ -912,17 +1160,44 @@ function hora_sign_d2(sign_index: int, part_index: int) -> int {
 };
 
 ~~ D3 Drekkana (siblings) chart sign. Parts map to same, 5th, and 9th sign (trine pattern).
+~~ sign_index in [0, 11], part_index in [0, 2].
 function drekkana_sign_d3(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 2) {
+        c_print_err("MochaLibError (mocha-astro): D3 part index must be in [0, 2].");
+        c_exit(2);
+    };
     return (sign_index + part_index * 4) % 12;
 };
 
 ~~ D4 Chaturthamsa (fortune/property) chart sign. Parts map to same, 4th, 7th, 10th sign (kendra pattern).
+~~ sign_index in [0, 11], part_index in [0, 3].
 function chaturthamsa_sign_d4(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 3) {
+        c_print_err("MochaLibError (mocha-astro): D4 part index must be in [0, 3].");
+        c_exit(2);
+    };
     return (sign_index + part_index * 3) % 12;
 };
 
 ~~ D7 Saptamsa (children) chart sign. Odd signs count from themselves; even signs count from the 7th (opposite) sign.
+~~ sign_index in [0, 11], part_index in [0, 6].
 function saptamsa_sign_d7(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 6) {
+        c_print_err("MochaLibError (mocha-astro): D7 part index must be in [0, 6].");
+        c_exit(2);
+    };
     var begin: int = sign_index;
     if (is_odd_sign(sign_index) == false) {
         begin = (sign_index + 6) % 12;
@@ -932,7 +1207,16 @@ function saptamsa_sign_d7(sign_index: int, part_index: int) -> int {
 
 ~~ D9 Navamsa (spouse/dharma) chart sign — the most important divisional chart in Vedic astrology.
 ~~ Movable signs count from themselves, fixed signs from the 9th sign, dual signs from the 5th sign.
+~~ sign_index in [0, 11], part_index in [0, 8].
 function navamsa_sign_d9(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 8) {
+        c_print_err("MochaLibError (mocha-astro): D9 part index must be in [0, 8].");
+        c_exit(2);
+    };
     var m: int = sign_modality(sign_index);
     var begin: int = sign_index;
     if (m == 1) {
@@ -945,7 +1229,16 @@ function navamsa_sign_d9(sign_index: int, part_index: int) -> int {
 };
 
 ~~ D10 Dasamsa (career) chart sign. Odd signs count from themselves; even signs count from the 9th sign.
+~~ sign_index in [0, 11], part_index in [0, 9].
 function dasamsa_sign_d10(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 9) {
+        c_print_err("MochaLibError (mocha-astro): D10 part index must be in [0, 9].");
+        c_exit(2);
+    };
     var begin: int = sign_index;
     if (is_odd_sign(sign_index) == false) {
         begin = (sign_index + 8) % 12;
@@ -954,12 +1247,30 @@ function dasamsa_sign_d10(sign_index: int, part_index: int) -> int {
 };
 
 ~~ D12 Dwadasamsa (parents) chart sign. Always counts forward from the birth sign itself.
+~~ sign_index in [0, 11], part_index in [0, 11].
 function dwadasamsa_sign_d12(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): D12 part index must be in [0, 11].");
+        c_exit(2);
+    };
     return (sign_index + part_index) % 12;
 };
 
 ~~ D16 Shodasamsa (vehicles/comforts) chart sign. Movable signs begin from Aries, fixed from Leo, dual from Sagittarius.
+~~ sign_index in [0, 11], part_index in [0, 15].
 function shodasamsa_sign_d16(sign_index: int, part_index: int) -> int {
+    if (sign_index < 0 || sign_index > 11) {
+        c_print_err("MochaLibError (mocha-astro): Sign index must be in [0, 11].");
+        c_exit(2);
+    };
+    if (part_index < 0 || part_index > 15) {
+        c_print_err("MochaLibError (mocha-astro): D16 part index must be in [0, 15].");
+        c_exit(2);
+    };
     var m: int = sign_modality(sign_index);
     var begin: int = 0;
     if (m == 1) {
@@ -981,18 +1292,43 @@ function shodasamsa_sign_d16(sign_index: int, part_index: int) -> int {
 ~~ Transit house position counted from the natal Moon sign (the classical primary Gochara method).
 ~~ natal_moon_sign and transit_sign are 0-11 sign indices.
 function gochara_house_from_moon(natal_moon_sign: int, transit_sign: int) -> int {
+    if (natal_moon_sign < 0 || natal_moon_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Natal Moon sign must be in [0, 11].");
+        c_exit(2);
+    };
+    if (transit_sign < 0 || transit_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Transit sign must be in [0, 11].");
+        c_exit(2);
+    };
     return house_position(natal_moon_sign, transit_sign);
 };
 
 ~~ Transit house position counted from the natal Ascendant sign (secondary/modern Gochara method).
 ~~ natal_ascendant_sign and transit_sign are 0-11 sign indices.
 function gochara_house_from_ascendant(natal_ascendant_sign: int, transit_sign: int) -> int {
+    if (natal_ascendant_sign < 0 || natal_ascendant_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Natal Ascendant sign must be in [0, 11].");
+        c_exit(2);
+    };
+    if (transit_sign < 0 || transit_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Transit sign must be in [0, 11].");
+        c_exit(2);
+    };
     return house_position(natal_ascendant_sign, transit_sign);
 };
 
 ~~ Whether transiting Saturn is currently in a Sade Sati period relative to the natal Moon.
 ~~ Sade Sati is active when Saturn transits the 12th, 1st (same), or 2nd sign from natal Moon.
+~~ natal_moon_sign and transiting_saturn_sign are 0-11 sign indices.
 function is_sade_sati(natal_moon_sign: int, transiting_saturn_sign: int) -> bool {
+    if (natal_moon_sign < 0 || natal_moon_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Natal Moon sign must be in [0, 11].");
+        c_exit(2);
+    };
+    if (transiting_saturn_sign < 0 || transiting_saturn_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Transiting Saturn sign must be in [0, 11].");
+        c_exit(2);
+    };
     var hp: int = house_position(natal_moon_sign, transiting_saturn_sign);
     if (hp == 12) { return true; };
     if (hp == 1) { return true; };
@@ -1002,7 +1338,16 @@ function is_sade_sati(natal_moon_sign: int, transiting_saturn_sign: int) -> bool
 
 ~~ Which phase of Sade Sati is currently active: 0 = not active, 1 = rising (12th from Moon),
 ~~ 2 = peak (same sign as Moon), 3 = setting (2nd from Moon).
+~~ natal_moon_sign and transiting_saturn_sign are 0-11 sign indices.
 function sade_sati_phase(natal_moon_sign: int, transiting_saturn_sign: int) -> int {
+    if (natal_moon_sign < 0 || natal_moon_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Natal Moon sign must be in [0, 11].");
+        c_exit(2);
+    };
+    if (transiting_saturn_sign < 0 || transiting_saturn_sign > 11) {
+        c_print_err("MochaLibError (mocha-astro): Transiting Saturn sign must be in [0, 11].");
+        c_exit(2);
+    };
     var hp: int = house_position(natal_moon_sign, transiting_saturn_sign);
     if (hp == 12) { return 1; };
     if (hp == 1) { return 2; };
@@ -1011,15 +1356,23 @@ function sade_sati_phase(natal_moon_sign: int, transiting_saturn_sign: int) -> i
 };
 
 ~~ Whether a transiting planet is within a given orb of exact conjunction with a natal point.
-~~ transit_longitude and natal_longitude in degrees, orb_deg = allowed orb.
+~~ transit_longitude and natal_longitude in degrees, orb_deg in [0, 180).
 function is_transit_within_orb(transit_longitude: float, natal_longitude: float, orb_deg: float) -> bool {
+    if (orb_deg < 0.0 || orb_deg >= 180.0) {
+        c_print_err("MochaLibError (mocha-astro): Transit orb must be in [0, 180) degrees.");
+        c_exit(2);
+    };
     var separation: float = angular_separation(transit_longitude, natal_longitude);
     return separation <= orb_deg;
 };
 
 ~~ Whether a transiting planet is within a given orb of exact opposition to a natal point.
-~~ transit_longitude and natal_longitude in degrees, orb_deg = allowed orb.
+~~ transit_longitude and natal_longitude in degrees, orb_deg in [0, 180).
 function is_transit_opposition_within_orb(transit_longitude: float, natal_longitude: float, orb_deg: float) -> bool {
+    if (orb_deg < 0.0 || orb_deg >= 180.0) {
+        c_print_err("MochaLibError (mocha-astro): Transit orb must be in [0, 180) degrees.");
+        c_exit(2);
+    };
     var separation: float = angular_separation(transit_longitude, natal_longitude);
     var diff_from_opposition: float = separation - 180.0;
     if (diff_from_opposition < 0.0) {

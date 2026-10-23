@@ -276,8 +276,14 @@ class TypeChecker:
             return False
         
         # int and float are compatible with each other
-        if expected in self.NUMERIC_TYPES and actual in self.NUMERIC_TYPES:
-            return True
+        # Directional numeric compatibility:
+        # int → vast → float → Complex (upward only)
+        # Reversed direction (downward) would truncate or lose imaginary part
+        NUMERIC_RANK = {"int": 0, "vast": 1, "float": 2, "Complex": 3}
+        if expected in NUMERIC_RANK and actual in NUMERIC_RANK:
+            if NUMERIC_RANK[actual] <= NUMERIC_RANK[expected]:
+                return True
+            return False
         
         # anything can be null if it's not a primitive
         if actual == "null" and expected not in self.PRIMITIVE_TYPES:
@@ -666,13 +672,15 @@ class TypeChecker:
                 return "str[]"
             if node.member == "allValues":
                 return "str[]"
+            if node.member == "jsonify":
+                return "str"
             if node.member == "merge":
                 return "dict"
-            if node.member == "copy":      # <-- add
+            if node.member == "copy":
                 return "dict"
             self.error(
                 f"'.{node.member}' is not a method on dict. "
-                f"Available: .length, .has, .allKeys, .allValues, .remove, .clean, .merge, .copy",
+                f"Available: .length, .has, .allKeys, .allValues, .jsonify, .remove, .clean, .merge, .copy",
                 node
             )
             return "unknown"
@@ -1051,6 +1059,8 @@ class TypeChecker:
                 return "bool"
             if func_name in ("allKeys", "allValues"):
                 return "str[]"
+            if func_name == "jsonify":
+                return "str"
             if func_name in ("remove", "clean"):
                 return "null"
             if func_name == "length":
@@ -1609,10 +1619,12 @@ class TypeChecker:
                         f"to '{node.target.name}' which is '{symbol['type']}'", node
                     )
                 # Class instances and C-backed handle types are move-only: `g = f;`
-                # would leave two variables owning one object
+                # would leave two variables owning one object. Self-assignment (`c = c;`)
+                # creates no second owner, so it is allowed.
                 move_only_builtins = ("File", "StringBuilder", "HashTable")
                 if (symbol["type"] in self.class_nodes or symbol["type"] in move_only_builtins) \
-                        and isinstance(node.value, Identifier):
+                        and isinstance(node.value, Identifier) \
+                        and node.value.name != node.target.name:
                     kind = "class instance" if symbol["type"] in self.class_nodes else f"{symbol['type']} handle"
                     self.error(
                         f"Cannot alias {kind} '{node.value.name}' into '{node.target.name}': "
@@ -1661,6 +1673,9 @@ class TypeChecker:
                         f"Constants are immutable in Mocha", node
                     )
             obj_type  = self.check_expr(node.target.obj)
+            # Nested dict write, e.g. d["a"]["b"] = v -- values are dynamic, always valid
+            if obj_type == "dict":
+                return
             elem_type = self.extract_element_type(obj_type)
             if elem_type is not None:
                 elem_type = self.extract_element_type(elem_type)

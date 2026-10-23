@@ -63,3 +63,4 @@ extend float[][] function diagonalise() -> Complex[][];
 extend float[][] function svd() -> (float[][], 3);
 extend float[][] function svd_thin() -> (float[][], 2);
 extend float[][] function singular_values() -> float[];
+extend float[][] function solve(b: float[]) -> float[];

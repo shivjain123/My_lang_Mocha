@@ -865,20 +865,14 @@ class AVLTree {
 
     // Internal min node
     private function min_node(n: AVLNode) -> AVLNode {
-        var cur: AVLNode = n;
-        while (cur.left != null) {
-            cur = cur.left;
-        };
-        return cur;
+        if (n.left == null) { return n; };
+        return this.min_node(n.left);
     };
 
     // Internal max node
     private function max_node(n: AVLNode) -> AVLNode {
-        var cur: AVLNode = n;
-        while (cur.right != null) {
-            cur = cur.right;
-        };
-        return cur;
+        if (n.right == null) { return n; };
+        return this.max_node(n.right);
     };
 
     // Internal remove
@@ -1112,6 +1106,7 @@ class RBTree {
         if (y.left != this.nil) {
             y.left.parent = x;
         };
+        y.left   = x;
         y.parent = x.parent;
         if (x.parent == this.nil) {
             this.root = y;
@@ -1122,7 +1117,6 @@ class RBTree {
                 x.parent.right = y;
             };
         };
-        y.left   = x;
         x.parent = y;
     };
 
@@ -1133,6 +1127,7 @@ class RBTree {
         if (x.right != this.nil) {
             x.right.parent = y;
         };
+        x.right  = y;
         x.parent = y.parent;
         if (y.parent == this.nil) {
             this.root = x;
@@ -1143,7 +1138,6 @@ class RBTree {
                 y.parent.right = x;
             };
         };
-        x.right  = y;
         y.parent = x;
     };
 
@@ -1273,20 +1267,14 @@ class RBTree {
 
     // Internal min node
     function min_node(n: RBNode) -> RBNode {
-        var cur: RBNode = n;
-        while (cur.left != this.nil) {
-            cur = cur.left;
-        };
-        return cur;
+        if (n.left == this.nil) { return n; };
+        return this.min_node(n.left);
     };
 
     // Internal max node
     function max_node(n: RBNode) -> RBNode {
-        var cur: RBNode = n;
-        while (cur.right != this.nil) {
-            cur = cur.right;
-        };
-        return cur;
+        if (n.right == this.nil) { return n; };
+        return this.max_node(n.right);
     };
 
     // Internal inorder
@@ -1336,21 +1324,18 @@ class RBTree {
         return this.predecessor_node(n.left, key, best);
     };
 
-    // Public API
+    // Internal: parent of the spot where key would be inserted (nil if the tree is empty)
+    function insert_parent(x: RBNode, parent: RBNode, key: DSValue) -> RBNode {
+        if (x == this.nil) { return parent; };
+        var c: int = this.cmp(key, x.key);
+        if (c < 0) { return this.insert_parent(x.left, x, key); };
+        return this.insert_parent(x.right, x, key);
+    };
 
+    // Public API
     function insert(key: DSValue) -> null {
         var z: RBNode    = RBNode(key, RBColor.RED, this.nil, this.nil, this.nil);
-        var y: RBNode    = this.nil;
-        var x: RBNode    = this.root;
-        while (x != this.nil) {
-            y = x;
-            var c: int = this.cmp(z.key, x.key);
-            if (c < 0) {
-                x = x.left;
-            } else {
-                x = x.right;
-            };
-        };
+        var y: RBNode    = this.insert_parent(this.root, this.nil, key);
         z.parent = y;
         if (y == this.nil) {
             this.root = z;
@@ -1383,8 +1368,8 @@ class RBTree {
         if (z == this.nil) {
             return;
         };
-        var y: RBNode       = z;
-        var y_orig: RBColor = y.color;
+        var y: RBNode       = this.nil;
+        var y_orig: RBColor = z.color;
         var x: RBNode       = this.nil;
         if (z.left == this.nil) {
             x = z.right;

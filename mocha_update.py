@@ -74,6 +74,13 @@ def update():
         print("  ✅ Updated. What's new:")
         for line in log.splitlines():
             print("     - " + (line if len(line) <= 100 else line[:97] + "..."))
+        print("  🔧 Rebuilding libraries so they match the new compiler...")
+        try:
+            import mocha_libs
+            if mocha_libs.rebuild() != 0:
+                print("  ⚠️  Some libraries failed to build. Run `mocha libs` to see the details.")
+        except Exception as e:
+            print(f"  ⚠️  Could not rebuild libraries ({e}). Run `mocha libs` yourself.")
     return 0
 
 if __name__ == "__main__":

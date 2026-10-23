@@ -475,8 +475,7 @@ class Network {
         var grad: Tensor = this.layers[last].backward(dout, lr);
         var i: int = last - 1;
         while (i >= 0) {
-            var prev_grad: Tensor = this.layers[i].backward(grad, lr);
-            grad = prev_grad;
+            grad = this.layers[i].backward(grad, lr);
             i = i - 1;
         };
 
@@ -490,9 +489,8 @@ class Network {
         var current: Tensor = this.layers[0].forward(input);
         var i: int = 1;
         while (i < this.layers.length) {
-            var next: Tensor = this.layers[i].forward(current);
-            current = next;
-            i = i + 1;
+            current = this.layers[i].forward(current);
+            i++;
         };
         return current;
     };
@@ -902,7 +900,8 @@ class BiGru {
         while (i < seq_len) {
             var h_new: Tensor = this.fwd.forward(xs[i], h_fwd);
             h_fwd.dispose();
-            h_fwd = h_new;
+            h_fwd = h_new.clone_tensor();
+            h_new.dispose();
             fwd_states.push(h_fwd.clone_tensor());
             i = i + 1;
         };
@@ -916,7 +915,8 @@ class BiGru {
         while (j >= 0) {
             var h_new: Tensor = this.bwd.forward(xs[j], h_bwd);
             h_bwd.dispose();
-            h_bwd = h_new;
+            h_bwd = h_new.clone_tensor();
+            h_new.dispose();
             bwd_states.push(h_bwd.clone_tensor());
             j = j - 1;
         };
@@ -1042,7 +1042,8 @@ class Hopfield {
             // check convergence
             var converged: bool = state.equals(new_state);
             state.dispose();
-            state = new_state;
+            state = new_state.clone_tensor();
+            new_state.dispose();
 
             if (converged) {
                 iter = max_iter; // break

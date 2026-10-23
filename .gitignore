@@ -78,6 +78,7 @@ size_*.wasm.gz
 test_c[m-z].mch
 test_d[a-z].mch
 test_e[a-z].mch
+test_f[a-z].mch
 lib_sigs.py
 type_survey2.py
 wasm_regress.ps1
@@ -85,3 +86,4 @@ test_d[p-z].txt
 test_d[a-z]_[a-z].txt
 test_e[a-z].txt
 .mocha_update_check
+test.mch

@@ -4,7 +4,6 @@
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
-local function c_sqrt(x: float) -> float native mocha_wrap_sqrt_f;
 local function c_erf(x: float) -> float native mocha_wrap_erf;
 local function c_tgamma(x: float) -> float native mocha_wrap_tgamma;
 local function c_lgamma(x: float) -> float native mocha_wrap_lgamma;
@@ -261,7 +260,7 @@ extend float[] {
 
         var g1: float = this.skewness();
         var nf: float = float(n);
-        var correction: float = c_sqrt(nf * (nf - 1.0)) / (nf - 2.0);
+        var correction: float = ((nf * (nf - 1.0)) / (nf - 2.0)).sqrt().real;
         return correction * g1;
     };
 
@@ -621,7 +620,7 @@ class NormalDist {
     function pdf(x: float) -> float {
         var pi: float = 3.14159265358979;
         var z: float = (x - this.mean_val) / this.std_val;
-        return c_exp(-0.5 * z * z) / (this.std_val * c_sqrt(2.0 * pi));
+        return c_exp(-0.5 * z * z) / (this.std_val * (2.0 * pi).sqrt().real);
     };
 
     function cdf(x: float) -> float {
@@ -1006,7 +1005,7 @@ class GaussianMixture {
         var i: int = 0;
         while (i < this.n_components) {
             var z: float = (x - this.means[i]) / this.stds[i];
-            var component: float = c_exp(-0.5 * z * z) / (this.stds[i] * c_sqrt(2.0 * pi));
+            var component: float = c_exp(-0.5 * z * z) / (this.stds[i] * (2.0 * pi).sqrt().real);
             result = result + this.weights[i] * component;
             i++;
         };
@@ -1073,7 +1072,7 @@ class GaussianMixture {
         };
         var pi: float = 3.14159265358979;
         var z: float = (x - this.means[k]) / this.stds[k];
-        var component_k: float = c_exp(-0.5 * z * z) / (this.stds[k] * c_sqrt(2.0 * pi));
+        var component_k: float = c_exp(-0.5 * z * z) / (this.stds[k] * (2.0 * pi).sqrt().real);
         return (this.weights[k] * component_k) / total;
     };
 };

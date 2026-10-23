@@ -35,6 +35,7 @@ echo   mocha help                       Show this message
 echo   mocha serve [page.html] [port]   Open a wasm page in the browser
 echo   mocha web ^<file.mch^> [fn ...]    Build as WebAssembly and open it in the browser
 echo   mocha update                     Pull the latest compiler + libraries
+echo   mocha libs [name ...]            Rebuild all libraries (or just the named ones)
 exit /b
 
 :after_help
@@ -45,6 +46,11 @@ if "%1"=="update" (
 )
 
 python "%MOCHA_DIR%mocha_update.py" check
+
+if "%1"=="libs" (
+    python "%MOCHA_DIR%mocha_libs.py" %2 %3 %4 %5 %6 %7 %8 %9
+    exit /b
+)
 
 if "%1"=="repl" (
     python "%REPL%"

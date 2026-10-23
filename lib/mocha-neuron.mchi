@@ -292,4 +292,5 @@ class BertClassifier function bc_shuffled_order(n: int) -> int[];
 class BertClassifier function train(positive: str[], negative: str[], epochs: int, lr: float) -> null;
 class BertClassifier function train_labelled(texts: str[], labels: float[], epochs: int, lr: float) -> null;
 class BertClassifier function predict(text: str) -> float;
+class BertClassifier function accuracy(positive: str[], negative: str[]) -> float;
 class BertClassifier function dispose() -> null;

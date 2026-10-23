@@ -35,8 +35,8 @@ function test(didLoad) -> null {
 
     // Test 5: unhandled — should print runtime error and exit
     // uncomment to test:
-    print("before fail", newLine=true);
-    fail "unhandled!";
-    print("after fail", newLine=true);
+    //print("before fail", newLine=true);
+    //fail "unhandled!";
+    //print("after fail", newLine=true);
 
 };

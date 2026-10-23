@@ -388,9 +388,12 @@ function sym_print(e: Expr) -> str {
             return ml + "·" + mr;
 
         case DIV:
-            // both sides need parens if ADD/SUB
+            // left: a/b/c reads as (a/b)/c, fine. right: wrap MUL/DIV too, a/(b*c) and a/(b/c)
             var dl: str = sym_print_parens(e.left, 3);
             var dr: str = sym_print_parens(e.right, 3);
+            if (e.right.kind == MUL || e.right.kind == DIV) {
+                dr = "(" + dr + ")";
+            };
             return dl + "/" + dr;
 
         case POW:
@@ -605,6 +608,10 @@ function sym_simplify(e: Expr) -> Expr {
             if (is_one(mr)) { return ml; };
             if (is_one(ml)) { return mr; };
 
+            // f * (-1) → -f   and   f * (-g) → -(f*g)
+            if (is_num(mr, -1.0)) { return neg(ml); };
+            if (mr.kind == NEG) { return neg(mul(ml, mr.left)); };
+
             // (f / x^n) * x^n → f
             if (ml.kind == DIV && mr.kind == POW) {
                 if (sym_equal(ml.right, mr)) {
@@ -624,6 +631,11 @@ function sym_simplify(e: Expr) -> Expr {
                 return sym_simplify(mr.left);
             };
 
+            // x * x → x^2
+            if (sym_equal(ml, mr)) {
+                return pow_e(ml, num(2.0));
+            };
+
             return mul(ml, mr);
 
         case DIV:
@@ -634,6 +646,17 @@ function sym_simplify(e: Expr) -> Expr {
             if (is_one(dr)) { return dl; };
             // f/f = 1
             if (sym_equal(dl, dr)) { return num(1.0); };
+            // (a/b) / (c/d) → (a*d) / (b*c)
+            if (dl.kind == DIV && dr.kind == DIV) {
+                return sym_simplify(div_e(
+                    mul(dl.left, dr.right),
+                    mul(dl.right, dr.left)
+                ));
+            };
+            // a / (-b) → -(a/b)
+            if (dr.kind == NEG) {
+                return sym_simplify(neg(div_e(dl, dr.left)));
+            };
             // x^n / x → x^(n-1)
             if (dl.kind == POW && sym_equal(dl.left, dr)) {
                 return sym_simplify(pow_e(dl.left, sub(dl.right, num(1.0))));
@@ -839,14 +862,15 @@ function sym_simplify(e: Expr) -> Expr {
     };
 };
 
+function sym_simplify_fix(prev: Expr, next: Expr) -> Expr {
+    if (sym_equal(prev, next)) { return next; };
+    var after: Expr = sym_simplify(next);
+    return sym_simplify_fix(next, after);
+};
+
 function sym_simplify_full(e: Expr) -> Expr {
-    var prev: Expr = e;
-    var next: Expr = sym_simplify(e);
-    while (!sym_equal(prev, next)) {
-        prev = next;
-        next = sym_simplify(next);
-    };
-    return next;
+    var first: Expr = sym_simplify(e);
+    return sym_simplify_fix(e, first);
 };
 
 function sym_diff(e: Expr, var_name: str) -> Expr {
@@ -906,6 +930,10 @@ function sym_eval(e: Expr, var_name: str, val: float) -> float {
         case LN:
             var lv: float = sym_eval(e.left, var_name, val);
             return lv.log().real;
+        
+        case EXP:
+            var ev: float = sym_eval(e.left, var_name, val);
+            return c_pow(2.718281828459045, ev);
 
         case TAN:
             var tv: float = sym_eval(e.left, var_name, val);
@@ -935,7 +963,10 @@ function sym_eval(e: Expr, var_name: str, val: float) -> float {
             var thv: float = sym_eval(e.left, var_name, val);
             return thv.tanh();
 
-        default: return 0.0;
+        default:
+            c_print_err("MochaSymCha: sym_eval does not support this expression kind.");
+            c_exit(2);
+            return 0.0;  // unreachable, just to satisfy return type
     };
 };
 
@@ -1302,6 +1333,34 @@ function sym_integral(e: Expr, var_name: str, a: float, b: float) -> float {
 // DEFINITE LIMITS NTEGRATION (SYMBOLIC + NUMERICAL)
 // falls back to numerical if symbolic fails
 // =============================================
+function sym_has_div(e: Expr) -> bool {
+    if (e.kind == DIV) { return true; };
+    if (e.kind == NUM || e.kind == VAR) { return false; };
+    if (e.kind == ADD || e.kind == SUB || e.kind == MUL || e.kind == POW) {
+        return sym_has_div(e.left) || sym_has_div(e.right);
+    };
+    return sym_has_div(e.left);
+};
+function sym_lhopital(orig: Expr, lh_num: Expr, lh_den: Expr, var_name: str, point: float, iter: int) -> float {
+    if (iter >= 5) {
+        c_print_err("###WARNING (mocha-SymCha): L'Hopital exhausted after 5 iterations, falling back to numerical.");
+        return sym_limit_numerical(orig, var_name, point);
+    };
+    var dn: Expr = sym_diff(lh_num, var_name);
+    var dd: Expr = sym_diff(lh_den, var_name);
+    // if the derivative ratio cancels to a division-free form, e.g. (1/x)/(-1/xx) → -x, evaluate it directly
+    var ratio: Expr = sym_simplify_full(div_e(dn, dd));
+    if (!sym_has_div(ratio)) {
+        return sym_eval(ratio, var_name, point);
+    };
+    var lnv: float = sym_eval(dn, var_name, point);
+    var ldv: float = sym_eval(dd, var_name, point);
+    if (ldv != 0.0) {
+        return lnv / ldv;
+    };
+    return sym_lhopital(orig, dn, dd, var_name, point, iter + 1);
+};
+
 function sym_limit(e: Expr, var_name: str, point: float) -> float {
 
     // ── Case 1: Not DIV or MUL — safe direct eval ──
@@ -1321,22 +1380,7 @@ function sym_limit(e: Expr, var_name: str, point: float) -> float {
 
         // 0/0 — L'Hôpital
         if (nv == 0.0) {
-            var lh_num: Expr = e.left;
-            var lh_den: Expr = e.right;
-            var iter: int = 0;
-            while (iter < 5) {
-                lh_num = sym_diff(lh_num, var_name);
-                lh_den = sym_diff(lh_den, var_name);
-                var lnv: float = sym_eval(lh_num, var_name, point);
-                var ldv: float = sym_eval(lh_den, var_name, point);
-                if (ldv != 0.0) {
-                    return lnv / ldv;
-                };
-                iter = iter + 1;
-            };
-            // L'Hôpital exhausted
-            c_print_err("###WARNING (mocha-SymCha): L'Hopital exhausted after 5 iterations, falling back to numerical.");
-            return sym_limit_numerical(e, var_name, point);
+            return sym_lhopital(e, e.left, e.right, var_name, point, 0);
         };
 
         // nv != 0, dv == 0 — true pole
@@ -1362,8 +1406,8 @@ function sym_limit(e: Expr, var_name: str, point: float) -> float {
             var recip_r: float = 1.0 / mr;
             if (recip_r == 0.0 || (recip_r < 0.0 && 0.0 - recip_r < 0.000001) || (recip_r > 0.0 && recip_r < 0.0000001)) {
                 // right side's reciprocal is ~0 → right side is huge → genuine 0*∞
-                var rw: Expr = div_e(e.left, div_e(num(1.0), e.right));
-                return sym_limit(rw, var_name, point);
+                var rw: Expr = div_e(e.right, div_e(num(1.0), e.left));
+                return sym_lhopital(rw, e.right, div_e(num(1.0), e.left), var_name, point, 0);
             };
             return 0.0;  // 0 * finite = 0
         };
@@ -1372,8 +1416,8 @@ function sym_limit(e: Expr, var_name: str, point: float) -> float {
         if (mr == 0.0) {
             var recip_l: float = 1.0 / ml;
             if (recip_l == 0.0 || (recip_l < 0.0 && 0.0 - recip_l < 0.000001) || (recip_l > 0.0 && recip_l < 0.0000001)) {
-                var rw2: Expr = div_e(e.right, div_e(num(1.0), e.left));
-                return sym_limit(rw2, var_name, point);
+                var rw2: Expr = div_e(e.left, div_e(num(1.0), e.right));
+                return sym_lhopital(rw2, e.left, div_e(num(1.0), e.right), var_name, point, 0);
             };
             return 0.0;
         };
@@ -1421,24 +1465,23 @@ function sym_limit_numerical(e: Expr, var_name: str, point: float) -> float {
 // =============================================
 // SERIES EXPANSION
 // =============================================
+function sym_taylor_step(current: Expr, var_name: str, point: float, i: int, terms: int, factorial: float, result: Expr) -> Expr {
+    if (i >= terms) { return result; };
+    var fact: float = factorial;
+    if (i > 0) { fact = factorial * float(i); };
+    var coeff: float = sym_eval(current, var_name, point) / fact;
+    // coeff * (x - point)^i
+    var term: Expr = mul(
+        num(coeff),
+        pow_e(sub(var_e(var_name), num(point)), num(float(i)))
+    );
+    var next_result: Expr = add(result, term);
+    var next_current: Expr = sym_diff(current, var_name);
+    return sym_taylor_step(next_current, var_name, point, i + 1, terms, fact, next_result);
+};
+
 function sym_taylor(e: Expr, var_name: str, point: float, terms: int) -> Expr {
-    var result: Expr = num(0.0);
-    var current: Expr = e;
-    var factorial: float = 1.0;
-    var i: int = 0;
-    while (i < terms) {
-        if (i > 0) { factorial = factorial * float(i); };
-        var coeff: float = sym_eval(current, var_name, point) / factorial;
-        // coeff * (x - point)^i
-        var term: Expr = mul(
-            num(coeff),
-            pow_e(sub(var_e(var_name), num(point)), num(float(i)))
-        );
-        result = add(result, term);
-        current = sym_diff(current, var_name);
-        i = i + 1;
-    };
-    return sym_simplify_full(result);
+    return sym_simplify_full(sym_taylor_step(e, var_name, point, 0, terms, 1.0, num(0.0)));
 };
 
 // =============================================
@@ -1608,23 +1651,20 @@ function cheby_T(n: int, x: float) -> float {
 };
 
 // Build Chebyshev polynomial Tn(x) as Expr
+function cheby_T_step(t_prev: Expr, t_curr: Expr, i: int, n: int, var_name: str) -> Expr {
+    if (i > n) { return t_curr; };
+    // T_n(x) = 2x*T_{n-1}(x) - T_{n-2}(x)
+    var t_next: Expr = sym_simplify_full(sub(
+        mul(mul(num(2.0), var_e(var_name)), t_curr),
+        t_prev
+    ));
+    return cheby_T_step(t_curr, t_next, i + 1, n, var_name);
+};
+
 function cheby_T_expr(n: int, var_name: str) -> Expr {
     if (n == 0) { return num(1.0); };
     if (n == 1) { return var_e(var_name); };
-    var t_prev: Expr = num(1.0);
-    var t_curr: Expr = var_e(var_name);
-    var i: int = 2;
-    while (i <= n) {
-        // T_n(x) = 2x*T_{n-1}(x) - T_{n-2}(x)
-        var t_next: Expr = sym_simplify_full(sub(
-            mul(mul(num(2.0), var_e(var_name)), t_curr),
-            t_prev
-        ));
-        t_prev = t_curr;
-        t_curr = t_next;
-        i = i + 1;
-    };
-    return t_curr;
+    return cheby_T_step(num(1.0), var_e(var_name), 2, n, var_name);
 };
 
 // Compute Chebyshev coefficients numerically using N sample points
