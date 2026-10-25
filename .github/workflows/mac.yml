@@ -39,3 +39,9 @@ jobs:
         if: always()
         timeout-minutes: 10
         run: bash ./mocha execute zig_test.mch
+      - name: WebAssembly build (cape_demo)
+        if: always()
+        timeout-minutes: 10
+        run: |
+          bash ./mocha wasm cape_demo.mch cape_demo
+          ls -l cape_demo.wasm cape_demo.js cape_demo.html
