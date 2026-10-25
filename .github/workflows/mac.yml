@@ -23,6 +23,18 @@ jobs:
         if: always()
         timeout-minutes: 5
         run: bash ./mocha execute stopwatch_T.mch
+      - name: Build Lua for Mac
+        run: |
+          curl -L -o lua.tar.gz https://www.lua.org/ftp/lua-5.5.0.tar.gz
+          tar xzf lua.tar.gz
+          cd lua-5.5.0/src
+          for f in *.c; do
+            case $f in
+              lua.c|luac.c) ;;
+              *) clang -O2 -DLUA_USE_MACOSX -c $f ;;
+            esac
+          done
+          ar rcs ../../lua-5.5.0_unix/liblua55.a *.o
       - name: Native code test (Lua FFI)
         if: always()
         timeout-minutes: 5
