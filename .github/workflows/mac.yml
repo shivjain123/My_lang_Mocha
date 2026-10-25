@@ -27,3 +27,11 @@ jobs:
         if: always()
         timeout-minutes: 5
         run: bash ./mocha execute lua_ffi.mch
+      - name: Native code test (SQLite FFI)
+        if: always()
+        timeout-minutes: 5
+        run: bash ./mocha execute sqlite3_ffi.mch
+      - name: Native code test (Wren)
+        if: always()
+        timeout-minutes: 5
+        run: bash ./mocha execute wren_test.mch
