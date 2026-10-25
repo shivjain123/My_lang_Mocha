@@ -18,30 +18,11 @@ jobs:
       - name: Evil number 7 (should say NOT Evil)
         run: echo 7 | bash ./mocha execute evil.mch
       - name: Build all libraries except ds
-        run: bash ./mocha libs astro bio chem forge geo ink lua math matvec meteoro neuron processing society space sqlite stats stopwatch string wren
+        run: bash ./mocha libs astro bio chem forge geo ink lua math matvec meteoro neuron processing society space sqlite stats stopwatch string SymCha wren
       - name: Use a library (stopwatch test)
         if: always()
         timeout-minutes: 5
         run: bash ./mocha execute stopwatch_T.mch
-      - name: Build Lua for Mac
-        run: |
-          curl -L -o lua.tar.gz https://www.lua.org/ftp/lua-5.5.0.tar.gz
-          tar xzf lua.tar.gz
-          cd lua-5.5.0/src
-          for f in *.c; do
-            case $f in
-              lua.c|luac.c) ;;
-              *) clang -O2 -DLUA_USE_MACOSX -c $f ;;
-            esac
-          done
-          rm -f ../../lua-5.5.0_unix/liblua55.a
-          ar rcs ../../lua-5.5.0_unix/liblua55.a *.o
-      - name: Check the Lua library
-        if: always()
-        run: |
-          ls -l lua-5.5.0_unix/
-          lipo -info lua-5.5.0_unix/liblua55.a || true
-          nm lua-5.5.0_unix/liblua55.a | grep lua_pcallk || echo "pcallk NOT FOUND"
       - name: Native code test (Lua FFI)
         if: always()
         timeout-minutes: 5

@@ -85,6 +85,50 @@ ZIG_DOWNLOADS = {
     "linux":   "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz",
 }
 
+def ensure_lua_mac():
+    """macOS only: build a Mac liblua55 from Lua's source the first time it is needed."""
+    global LUA_LIB
+    import platform, shutil
+    arch = "arm64" if platform.machine() == "arm64" else "x86_64"
+    mac_lib = os.path.join(LUA_DIR, f"liblua55_mac_{arch}.a")
+    LUA_LIB = mac_lib
+    if os.path.exists(mac_lib):
+        print("  ⚡ lua cached", flush=True)
+        return True
+    print("  ⬇  Building Lua for macOS (one-time, may take a minute)...", flush=True)
+    tmp = tempfile.mkdtemp()
+    try:
+        tgz = os.path.join(tmp, "lua.tar.gz")
+        urllib.request.urlretrieve("https://www.lua.org/ftp/lua-5.5.0.tar.gz", tgz)
+        with tarfile.open(tgz) as t:
+            t.extractall(tmp)
+        src = os.path.join(tmp, "lua-5.5.0", "src")
+        objs = []
+        for name in sorted(os.listdir(src)):
+            if not name.endswith(".c") or name in ("lua.c", "luac.c"):
+                continue
+            obj = os.path.join(tmp, name[:-2] + ".o")
+            result = subprocess.run(
+                [CLANG_PATH, "-O2", "-target", f"{arch}-apple-darwin", "-DLUA_USE_MACOSX", # type: ignore
+                 "-c", os.path.join(src, name), "-o", obj],
+                capture_output=True, text=True, encoding='utf-8'
+            ) # type: ignore
+            if result.returncode != 0:
+                print(f"  ❌ lua compile failed ({name}):\n{result.stderr}")
+                return False
+            objs.append(obj)
+        result = subprocess.run(["ar", "rcs", mac_lib] + objs,
+                                capture_output=True, text=True, encoding='utf-8')
+        if result.returncode != 0:
+            print(f"  ❌ lua archive failed:\n{result.stderr}")
+            return False
+    except Exception as e:
+        print(f"  ❌ Could not build Lua for macOS: {e}")
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return True
+
 def ensure_zig():
     zig_lib_dir = os.path.join(SCRIPT_DIR, "zig-lib")
     if os.path.exists(ZIG_PATH) and os.path.isdir(zig_lib_dir):
@@ -1461,6 +1505,11 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     else:
         print("  ⚡ sqlite3 cached", flush=True)
 
+    # Build Lua for macOS (the Linux library can't be used on a Mac)
+    if needs_lua and IS_MACOS:
+        if not ensure_lua_mac():
+            return False
+        
     # Compile Wren
     if needs_wren:
         if needs_recompile(WREN_C, WREN_OBJ):
