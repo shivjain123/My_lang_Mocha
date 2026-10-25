@@ -34,6 +34,7 @@ jobs:
               *) clang -O2 -DLUA_USE_MACOSX -c $f ;;
             esac
           done
+          rm -f ../../lua-5.5.0_unix/liblua55.a
           ar rcs ../../lua-5.5.0_unix/liblua55.a *.o
       - name: Check the Lua library
         if: always()
