@@ -133,8 +133,17 @@ def ensure_zig():
     zig_lib_dir = os.path.join(SCRIPT_DIR, "zig-lib")
     if os.path.exists(ZIG_PATH) and os.path.isdir(zig_lib_dir):
         return True
-    key = "windows" if IS_WINDOWS else "linux"
-    url = ZIG_DOWNLOADS.get(key)
+    downloads = dict(ZIG_DOWNLOADS)
+    downloads["macos_arm64"]  = "https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz"
+    downloads["macos_x86_64"] = "https://ziglang.org/download/0.16.0/zig-x86_64-macos-0.16.0.tar.xz"
+    if IS_WINDOWS:
+        key = "windows"
+    elif IS_MACOS:
+        import platform
+        key = "macos_arm64" if platform.machine() == "arm64" else "macos_x86_64"
+    else:
+        key = "linux"
+    url = downloads.get(key)
     if not url or "YOUR_NAME" in url:
         print(f"  ❌ This program uses Zig FFI (mocha_zig_ functions), but Zig was not found at:\n     {ZIG_PATH}")
         print(f"     Install Zig {ZIG_VERSION} there, or set the download link in mocha_compile.py.")
@@ -1529,9 +1538,13 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     if needs_zig and not ensure_zig():
         return False
     if needs_zig and needs_recompile(zig_src, zig_out):
-        zig_target = "x86_64-windows-gnu" if IS_WINDOWS else \
-                     "x86_64-macos-none"   if IS_MACOS  else \
-                     "x86_64-linux-gnu"
+        if IS_WINDOWS:
+            zig_target = "x86_64-windows-gnu"
+        elif IS_MACOS:
+            import platform
+            zig_target = "aarch64-macos-none" if platform.machine() == "arm64" else "x86_64-macos-none"
+        else:
+            zig_target = "x86_64-linux-gnu"
         result = subprocess.run(
             [ZIG_PATH, "build-lib", "zig_ffi.zig",
             "--zig-lib-dir", os.path.join(SCRIPT_DIR, "zig-lib"),
