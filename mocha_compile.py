@@ -1333,10 +1333,18 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
             fields = codegen.class_fields[class_name]
             llvm_fields = ", ".join(to_llvm_type(f[1]) for f in fields)
             struct_decl = f"%struct.{class_name} = type {{ {llvm_fields} }}"
+            has_body = True
         else:
             struct_decl = f"%struct.{class_name} = type opaque"
-        
+            has_body = False
+
         codegen.type_declarations.append(struct_decl)
+
+        if has_body:
+            # RC: an imported class with fields is an RC-allocated Mocha object whose lib
+            # defines Name_release, so user code treats it like a same-file class
+            codegen.rc_classes.add(class_name)
+            codegen.type_declarations.append(f"declare void @{class_name}_release(%struct.{class_name}*)")
 
     try:
         llvm_ir = codegen.generate(ast)
@@ -1388,8 +1396,9 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
         MINGW_SYSROOT = os.path.dirname(os.path.dirname(MINGW_GCC))
         CLANG_TARGET  = "x86_64-w64-mingw32"
     elif IS_MACOS:
+        import platform
         MINGW_SYSROOT = None
-        CLANG_TARGET  = "x86_64-apple-darwin"
+        CLANG_TARGET  = "arm64-apple-darwin" if platform.machine() == "arm64" else "x86_64-apple-darwin"
     else:
         MINGW_SYSROOT = None
         CLANG_TARGET  = "x86_64-linux-gnu"
