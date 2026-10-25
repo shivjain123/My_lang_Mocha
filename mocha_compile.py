@@ -148,7 +148,9 @@ def get_clang_flags() -> tuple[str, str | None]:
         mingw_sysroot = os.path.dirname(os.path.dirname(MINGW_GCC)) if MINGW_GCC else None
         return "x86_64-w64-mingw32", mingw_sysroot
     elif IS_MACOS:
-        return "x86_64-apple-darwin", None
+        import platform
+        arch = "arm64" if platform.machine() == "arm64" else "x86_64"
+        return f"{arch}-apple-darwin", None
     else:
         return "x86_64-linux-gnu", None
 
