@@ -84,3 +84,9 @@ jobs:
           cd "$HOME/somewhere_else"
           mocha help
           echo 5 | mocha execute evil.mch
+      - name: Generate docs (evil.mch)
+        if: always()
+        timeout-minutes: 5
+        run: |
+          bash ./mocha doc evil.mch
+          git status --short
