@@ -45,3 +45,23 @@ jobs:
         run: |
           bash ./mocha wasm cape_demo.mch cape_demo
           ls -l cape_demo.wasm cape_demo.js cape_demo.html
+      - name: Run the WebAssembly (cape_demo)
+        if: always()
+        timeout-minutes: 5
+        run: |
+          cp cape_demo.js cape_demo_node.mjs
+          node --input-type=module <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { pathToFileURL } from 'node:url';
+          import { load } from './cape_demo_node.mjs';
+          const realFetch = globalThis.fetch;
+          globalThis.fetch = async (u, ...rest) => {
+            if (u instanceof URL && u.protocol === 'file:') return new Response(readFileSync(u));
+            return realFetch(u, ...rest);
+          };
+          const m = await load(pathToFileURL(process.cwd() + '/cape_demo.wasm'));
+          for (const [t, td] of [[28, 18], [28, 28], [28, 10], [26, 16], [24, 20]]) {
+            console.log('cape_demo(' + t + ', ' + td + ') = ' + m.cape_demo(t, td));
+          }
+          m.flush();
+          EOF
