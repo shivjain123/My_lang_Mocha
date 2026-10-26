@@ -2,7 +2,17 @@ name: Mac check
 
 on:
   push:
+    paths:
+      - 'mocha'
+      - 'mocha_*.py'
+      - 'mocha_runtime.c'
+      - 'lib/**'
+      - '.github/workflows/mac.yml'
   workflow_dispatch:
+
+concurrency:
+  group: mac-check
+  cancel-in-progress: true
 
 jobs:
   mac:
@@ -17,7 +27,7 @@ jobs:
         run: echo 5 | bash ./mocha execute evil.mch
       - name: Evil number 7 (should say NOT Evil)
         run: echo 7 | bash ./mocha execute evil.mch
-      - name: Build all libraries except ds
+      - name: Build all libraries
         run: bash ./mocha libs
       - name: Use a library (stopwatch test)
         if: always()
