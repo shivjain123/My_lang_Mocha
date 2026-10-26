@@ -78,6 +78,9 @@ jobs:
       - name: Run mocha from PATH like a real user
         if: always()
         run: |
-          git ls-files -s mocha
           export PATH="$PWD:$PATH"
+          mkdir -p "$HOME/somewhere_else"
+          cp evil.mch "$HOME/somewhere_else/"
+          cd "$HOME/somewhere_else"
           mocha help
+          echo 5 | mocha execute evil.mch
