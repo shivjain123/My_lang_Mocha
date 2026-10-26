@@ -90,3 +90,8 @@ jobs:
         run: |
           bash ./mocha doc evil.mch
           git status --short
+      - name: REPL test
+        if: always()
+        timeout-minutes: 2
+        run: |
+          printf 'var x: int = 5\nx * 2\nprint("hello from the REPL", newLine=true)\nexit\n' | bash ./mocha repl
