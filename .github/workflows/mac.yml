@@ -65,3 +65,9 @@ jobs:
           }
           m.flush();
           EOF
+      - name: Run mocha from PATH like a real user
+        if: always()
+        run: |
+          git ls-files -s mocha
+          export PATH="$PWD:$PATH"
+          mocha help
