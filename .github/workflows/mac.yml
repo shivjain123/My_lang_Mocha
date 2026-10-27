@@ -7,6 +7,8 @@ on:
       - 'mocha_*.py'
       - 'mocha_runtime.c'
       - 'lib/**'
+      - 'run_all.sh'
+      - 'test_*.mch'
       - '.github/workflows/mac.yml'
   workflow_dispatch:
 
@@ -15,7 +17,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  mac:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run all tests (run_all.sh)
+        timeout-minutes: 40
+        run: bash ./run_all.sh
+
+  basics:
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -95,7 +110,3 @@ jobs:
         timeout-minutes: 2
         run: |
           printf 'var x: int = 5\nx * 2\nprint("hello from the REPL", newLine=true)\nexit\n' | bash ./mocha repl
-      - name: Run all tests (run_all.sh)
-        if: always()
-        timeout-minutes: 40
-        run: bash ./run_all.sh --skip-libs
