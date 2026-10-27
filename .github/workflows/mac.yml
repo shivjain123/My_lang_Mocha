@@ -95,3 +95,7 @@ jobs:
         timeout-minutes: 2
         run: |
           printf 'var x: int = 5\nx * 2\nprint("hello from the REPL", newLine=true)\nexit\n' | bash ./mocha repl
+      - name: Run all tests (run_all.sh)
+        if: always()
+        timeout-minutes: 40
+        run: bash ./run_all.sh --skip-libs
