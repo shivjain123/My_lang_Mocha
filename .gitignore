@@ -1,6 +1,3 @@
-# ─── Compiler & Toolchain Binaries ───────────────────────────────────────────
-zig.exe
-
 # ─── Compiled & Intermediate Outputs ─────────────────────────────────────────
 *.exe
 *.ll
@@ -13,8 +10,6 @@ zig.exe
 
 # ─── Mocha Build Artifacts ────────────────────────────────────────────────────
 *_msvc.*
-mocha_cuda_runtime.lib
-mocha_cuda_runtime.obj
 
 # ─── Generated Data Files ─────────────────────────────────────────────────────
 *.db
@@ -76,9 +71,7 @@ size_*.wasm.gz
 
 # scratch: new RC tests
 test_c[m-z].mch
-test_d[a-z].mch
-test_e[a-z].mch
-test_f[a-z].mch
+test_[d-g][a-z].mch
 lib_sigs.py
 type_survey2.py
 wasm_regress.ps1
@@ -87,3 +80,22 @@ test_d[a-z]_[a-z].txt
 test_e[a-z].txt
 .mocha_update_check
 test.mch
+shapes.txt
+shapes[1-9].txt
+builtins.txt
+tensor_push.mch
+shapes_probe.py
+shapes[1-9]_probe.py
+*.db.*
+gru_seq_test.mch
+gc_save_test.mch
+gc_load_test.mch
+probe_*.py
+*md
+survey_*.py
+*_leak_test.mch
+hopfield_*.mch
+check_*.py
+gru_seq_train.mch
+*_leak.mch
+build_*.py

@@ -1273,7 +1273,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.4")
+    print(f"🔥 Mocha Compiler v1.5")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):

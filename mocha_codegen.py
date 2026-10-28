@@ -28,14 +28,18 @@ LLVM_TYPES = {
 
 _tag_types_registry: set = set()
 
+_STRICT_TYPES = os.environ.get("MOCHA_STRICT_TYPES") == "1"
+
 def to_llvm_type(mocha_type: str) -> str:
+    if mocha_type == "unknown" and _STRICT_TYPES:
+        raise MochaCodeGenError("Internal: unresolved type reached codegen (please report this)")
+    if mocha_type.endswith("]"):
+        return "%MochaArray2D*" if "[][]" in mocha_type else "%MochaArray*"
     if mocha_type.startswith("("):
         return "%MochaTuple*"
-    if "[][]" in mocha_type:
-        return "%MochaArray2D*"
-    if "[" in mocha_type:
-        return "%MochaArray*"
-    if mocha_type == "dict": 
+    if mocha_type.startswith("set<"):
+        return "%MochaSet*"
+    if mocha_type == "dict":
         return "%MochaDict*"
     if mocha_type.startswith("set<"):
         return "%MochaSet*"
@@ -130,6 +134,7 @@ class CodeGen:
         self.class_fields = {}
         self.class_parents = {}
         self.method_return_types = {}
+        self.func_mocha_return_types = {}   # plain function name -> declared Mocha return type (e.g. "str[]")
         self.local_mocha_types = {}
         self.lib_functions = {}
         self.lib_constants = {}
@@ -363,7 +368,7 @@ class CodeGen:
         for idx, (fname, ftype) in enumerate(all_fields):
             zero = self.get_zero_value(ftype)  # ftype is already LLVM type
             ptr = self.fresh_temp()
-            self.emit(f"  {ptr} = getelementptr %struct.{node_name}, %struct.{node_name}* {self_name}, i32 0, i32 {idx}")
+            self.emit(f"  {ptr} = getelementptr %struct.{node_name}, %struct.{node_name}* {self_name}, i32 0, i32 {idx}  ; field {fname}")
             self.emit(f"  store {zero}, {ftype}* {ptr}")
     
     def get_zero_value(self, lt: str) -> str:
@@ -425,7 +430,7 @@ class CodeGen:
                 )
             field_type = to_llvm_type(fields[idx][1])
             ptr = self.fresh_temp()
-            self.emit(f"  {ptr} = getelementptr %struct.{class_name}, %struct.{class_name}* {obj_val}, i32 0, i32 {idx}")
+            self.emit(f"  {ptr} = getelementptr %struct.{class_name}, %struct.{class_name}* {obj_val}, i32 0, i32 {idx}  ; field {node.member}")
             return ("field", ptr, field_type)
 
         if isinstance(node, IndexAccess):
@@ -653,6 +658,10 @@ class CodeGen:
         T = f"%struct.{class_name}*"
         self.emit(f"define void @{class_name}_drop({T} %self) {{")
         self.emit("entry:")
+        # RC: a class with a finalize() method gets it called once, when its last reference dies,
+        # before its fields are released (Tensor uses it to free its host and GPU buffers)
+        if f"{class_name}_finalize" in self.method_return_types:
+            self.emit(f"  call void @{class_name}_finalize({T} %self)")
         for idx, (fname, mtype) in enumerate(mfields):
             kind = self.rc_simple_field_kind(mtype)
             is_cls = mtype in self.rc_classes
@@ -1258,11 +1267,13 @@ class CodeGen:
                 tmp = self.fresh_temp()
                 self.emit(f"  {tmp} = call i32 @mocha_array_length(%MochaArray* {obj_reg})")
                 # RC: an array returned by a plain function call is a fresh temporary we own.
-                # The element kind of a call result is unknown here (infer_mocha_type returns ""
-                # for calls), so release with kind 0: this frees the array and its buffer but not
-                # element references, so str[] / class[] temporaries still leak their elements.
+                # infer_mocha_type returns "" for calls, so the element kind comes from the called
+                # function's declared return type (str[] -> 1, class[] -> the class, anything else 0)
                 if isinstance(node.obj, FunctionCall) and isinstance(node.obj.name, Identifier):
-                    self.emit_array_release_call(obj_reg, 0)
+                    ret_t = self.func_mocha_return_types.get(node.obj.name.name, "")
+                    elem_cls = self.array_elem_class(ret_t)
+                    elem_kind = elem_cls if elem_cls else (1 if self.is_str_array_type(ret_t) else 0)
+                    self.emit_array_release_call(obj_reg, elem_kind)
                 return (tmp, "i32")
             # push and pop handled in gen_function_call, not here
 
@@ -1334,7 +1345,7 @@ class CodeGen:
                     llvm_ftype = ftype if ftype.startswith("%") or ftype in ("i32", "i64", "double", "i8", "i8*", "void") else to_llvm_type(ftype)  # ← convert here
                     self.emit(
                         f"  {ptr} = getelementptr %struct.{class_name}, "
-                        f"%struct.{class_name}* {obj_reg}, i32 0, i32 {idx}"
+                        f"%struct.{class_name}* {obj_reg}, i32 0, i32 {idx}  ; field {fname}"
                     )
                     self.emit(f"  {tmp} = load {llvm_ftype}, {llvm_ftype}* {ptr}")
                     return (tmp, llvm_ftype)  # ← return llvm type too
@@ -2680,6 +2691,11 @@ class CodeGen:
                     args     = self._collect_args(node)
                     all_args = [(obj_reg, obj_type)] + args
                     return self._emit_call(ret_type, mangled, all_args)
+                # imported class (not in class_nodes): same path as call-result receivers
+                tmp_ptr = self.fresh_temp()
+                self.emit(f"  {tmp_ptr} = alloca {obj_type}")
+                self.emit(f"  store {obj_type} {obj_reg}, {obj_type}* {tmp_ptr}")
+                return self.gen_struct_method_call(tmp_ptr, obj_type, member, node)
                 
         elif isinstance(obj, (FloatLiteral, IntLiteral, UnaryOp, BinaryOp)):
             obj_reg, obj_type = self.gen_expr(obj)
@@ -3602,7 +3618,7 @@ class CodeGen:
             ptr = self.unique_ptr_name(node.name)
             self.alloca_at_entry("i8*", ptr)
             if node.value:
-                val_reg, val_type = self.gen_expr(node.value)
+                # the value was already evaluated once at the top of gen_var_decl; don't evaluate it again
                 self.emit(f"  store i8* {val_reg}, i8** {ptr}")
             else:
                 self.emit(f"  store i8* null, i8** {ptr}")
@@ -3852,12 +3868,17 @@ class CodeGen:
                     ptr = self.fresh_temp()
                     self.emit(
                         f"  {ptr} = getelementptr %struct.{class_name}, "
-                        f"%struct.{class_name}* {obj_reg}, i32 0, i32 {idx}"
+                        f"%struct.{class_name}* {obj_reg}, i32 0, i32 {idx}  ; field {fname}"
                     )
                     # Promote i32 -> double if needed
                     if llvm_ftype == "double" and val_type == "i32":
                         p = self.fresh_temp()
                         self.emit(f"  {p} = sitofp i32 {val_reg} to double")
+                        val_reg = p
+                    # Widen i32 -> i64 (int literal or int expression into a vast field)
+                    elif llvm_ftype == "i64" and val_type == "i32":
+                        p = self.fresh_temp()
+                        self.emit(f"  {p} = sext i32 {val_reg} to i64")
                         val_reg = p
 
                     # RC: owned fields. Retain new value first (self-assignment safe), then release old one.
@@ -3958,7 +3979,16 @@ class CodeGen:
         # ── Load, operate, store ───────────────────────────────
         old = self.fresh_temp()
         self.emit(f"  {old} = load {llvm_type}, {llvm_type}* {ptr}")
-        val_reg, _ = self.gen_expr(node.value)
+        val_reg, val_type = self.gen_expr(node.value)
+        # widen the operand to the target's type (int literal/expression into a vast or float target)
+        if val_type == "i32" and llvm_type == "i64":
+            w = self.fresh_temp()
+            self.emit(f"  {w} = sext i32 {val_reg} to i64")
+            val_reg = w
+        elif val_type in ("i32", "i64") and llvm_type == "double":
+            w = self.fresh_temp()
+            self.emit(f"  {w} = sitofp {val_type} {val_reg} to double")
+            val_reg = w
         new = self.fresh_temp()
         is_float = llvm_type == "double"
         if   node.op == "+=": instr = "fadd" if is_float else "add"
@@ -4987,7 +5017,7 @@ class CodeGen:
                     val_reg, _ = self.gen_expr(m.value)
                     self.in_function = prev_in_function
                     ptr = self.fresh_temp()
-                    self.emit(f"  {ptr} = getelementptr %struct.{node.name}, %struct.{node.name}* %self, i32 0, i32 {idx}")
+                    self.emit(f"  {ptr} = getelementptr %struct.{node.name}, %struct.{node.name}* %self, i32 0, i32 {idx}  ; field {m.name}")
                     self.emit(f"  store {lt} {val_reg}, {lt}* {ptr}")
 
                 self.emit("  ret void")
@@ -6250,6 +6280,7 @@ class CodeGen:
             if isinstance(node, FunctionDecl):
                 ret_llvm = to_llvm_type(node.return_type)
                 self.method_return_types[node.name] = ret_llvm
+                self.func_mocha_return_types[node.name] = node.return_type
                 if node.has_didLoad:
                     entry_func = (node.name, node.params)
                     self.method_return_types[f"mocha_entry_{node.name}"] = ret_llvm

@@ -1,0 +1,1168 @@
+﻿=== 878a04d 2026-10-28
+v1.4 (28th October 2026): Only link the Windows system libraries for Rust FFI on Windows so Rust FFI can link on macOS; Mac workflow tests job now only runs C++ and Rust FFI; Next up: read the Mac Rust FFI result
+
+M	.github/workflows/mac.yml
+M	mocha_compile.py
+
+=== 440a534 2026-10-28
+v1.4 (28th October 2026): Rust build on Mac now uses panic=abort for the no_std rust_ffi library; Next up: read the Mac Rust FFI result
+
+M	.github/workflows/mac.yml
+
+=== dc02559 2026-10-28
+v1.4 (28th October 2026): Mac workflow now builds rust_ffi.a with rustc and tests Rust FFI; Next up: read the Mac test results
+
+M	.github/workflows/mac.yml
+
+=== a3de3d4 2026-10-28
+v1.4 (28th October 2026): Moved the C++ FFI step into the Mac tests job so it runs on every relevant push; Next up: read the Mac test results
+
+M	.github/workflows/mac.yml
+
+=== 2ff0217 2026-10-28
+v1.4 (28th October 2026): Fixed the C++ FFI string crash after RC in the runtime and wrapper; Added cpp_tests.mch; Mac workflow now tests C++ FFI; Next up: read the Mac test results
+
+M	.github/workflows/mac.yml
+A	cpp_tests.mch
+M	hello_cpp.cpp
+M	mocha_runtime.c
+
+=== 992e629 2026-10-27
+v1.4 (27th October 2026): Mac workflow split into a tests job that only runs run_all.sh on push and a basics job for the old checks that runs only from the Run workflow button; Next up: read the Mac test results
+
+M	.github/workflows/mac.yml
+
+=== 389485b 2026-10-27
+v1.4 (27th October 2026): Added run_all.sh, a Mac/Linux version of run_all.ps1, and the Mac workflow now runs all test_*.mch programs; Next up: read the Mac test results
+
+M	.github/workflows/mac.yml
+A	run_all.sh
+
+=== b3d71ef 2026-10-26
+v1.4 (26th October 2026): Mac workflow now tests the mocha repl command; Next up: check the Mac results and test more programs on macOS
+
+M	.github/workflows/mac.yml
+
+=== d489e2f 2026-10-26
+v1.4 (26th October 2026): Mac workflow now tests the mocha doc command; Next up: check the Mac results and test the REPL on macOS
+
+M	.github/workflows/mac.yml
+
+=== a1dabb8 2026-10-26
+v1.4 (26th October 2026): Mac workflow builds all 21 libraries including ds and runs mocha from another folder like a real user; Next up: check the Mac results and test more programs on macOS
+
+M	.github/workflows/mac.yml
+
+=== 17aca84 2026-10-26
+v1.4 (26th October 2026): Mac workflow only runs on relevant changes and cancels older runs; Next up: add ds to the Mac library test once pushed
+
+M	.github/workflows/mac.yml
+
+=== 9d8595e 2026-10-26
+v1.4 (26th October 2026): Marked the mocha script as executable so it runs from the PATH on macOS and Linux; Next up: add ds to the Mac library test once pushed
+
+M	mocha
+
+=== 34398d9 2026-10-26
+v1.4 (26th October 2026): Mac workflow now runs mocha from the PATH like a real user; Next up: add ds to the Mac library test once pushed
+
+M	.github/workflows/mac.yml
+
+=== 2084137 2026-10-26
+v1.4 (26th October 2026): Mac workflow now runs the cape_demo WebAssembly with Node; Next up: add ds to the Mac library test once pushed
+
+M	.github/workflows/mac.yml
+
+=== fcfb6b2 2026-10-25
+v1.4 (25th October 2026): Mac workflow now builds cape_demo as WebAssembly; Next up: run the wasm on macOS and add ds to the library test once pushed
+
+M	.github/workflows/mac.yml
+
+=== 430378a 2026-10-25
+v1.4 (25th October 2026): Added macOS Zig support (Mac downloads for Apple Silicon and Intel, correct Zig target per Mac); Mac workflow now tests Zig FFI; Next up: add ds to the Mac library test once pushed
+
+M	.github/workflows/mac.yml
+M	mocha_compile.py
+
+=== f358110 2026-10-25
+v1.4 (25th October 2026): Mac workflow now tests SQLite FFI and Wren on macOS; Next up: test Zig FFI on Apple Silicon
+
+M	.github/workflows/mac.yml
+
+=== 3c50580 2026-10-25
+v1.4 (25th October 2026): Mocha now builds its own Lua library on macOS (arm64 or Intel); Mac workflow no longer builds Lua by hand; Next up: more macOS tests
+
+M	.github/workflows/mac.yml
+M	mocha_compile.py
+
+=== 4d89168 2026-10-25
+v1.4 (25th October 2026): Picked the arm64 clang target on Apple Silicon in get_clang_flags too; Next up: check the Mac workflow results on both Macs
+
+M	mocha_compile.py
+
+=== 7ab4a9d 2026-10-25
+v1.4 (25th October 2026): Picked the arm64 clang target on Apple Silicon Macs instead of always x86_64; Next up: check get_clang_flags for the same issue
+
+M	mocha_compile.py
+
+=== 2f4da0f 2026-10-25
+v1.4 (25th October 2026): Mac workflow removes the Linux Lua library before building the Mac one; Next up: fix Lua linking on macOS
+
+M	.github/workflows/mac.yml
+
+=== e44bd43 2026-10-25
+v1.4 (25th October 2026): Added a Mac workflow step that inspects the Mac-built Lua library; Next up: fix Lua linking on macOS
+
+M	.github/workflows/mac.yml
+
+=== bad2700 2026-10-25
+v1.4 (25th October 2026): Mac workflow builds Lua from source before the Lua FFI test; Next up: make the compiler build Lua automatically on macOS
+
+M	.github/workflows/mac.yml
+
+=== fe5510f 2026-10-24
+(24th Oct): the rust_ffi.a static library with the arithemetic test functions along with whole File module being made in the Mocha-inspired OS project in Rust.
+
+A	rust_ffi.a
+D	rust_ffi.a.bak
+
+=== 81610af 2026-10-23
+v1.4(23rd October, 2026): Main RC finally completed after 4 months of work.
+
+Feat:
+- Other than block scoping, cuda rc for gpu, imported library locals, inheritance rc,
+   resolution of cycles in mocha-ds, RC for rest all plausible routes (open to discovery ever though)
+   is over.
+- Many libraries have been edited to have guards against mathematically sensible but scientifically implausible values.
+  They also have gotten more precise constants, and have been recompiled.
+- BertClassifier has gotten an accuracy function; so no manual loop to print positives and negatives is needed anymore.
+- SymCha had a few errors in Taylor and Chebyshev's solving that have been trated away.
+- Dicts, even nested ones, can be printed now. Arrays in dicts are supported yet.
+- Rust still requires only 1 lib named rust_ffi.a but now can be used with std functions, linker accommodates.
+- File object now gets its str args released + it has an f.eof() function that needs to be checked in the while loop
+  which will have to have when calling read or readLine inside it. also .close is still available but call .free()
+  as preference to prevent memory leak. read and readLine do not have null pointer derefs anymore.
+- Dicts now perform deep copy.
+- Same NULL deref issue in Wren's doFile also has been treated away.
+- mocha update command now automatically first tries to build libs. However, failure of some does not prove fatal
+  for the update; it logs the failed lib updates and moves on.
+- To update all libs, use "mocha libs" command. if only a specific one is to be re-compiled, put its name as the 3rd arg
+  "mocha libs chem" or "mocha libs mocha-chem"
+- Matvec lib now has a linear 2-equation solver function which extends on 2D float arrays.
+
+- TODO:
+    1. Miscelleneous edits from compiler audit
+    2. CUDA RC, followed by other kinds of rc as listed in the first point.
+    3. More corrections in SymCha
+    4. Let Arrays be printed, and arrays in dicts be printed and stored.
+    5. Allow Rust .a to have any name and there to be more than 1 probably.
+    6. Continue Decompiler and Mac compiling work.
+    7. Maybe think of another FFI.
+
+M	.gitignore
+M	bigger_bert_test.mch
+A	chebyshevs_test.mch
+A	dict_deep.mch
+A	dict_leak_test.mch
+A	geo_div_zero.mch
+A	geo_new_guards.mch
+M	lib/mocha-SymCha.mch
+M	lib/mocha-SymCha.mchi
+M	lib/mocha-astro.mch
+M	lib/mocha-astro.mchi
+M	lib/mocha-chem.mch
+M	lib/mocha-chem.mchi
+M	lib/mocha-ds.mch
+M	lib/mocha-ds.mchi
+M	lib/mocha-geo.mch
+M	lib/mocha-matvec.mch
+M	lib/mocha-matvec.mchi
+M	lib/mocha-meteoro.mch
+M	lib/mocha-neuron.mch
+M	lib/mocha-neuron.mchi
+M	lib/mocha-society.mch
+M	lib/mocha-society.mchi
+M	lib/mocha-space.mch
+M	lib/mocha-space.mchi
+M	lib/mocha-stats.mch
+M	lib/mocha-stats.mchi
+M	mocha.bat
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_ffi_tests.mch
+M	mocha_runtime.c
+M	mocha_typeChecker.py
+M	mocha_update.py
+A	nested_dict_class.mch
+A	richter_test.mch
+M	run_all.ps1
+A	rust_ffi.a.bak
+A	rust_ffi.mch
+A	skip_symplifier.mch
+A	space_updation.mch
+M	suite_of_v0.7.mch
+A	symcha_debug.mch
+A	symcha_div_zero.mch
+A	symcha_infinity.mch
+A	symcha_symplify_test.mch
+M	symcha_updations.mch
+A	tell_test.mch
+M	try_rescue_test.mch
+A	unit_cell_test.mch
+M	zig_test.mch
+
+=== 000cbcb 2026-10-20
+v1.3 (20th October 2026): Mac workflow now compiles and runs lua_ffi.mch to test native FFI on macOS; Next up: test more native libraries on macOS
+
+M	.github/workflows/mac.yml
+
+=== dc704bf 2026-10-20
+v1.3 (20th October 2026): Mac workflow now compiles and runs stopwatch_T.mch to test using a library; Next up: test more libraries on macOS
+
+M	.github/workflows/mac.yml
+
+=== 58b1af3 2026-10-20
+v1.3 (20th October 2026): Pushed the mocha script and mocha_libs.py so the libs command exists on GitHub; Mac workflow builds all libraries except the known-broken ds; Next up: fix any macOS library build errors
+
+M	mocha
+A	mocha_libs.py
+
+=== ef5a3df 2026-10-20
+v1.3 (20th October 2026): Mac workflow builds all libraries except the known-broken ds; Next up: fix any macOS library build errors
+
+M	.github/workflows/mac.yml
+
+=== 114282b 2026-10-20
+v1.3 (20th October 2026): Mac workflow now tests both Apple Silicon and Intel Macs; Next up: test more Mocha features on macOS
+
+M	.github/workflows/mac.yml
+
+=== b1380b2 2026-10-20
+v1.3 (20th October 2026): Skipped the lld linker flag on macOS so linking can use Apple's linker; Next up: fix the next macOS compile error
+
+M	mocha_compile.py
+
+=== 4ea4d60 2026-10-19
+v1.3 (19th October 2026): Mac workflow now compiles and runs evil.mch; Next up: fix whatever breaks on macOS
+
+M	.github/workflows/mac.yml
+A	evil.mch
+
+=== c227402 2026-10-19
+v1.3 (19th October 2026): Mac workflow now runs mocha help; Next up: compile a hello program on macOS
+
+M	.github/workflows/mac.yml
+
+=== cd46e32 2026-10-19
+v1.3 (19th October 2026): Added GitHub Actions workflow to test Mocha on a Mac; Next up: make Mocha build and run on macOS
+
+A	.github/workflows/mac.yml
+
+=== 1823122 2026-10-19
+v1.3 (19th October): wasm pages, serve/web/update commands, BertClassifier; BREAKING: move-only semantics
+
+Mocha has started behaving like a usable language!
+
+- Mocha now has a wasm command which assembles and autogenerates the .wasm and .html file.
+  User can write their own too with same file name, and that shall not be overwritten in the next
+  compilation, i.e, page without the mocha-generated marker line is never overwritten.
+- Mocha serve file.html opens the html file without needing local host from user.
+- Mocha web command now does what mocha wasm does + auto opens the html page.
+- Mocha update command now handles the cases for git pull.
+  It runs git pull --ff-only and shows a once-a-day notice (MOCHA_NO_UPDATE_CHECK=1 turns it off).
+- BERT now has a BertClassifier which makes BertLayer much easier to write.
+  It even allows to write separate positive and negative sentences, and has an accuracy function.
+- Semantics are move-only from now. Variable declaration or assignment by aliasing is rejected by TC now.
+- Changes to the File struct have been made: now File has a proper .close() and .free() functions.
+  String args of it are now released. read does not hold freed pointer and buffer read on console device does not crash.
+  To check if file is over, use f.eof() == true
+- Correct syntax to allocate a dynamic 2D Array is var a:int[][] = [[]]; not [][].
+  That used to SIGSEGV but is now a TC error and fails to compile.
+- Many things have been RC'd.
+- .size is a property on the set, not a function call. It leaked before, which has now been treated.
+- doFile of Wren had the same problem of crashing on console device, which has now been solved.
+
+- TODO: Solve Item[][] leak in test_ca, test remaining temporary C sematics creators;
+        begin CUDA RC, followed by imported lib locals and inheritance;
+        Continue self-hosting work starting TC.mch;
+        Resolve the errors in mocha-neuron.mch and make other NNs easier to write;
+        Once RC is stable, add the sqlite local struct-handle;
+        Try compiling mocha on Macintosh using github .yaml files.
+        Continue decompiler work by refining emitter;
+        Update runtime header, inline comments, and spec v1.3;
+        Remove debug comments from codegen to prevent them from going into user-release.
+
+M	.gitignore
+A	bigger_bert_test.mch
+M	cape_demo.html
+M	cape_demo.wasm
+M	lib/mocha-neuron.mch
+M	lib/mocha-neuron.mchi
+M	mocha
+M	mocha.bat
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_runtime.c
+A	mocha_serve.py
+M	mocha_typeChecker.py
+A	mocha_update.py
+M	mocha_wasm.py
+A	new_bert_classified.mch
+M	run_all.ps1
+A	test_em.wren
+A	test_types_wasm.html
+A	test_types_wasm.mch
+
+=== c64f54c 2026-10-17
+v.1.2 (17th October, 2026): Many ownership-kind RC have been corrected now, alloca bug causing stack overflow in .format() calls has been changed to getelementptr allocations, mocha_set_xor now properly releases the 2 intermediate sets casuing leak to disappear; inv_sech function has a proper guard for the edge case when x < 0; subset and superset functions added for sets, jaccard/dice/overlap having a bogus error when called via member access instead of the common function_call route has been solved; both mocha.bat and mocha.sh now properly error when the name of the command is typed wrong or the file does not exist; Decompiler work continues; Self-Hosted parser is now complete and matches the current Python Parser exactly. The demo for wams has been hosted on github pages in a new repo. Issues logged: mocha_set_intersect may need the same treatment as the xor one & 2D arrays when declared via wrong syntax corrupt the Heap or SIGSEGV instead of exiting with a TC Error; Next up: Miscelleneaous several RC issues will keep getting taken up and solved; Decompiler work shall continue; Wasm will now generate its own html and look forward to removing the python host -8000 requirement manually; local struct for sqlite calls is left and will be done after RC is stable; Writing GRU, BERT, etc. will be made easier; CUDA RC, RC for imported libs and for inheritance is pending; runtime header update and spec update.
+
+M	.gitignore
+M	cape_demo.html
+M	mocha
+M	mocha.bat
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_emitter.py
+M	mocha_parser.py
+M	mocha_runtime.c
+M	mocha_typeChecker.py
+M	self_hosted/ast.mch
+M	self_hosted/elaborate_parse.mch
+M	self_hosted/parser.mch
+A	set_sub_super.mch
+
+=== 7bfea57 2026-10-15
+v1.2.6 (15th October, 2026): Reference counting has covered much of different things now; Found out format used to crash on big loops due to alloca hoisting. Changed it to getelementptr and stack overflow has gone away; For all current patterns seen, deparser and classifier are complete. Emitter is constantly being improved. Some things though are genuinely unrecoverable from IR so honest limitation to be consider; The Math lib had an error where the inv_sech() function in runtime would return Complex by mocha code would call it with a float return. It has now been solved. Wasm now works without a js file and only has inline emit when making an html file, which will eventually also be inlined in the python code. Also, -g0 has been made conditional on an env variable, thus reducing wasm assembly sizes from 1.9MB to 59KB and gzipped of 27KB. TODO: 1) RC is ecxpected to continue for various aspects, followed by CUDA RC, then imported lib locals RC. 2) Wasm will see inling of html, reduction of js dependency or atleast increase in strictness, and eventual incorporation into the mocha_compile.py driver. 3) Emitter will be completed, then all 3 files be merged into mocha_decompiler.py with a CLI command of 'mocha reverse file.mch'. 4) Side projects that will go on include self hosting, trying to compile on mac using github lib, and replacement of global cache of sqlite calls with a new struct taught to the TC and a handle that ecah call will use.
+
+M	.gitignore
+M	cape_demo.wasm
+M	fixed_trig.mch
+M	lib/mocha-math.mch
+M	lib/mocha-math.mchi
+A	lib_sigs.json
+M	mocha_classifier.py
+M	mocha_codegen.py
+M	mocha_deparser.py
+A	mocha_emitter.py
+M	mocha_runtime.c
+M	mocha_wasm.py
+M	run_all.ps1
+A	run_wasm.js
+D	test_cc.mch
+M	try_rescue_test.mch
+
+=== 77becf5 2026-10-11
+v1.2.6 (11th October, 2026): fix(rc): ownership fixes for arrays, dicts, tuples and strings
+ - free boxed values after push/occs/set.has/set.delete (+ declare free)
+ - array slot stores, push and pop retain/release correctly for class and str elements
+ - reassignment retains new value before releasing old; new tuple branch; Item[] releases elements
+ - 2D element reads count as borrowed; 2D string store restored
+ - dict object values ref-counted; fresh objects released after set_object; merge/copy key strdup removed
+ - tests test_bq..test_cl, run_all.ps1 extended. Known open: lin_svm_T double release in Svm.fit (investigating), Item[][] parked. Class RC mostly done. After the 2D array bug is resolved, CUDA RC will be proceeded with and made bert and gru etc models writing easier for the user. After all that, locals of imported classes shall be freed. RC of ink has been completed with manual dispose function on each plot type to be called post plot use.
+Package version is now v.1.2.1 matching the compiler with the pythonPath now fetch instead of hardcoded 'python' in extension.js as that would break on MacOS. Also, all languageclient modules are bundled in one dist extension.js using esbuild-dev and added .vscodeignore to ignore .vsix during next bundling. mocha wasm file.mch now assembles to mocha.wasm and js emission happens on the fly so no js file visible. Same treatment awaits the html file and one for the web so python -m http 8000 is no longer needed. Added to mocha.bat and mocha.sh. Lua includes in runtime made platform-agnostic instead of being windows-copies on linux/mac Decompiler work restarted after August. A comprehensive decompiler (still open to new additions) has bene completed and classifier work began. Emitter will be next. Self-hosting work also restarted. Lexer and ast is now up to date. Parser updations are underway.
+
+D	blorp_test.mch
+M	cape_demo.html
+A	cape_demo.js
+M	cape_demo.wasm
+A	cfg_check.py
+A	check_plain.py
+A	check_switch.py
+A	compile_corpus.ps1
+A	corpus_current/failures.txt
+A	decomp_allenc.mch
+A	decomp_suite07.mch
+A	deparser_check.py
+A	find_empty.py
+A	func_survey.py
+A	if_check.py
+A	label_survey.py
+M	lib/mocha-bio.mch
+M	lin_svm_T.mch
+A	lin_svm_dbg.mch
+A	loop_check.py
+A	loop_edges.py
+A	loop_survey.py
+M	mocha
+A	mocha-vscode/.vscodeignore
+A	mocha-vscode/dist/extension.js
+M	mocha-vscode/extension.js
+D	mocha-vscode/mocha-language-1.1.0.vsix
+A	mocha-vscode/mocha-language-1.2.0.vsix
+A	mocha-vscode/mocha-language-1.2.1.vsix
+M	mocha-vscode/package-lock.json
+M	mocha-vscode/package.json
+M	mocha.bat
+A	mocha_classifier.py
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_deparser.py
+M	mocha_runtime.c
+M	mocha_wasm.py
+M	object_comprehension.mch
+A	peek_class.py
+A	peek_drop.py
+A	peek_for.py
+A	peek_if.py
+A	peek_labels.py
+M	run_all.ps1
+M	self_hosted/elaborate_parse.mch
+M	self_hosted/parser.mch
+A	test_bq.mch
+A	test_br.mch
+A	test_bs.mch
+A	test_bt.mch
+A	test_bu.mch
+A	test_bv.mch
+A	test_bw.mch
+A	test_bx.mch
+A	test_by.mch
+A	test_bz.mch
+A	test_ca.mch
+A	test_cb.mch
+A	test_cc.mch
+A	test_cd.mch
+A	test_ce.mch
+A	test_cf.mch
+A	test_cg.mch
+A	test_ch.mch
+A	test_ci.mch
+A	test_cj.mch
+A	test_ck.mch
+A	test_cl.mch
+
+=== f60f6ab 2026-10-10
+lua includes now plain, each platform uses its own lua headers
+
+M	mocha_runtime.c
+
+=== 90a0a85 2026-10-10
+Add files via upload
+
+Added Linux Lua library (lua-5.5.0_unix) so Lua works on Linux
+A	lua-5.5.0_unix/include/lauxlib.h
+A	lua-5.5.0_unix/include/lua.h
+A	lua-5.5.0_unix/include/lua.hpp
+A	lua-5.5.0_unix/include/luaconf.h
+A	lua-5.5.0_unix/include/lualib.h
+A	lua-5.5.0_unix/liblua55.a
+
+=== 8f9adf5 2026-10-10
+v1.2(10th Oct 2026): RC issues of lua and mocha handling the same pointer to a string causing retain without retain on input side and dangling pointer retain after free have been solved for strings.
+
+M	mocha_runtime.c
+
+=== 852bee9 2026-10-10
+v1.2(10th Oct 2026): RC issues of wren and mocha handling the same pointer to a string causing retain without retain on input side and dangling pointer retain after free have been solved for strings.
+
+M	mocha_runtime.c
+
+=== f4c64a8 2026-10-10
+v1.2.4 (10th October 2026): Fixed class allocation size bug in compute_struct_size, which ignored field padding (an int among 8-byte fields made objects too small and smashed the back canary at cleanup); this was the heap corruption blocking ASTNode in the self-hosted parser; all RC tests (test_b to test_bp) still pass; self-hosted parser now runs its 10-test harness; Next up: verify parser step 1, rewrite parse_match for case ranges, continue the 11-step parser plan, then RC for 2d arrays, dict of objects, imported and inherited classes.
+
+M	mocha_codegen.py
+M	run_all.ps1
+A	self_hosted/probe_a.mch
+A	self_hosted/probe_b.mch
+
+=== addf786 2026-10-10
+v1.2.4(10th October, 2026): Many changes to class RC have been made, concerning retains for primitvies, locals, etc. in classes, arrays of classes, and many other things. Tests test_m until test_bp are for that. Cape_cin for mocha-meteoro.mch fixed so it is trapezoid with virtual numbers now, instead of the rectangular earlier. after wasm flags adding to runtime, mocha is web compilable for wasm. Will now begin with adding --wasm flag to compiler to automate the build ps1 script and js shim removal. Readme had a mistake about Julia's comparison, which has been corrected. All aliasing bugs which first crashed with retain after free have been mended. Next up: RC for 2d arrays, for dict of objects, for imported classes and inherited classes, followed by block scoping and CUDA RC; --wasm flag first tested with a separate file mocha_wasm.py, then merged into main mocha_compile.py.
+
+M	README.md
+A	build_wasm.ps1
+A	cape_demo.html
+M	cape_demo.mch
+M	cape_demo.wasm
+A	cape_probe.mch
+M	lib/mocha-meteoro.mch
+M	lib/mocha-meteoro.mchi
+M	mocha_codegen.py
+M	mocha_runtime.c
+A	mocha_wasm.py
+A	run_all.ps1
+A	test_ae.mch
+A	test_af.mch
+A	test_ag.mch
+A	test_ah.mch
+A	test_ai.mch
+A	test_aj.mch
+A	test_ak.mch
+A	test_al.mch
+A	test_am.mch
+A	test_an.mch
+A	test_ao.mch
+A	test_ap.mch
+A	test_aq.mch
+A	test_ar.mch
+A	test_as.mch
+A	test_at.mch
+A	test_au.mch
+A	test_av.mch
+A	test_aw.mch
+A	test_ax.mch
+A	test_ay.mch
+A	test_az.mch
+A	test_ba.mch
+A	test_bb.mch
+A	test_bc.mch
+A	test_bd.mch
+A	test_be.mch
+A	test_bf.mch
+A	test_bg.mch
+A	test_bh.mch
+A	test_bi.mch
+A	test_bj.mch
+A	test_bk.mch
+A	test_bl.mch
+A	test_bm.mch
+A	test_bn.mch
+A	test_bo.mch
+A	test_bp.mch
+
+=== 5b895e4 2026-10-07
+class RC: set/2D array locals release previous value in loops; set branch no longer evaluates its value twice; tests ac, ad
+
+M	mocha_codegen.py
+A	test_aa.mch
+A	test_ab.mch
+A	test_ac.mch
+A	test_ad.mch
+
+=== 8ec1703 2026-10-07
+class RC: borrowed-value retains in dict assign, dict locals release previous value in loops; tests w-z
+
+M	mocha_codegen.py
+A	test_z.mch
+
+=== 4a47ab1 2026-10-06
+wip: class RC state, leak under investigation
+
+M	mocha_codegen.py
+M	mocha_runtime.c
+A	test_m.mch
+A	test_n.mch
+A	test_o.mch
+A	test_p.mch
+A	test_q.mch
+A	test_r.mch
+A	test_s.mch
+A	test_t.mch
+A	test_u.mch
+A	test_v.mch
+A	test_w.mch
+A	test_x.mch
+A	test_y.mch
+
+=== 89500ee 2026-10-05
+v.1.2 mini (5th Oct, 2026): Zig now has its stable form for Linux. Macintosh will be done later.
+
+M	.gitignore
+M	mocha_compile.py
+
+=== 800283f 2026-10-05
+v1.2.3(5th October, 2026): RC on arrays in classes, sets-dicts-Complex in classes is done. Self-referential and other things are left. Began mocha-web work. Mocha files, through runtime usage after adding some ifndef wasm flags, compiles to wasm, and through a shim html file, is able to open in browser via zig compiling. Next up: Continue RC for classes, and add --wasm for compiler so it becomes an innate feature of Mocha.
+
+A	alloc_full.wasm
+A	cape_demo.mch
+A	cape_demo.wasm
+A	dewpoint.html
+A	dewpoint.mch
+A	dewpoint.wasm
+A	index.html
+M	lib/mocha-meteoro.mch
+M	mocha_codegen.py
+M	mocha_runtime.c
+A	run_wasi.js
+A	self_hosted/ast_isolation_test.mch
+A	test_g.mch
+A	test_h.mch
+A	test_i.mch
+A	test_j.mch
+A	test_k.mch
+A	test_l.mch
+
+=== 2db4559 2026-10-05
+v1.2.2 (5th October, 2026) Class RC has progressed. Array fields are now properly owned by classes and constructors get proper emission and release of RC Nodes. Also, mocha-web pre-testing has begun.
+
+A	add.wasm
+A	alloc_test.wasm
+M	mocha_codegen.py
+M	mocha_runtime.c
+A	run.js
+A	test_b.mch
+A	test_c.mch
+A	test_d.mch
+A	test_e.mch
+A	test_f.mch
+A	wasm_errors.txt
+M	watch.ps1
+
+=== 1704c74 2026-10-04
+v1.2 (4th October 2026): Fixed miscelleneous errors in Codegen; Added mocha help/mocha --help/mocha -h command in both windows and linux/os build; Restarted self-hosting after 4 months => Updated already done lexer.mch and tokens.mch to match with mocha_lexer.py, doing same with parser.mch now, will do TC after it. Currently not in plan to replace python's version yet but started off as a mini project; Mocha-ink now has dispose functions for each graph; Done Basic RC of classes using a different method to the one tried earlier; Next up: Complete RC for Classes then begin block scoping, CUDA RC, test in Vm to check Linux and Macintosh compiles, complete parser.mch and move onto TC.mch and codegen scripts. Maybe think about mocha-web library.
+
+A	class_rc_test.mch
+M	lib/mocha-ink.mch
+M	lib/mocha-ink.mchi
+M	mocha
+M	mocha.bat
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_runtime.c
+M	mocha_typeChecker.py
+M	self_hosted/lexer.mch
+A	self_hosted/lexer_bitwise_test.mch
+A	self_hosted/lexer_doc_test.mch
+A	self_hosted/lexer_emoji_test.mch
+A	self_hosted/lexer_escape_test.mch
+A	self_hosted/lexer_keyword_test.mch
+A	self_hosted/lexer_sci_test.mch
+A	self_hosted/lexer_underscore_test.mch
+M	self_hosted/parser.mch
+M	self_hosted/token.mch
+M	watch.ps1
+
+=== 39100ae 2026-09-30
+v1.2.1 (30th September 2026): Mocha now downloads Zig by itself the first time a program needs it, so Zig no longer has to ship in the repo. Tested by removing my Zig and compiling the Zig test again.
+
+M	mocha_compile.py
+M	zig_test.mch
+
+=== 3eda749 2026-09-30
+v1.2 (30th September 2026): Cleaned up the runtime and started making Mocha shippable. Crash handler and error backtrace were Windows-only and would have broken the build on Linux/macOS, now fixed. Call stack traceback no longer gets confused in deep recursion, and freeing objects from RC_list is much faster now. The date and time functions were all sharing one buffer that later calls overwrote, now each returns its own string (sqlite errmsg too). Zig is now only built when a program actually uses mocha_zig_ functions, and a link error on a missing native function now explains the mocha_zig_ naming rule. Lua, SQLite and Wren now ship in the repo, Zig stays out because it is too big. Proper RC for extend has been added and chained call leak has been fixed. Runtime, parser, and typechecker errors have been updated. version has now been ticked up to v1.2. Next up: Zig download on first use, and RC for classes, block scoping, ink and CUDA.
+
+M	.gitignore
+A	alias_test.mch
+A	caps_class_test.mch
+A	lua-5.5.0_Win64_dllw6_lib/include/lauxlib.h
+A	lua-5.5.0_Win64_dllw6_lib/include/lua.h
+A	lua-5.5.0_Win64_dllw6_lib/include/lua.hpp
+A	lua-5.5.0_Win64_dllw6_lib/include/luaconf.h
+A	lua-5.5.0_Win64_dllw6_lib/include/lualib.h
+A	lua-5.5.0_Win64_dllw6_lib/liblua55.a
+A	lua-5.5.0_Win64_dllw6_lib/lua55.def
+A	lua-5.5.0_Win64_dllw6_lib/lua55_exports.txt
+A	lua-5.5.0_Win64_dllw6_lib/lua55_msvc.lib
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_parser.py
+M	mocha_runtime.c
+M	mocha_typeChecker.py
+A	sqlite-amalgamation-3510300/shell.c
+A	sqlite-amalgamation-3510300/sqlite3.c
+A	sqlite-amalgamation-3510300/sqlite3.h
+A	sqlite-amalgamation-3510300/sqlite3ext.h
+A	tag_name_test.mch
+A	wren/README.md
+A	wren/include/wren.h
+A	wren/include/wren.hpp
+A	wren/optional/wren_opt_meta.c
+A	wren/optional/wren_opt_meta.h
+A	wren/optional/wren_opt_meta.wren
+A	wren/optional/wren_opt_meta.wren.inc
+A	wren/optional/wren_opt_random.c
+A	wren/optional/wren_opt_random.h
+A	wren/optional/wren_opt_random.wren
+A	wren/optional/wren_opt_random.wren.inc
+A	wren/vm/wren_common.h
+A	wren/vm/wren_compiler.c
+A	wren/vm/wren_compiler.h
+A	wren/vm/wren_core.c
+A	wren/vm/wren_core.h
+A	wren/vm/wren_core.wren
+A	wren/vm/wren_core.wren.inc
+A	wren/vm/wren_debug.c
+A	wren/vm/wren_debug.h
+A	wren/vm/wren_math.h
+A	wren/vm/wren_opcodes.h
+A	wren/vm/wren_primitive.c
+A	wren/vm/wren_primitive.h
+A	wren/vm/wren_utils.c
+A	wren/vm/wren_utils.h
+A	wren/vm/wren_value.c
+A	wren/vm/wren_value.h
+A	wren/vm/wren_vm.c
+A	wren/vm/wren_vm.h
+M	zig_test.mch
+
+=== c37a026 2026-09-30
+Untrack node_modules, test dbs, and built zig_ffi.lib
+
+D	mocha-vscode/node_modules/.bin/semver
+D	mocha-vscode/node_modules/.bin/semver.cmd
+D	mocha-vscode/node_modules/.bin/semver.ps1
+D	mocha-vscode/node_modules/.package-lock.json
+D	mocha-vscode/node_modules/balanced-match/LICENSE.md
+D	mocha-vscode/node_modules/balanced-match/README.md
+D	mocha-vscode/node_modules/balanced-match/dist/commonjs/index.d.ts
+D	mocha-vscode/node_modules/balanced-match/dist/commonjs/index.d.ts.map
+D	mocha-vscode/node_modules/balanced-match/dist/commonjs/index.js
+D	mocha-vscode/node_modules/balanced-match/dist/commonjs/index.js.map
+D	mocha-vscode/node_modules/balanced-match/dist/commonjs/package.json
+D	mocha-vscode/node_modules/balanced-match/dist/esm/index.d.ts
+D	mocha-vscode/node_modules/balanced-match/dist/esm/index.d.ts.map
+D	mocha-vscode/node_modules/balanced-match/dist/esm/index.js
+D	mocha-vscode/node_modules/balanced-match/dist/esm/index.js.map
+D	mocha-vscode/node_modules/balanced-match/dist/esm/package.json
+D	mocha-vscode/node_modules/balanced-match/package.json
+D	mocha-vscode/node_modules/brace-expansion/LICENSE
+D	mocha-vscode/node_modules/brace-expansion/README.md
+D	mocha-vscode/node_modules/brace-expansion/dist/commonjs/index.d.ts
+D	mocha-vscode/node_modules/brace-expansion/dist/commonjs/index.d.ts.map
+D	mocha-vscode/node_modules/brace-expansion/dist/commonjs/index.js
+D	mocha-vscode/node_modules/brace-expansion/dist/commonjs/index.js.map
+D	mocha-vscode/node_modules/brace-expansion/dist/commonjs/package.json
+D	mocha-vscode/node_modules/brace-expansion/dist/esm/index.d.ts
+D	mocha-vscode/node_modules/brace-expansion/dist/esm/index.d.ts.map
+D	mocha-vscode/node_modules/brace-expansion/dist/esm/index.js
+D	mocha-vscode/node_modules/brace-expansion/dist/esm/index.js.map
+D	mocha-vscode/node_modules/brace-expansion/dist/esm/package.json
+D	mocha-vscode/node_modules/brace-expansion/package.json
+D	mocha-vscode/node_modules/minimatch/LICENSE.md
+D	mocha-vscode/node_modules/minimatch/README.md
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/assert-valid-pattern.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/assert-valid-pattern.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/assert-valid-pattern.js
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/assert-valid-pattern.js.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/ast.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/ast.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/ast.js
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/ast.js.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/brace-expressions.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/brace-expressions.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/brace-expressions.js
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/brace-expressions.js.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/escape.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/escape.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/escape.js
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/escape.js.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/index.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/index.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/index.js
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/index.js.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/package.json
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/unescape.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/unescape.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/unescape.js
+D	mocha-vscode/node_modules/minimatch/dist/commonjs/unescape.js.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/assert-valid-pattern.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/esm/assert-valid-pattern.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/assert-valid-pattern.js
+D	mocha-vscode/node_modules/minimatch/dist/esm/assert-valid-pattern.js.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/ast.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/esm/ast.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/ast.js
+D	mocha-vscode/node_modules/minimatch/dist/esm/ast.js.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/brace-expressions.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/esm/brace-expressions.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/brace-expressions.js
+D	mocha-vscode/node_modules/minimatch/dist/esm/brace-expressions.js.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/escape.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/esm/escape.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/escape.js
+D	mocha-vscode/node_modules/minimatch/dist/esm/escape.js.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/index.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/esm/index.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/index.js
+D	mocha-vscode/node_modules/minimatch/dist/esm/index.js.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/package.json
+D	mocha-vscode/node_modules/minimatch/dist/esm/unescape.d.ts
+D	mocha-vscode/node_modules/minimatch/dist/esm/unescape.d.ts.map
+D	mocha-vscode/node_modules/minimatch/dist/esm/unescape.js
+D	mocha-vscode/node_modules/minimatch/dist/esm/unescape.js.map
+D	mocha-vscode/node_modules/minimatch/package.json
+D	mocha-vscode/node_modules/semver/LICENSE
+D	mocha-vscode/node_modules/semver/README.md
+D	mocha-vscode/node_modules/semver/bin/semver.js
+D	mocha-vscode/node_modules/semver/classes/comparator.js
+D	mocha-vscode/node_modules/semver/classes/index.js
+D	mocha-vscode/node_modules/semver/classes/range.js
+D	mocha-vscode/node_modules/semver/classes/semver.js
+D	mocha-vscode/node_modules/semver/functions/clean.js
+D	mocha-vscode/node_modules/semver/functions/cmp.js
+D	mocha-vscode/node_modules/semver/functions/coerce.js
+D	mocha-vscode/node_modules/semver/functions/compare-build.js
+D	mocha-vscode/node_modules/semver/functions/compare-loose.js
+D	mocha-vscode/node_modules/semver/functions/compare.js
+D	mocha-vscode/node_modules/semver/functions/diff.js
+D	mocha-vscode/node_modules/semver/functions/eq.js
+D	mocha-vscode/node_modules/semver/functions/gt.js
+D	mocha-vscode/node_modules/semver/functions/gte.js
+D	mocha-vscode/node_modules/semver/functions/inc.js
+D	mocha-vscode/node_modules/semver/functions/lt.js
+D	mocha-vscode/node_modules/semver/functions/lte.js
+D	mocha-vscode/node_modules/semver/functions/major.js
+D	mocha-vscode/node_modules/semver/functions/minor.js
+D	mocha-vscode/node_modules/semver/functions/neq.js
+D	mocha-vscode/node_modules/semver/functions/parse.js
+D	mocha-vscode/node_modules/semver/functions/patch.js
+D	mocha-vscode/node_modules/semver/functions/prerelease.js
+D	mocha-vscode/node_modules/semver/functions/rcompare.js
+D	mocha-vscode/node_modules/semver/functions/rsort.js
+D	mocha-vscode/node_modules/semver/functions/satisfies.js
+D	mocha-vscode/node_modules/semver/functions/sort.js
+D	mocha-vscode/node_modules/semver/functions/truncate.js
+D	mocha-vscode/node_modules/semver/functions/valid.js
+D	mocha-vscode/node_modules/semver/index.js
+D	mocha-vscode/node_modules/semver/internal/constants.js
+D	mocha-vscode/node_modules/semver/internal/debug.js
+D	mocha-vscode/node_modules/semver/internal/identifiers.js
+D	mocha-vscode/node_modules/semver/internal/lrucache.js
+D	mocha-vscode/node_modules/semver/internal/parse-options.js
+D	mocha-vscode/node_modules/semver/internal/re.js
+D	mocha-vscode/node_modules/semver/package.json
+D	mocha-vscode/node_modules/semver/preload.js
+D	mocha-vscode/node_modules/semver/range.bnf
+D	mocha-vscode/node_modules/semver/ranges/gtr.js
+D	mocha-vscode/node_modules/semver/ranges/intersects.js
+D	mocha-vscode/node_modules/semver/ranges/ltr.js
+D	mocha-vscode/node_modules/semver/ranges/max-satisfying.js
+D	mocha-vscode/node_modules/semver/ranges/min-satisfying.js
+D	mocha-vscode/node_modules/semver/ranges/min-version.js
+D	mocha-vscode/node_modules/semver/ranges/outside.js
+D	mocha-vscode/node_modules/semver/ranges/simplify.js
+D	mocha-vscode/node_modules/semver/ranges/subset.js
+D	mocha-vscode/node_modules/semver/ranges/to-comparators.js
+D	mocha-vscode/node_modules/semver/ranges/valid.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/License.txt
+D	mocha-vscode/node_modules/vscode-jsonrpc/README.md
+D	mocha-vscode/node_modules/vscode-jsonrpc/eslint.config.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/browser/main.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/browser/main.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/browser/ril.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/browser/ril.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/api.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/api.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/cancellation.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/cancellation.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/connection.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/connection.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/disposable.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/disposable.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/encoding.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/encoding.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/events.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/events.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/is.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/is.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/linkedMap.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/linkedMap.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messageBuffer.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messageBuffer.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messageReader.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messageReader.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messageWriter.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messageWriter.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messages.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/messages.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/ral.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/ral.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/semaphore.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/semaphore.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/sharedArrayCancellation.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/common/sharedArrayCancellation.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/node/main.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/node/main.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/node/ril.d.ts
+D	mocha-vscode/node_modules/vscode-jsonrpc/lib/node/ril.js
+D	mocha-vscode/node_modules/vscode-jsonrpc/package.json
+D	mocha-vscode/node_modules/vscode-jsonrpc/thirdpartynotices.txt
+D	mocha-vscode/node_modules/vscode-jsonrpc/tsconfig.tsbuildinfo
+D	mocha-vscode/node_modules/vscode-jsonrpc/typings/thenable.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/License.txt
+D	mocha-vscode/node_modules/vscode-languageclient/README.md
+D	mocha-vscode/node_modules/vscode-languageclient/eslint.config.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/browser/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/browser/main.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/api.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/api.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/callHierarchy.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/callHierarchy.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/client.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/client.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/codeAction.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/codeAction.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/codeConverter.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/codeConverter.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/codeLens.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/codeLens.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/colorProvider.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/colorProvider.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/completion.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/completion.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/configuration.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/configuration.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/declaration.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/declaration.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/definition.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/definition.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/diagnostic.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/diagnostic.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/documentHighlight.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/documentHighlight.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/documentLink.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/documentLink.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/documentSymbol.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/documentSymbol.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/executeCommand.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/executeCommand.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/features.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/features.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/fileOperations.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/fileOperations.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/fileSystemWatcher.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/fileSystemWatcher.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/foldingRange.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/foldingRange.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/formatting.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/formatting.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/hover.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/hover.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/implementation.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/implementation.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/inlayHint.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/inlayHint.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/inlineCompletion.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/inlineCompletion.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/inlineValue.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/inlineValue.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/linkedEditingRange.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/linkedEditingRange.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/notebook.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/notebook.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/progress.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/progress.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/progressPart.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/progressPart.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCallHierarchyItem.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCallHierarchyItem.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCodeAction.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCodeAction.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCodeLens.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCodeLens.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCompletionItem.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolCompletionItem.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolConverter.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolConverter.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolDiagnostic.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolDiagnostic.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolDocumentLink.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolDocumentLink.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolInlayHint.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolInlayHint.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolTypeHierarchyItem.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolTypeHierarchyItem.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolWorkspaceSymbol.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/protocolWorkspaceSymbol.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/reference.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/reference.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/rename.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/rename.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/selectionRange.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/selectionRange.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/semanticTokens.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/semanticTokens.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/signatureHelp.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/signatureHelp.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/textDocumentContent.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/textDocumentContent.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/textSynchronization.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/textSynchronization.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/typeDefinition.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/typeDefinition.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/typeHierarchy.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/typeHierarchy.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/async.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/async.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/globPattern.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/globPattern.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/is.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/is.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/uuid.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/utils/uuid.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/workspaceFolder.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/workspaceFolder.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/workspaceSymbol.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/common/workspaceSymbol.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/node/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/node/main.js
+D	mocha-vscode/node_modules/vscode-languageclient/lib/node/processes.d.ts
+D	mocha-vscode/node_modules/vscode-languageclient/lib/node/processes.js
+D	mocha-vscode/node_modules/vscode-languageclient/package.json
+D	mocha-vscode/node_modules/vscode-languageclient/typings/vscode.proposed.codeActionAI.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/License.txt
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/README.md
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/eslint.config.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/browser/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/browser/main.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/api.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/api.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/connection.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/connection.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/messages.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/messages.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.$.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.$.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.callHierarchy.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.callHierarchy.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.colorProvider.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.colorProvider.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.configuration.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.configuration.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.declaration.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.declaration.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.diagnostic.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.diagnostic.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.fileOperations.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.fileOperations.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.foldingRange.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.foldingRange.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.implementation.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.implementation.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.inlayHint.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.inlayHint.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.inlineCompletion.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.inlineCompletion.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.inlineValue.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.inlineValue.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.linkedEditingRange.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.linkedEditingRange.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.moniker.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.moniker.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.notebook.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.notebook.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.progress.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.progress.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.selectionRange.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.selectionRange.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.semanticTokens.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.semanticTokens.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.showDocument.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.showDocument.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.textDocumentContent.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.textDocumentContent.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.typeDefinition.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.typeDefinition.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.typeHierarchy.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.typeHierarchy.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.workspaceFolder.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.workspaceFolder.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/utils/is.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/common/utils/is.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/node/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/lib/node/main.js
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/metaModel.schema.json
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/package.json
+D	mocha-vscode/node_modules/vscode-languageserver-protocol/thirdpartynotices.txt
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/License.txt
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/README.md
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/eslint.config.js
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/lib/esm/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/lib/esm/main.js
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/lib/esm/package.json
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/lib/umd/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/lib/umd/main.js
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/package.json
+D	mocha-vscode/node_modules/vscode-languageserver-textdocument/thirdpartynotices.txt
+D	mocha-vscode/node_modules/vscode-languageserver-types/License.txt
+D	mocha-vscode/node_modules/vscode-languageserver-types/README.md
+D	mocha-vscode/node_modules/vscode-languageserver-types/eslint.config.js
+D	mocha-vscode/node_modules/vscode-languageserver-types/lib/esm/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-types/lib/esm/main.js
+D	mocha-vscode/node_modules/vscode-languageserver-types/lib/esm/package.json
+D	mocha-vscode/node_modules/vscode-languageserver-types/lib/umd/main.d.ts
+D	mocha-vscode/node_modules/vscode-languageserver-types/lib/umd/main.js
+D	mocha-vscode/node_modules/vscode-languageserver-types/package.json
+D	mocha-vscode/node_modules/vscode-languageserver-types/thirdpartynotices.txt
+D	mocha_test.db
+D	mocha_test2.db
+D	zig_ffi.lib
+
+=== 17a482e 2026-09-29
+v1.1 (29th September 2026): Mocha is back up and working after 62 days! So Congrats! There was an issue with memset being hardcoded to 64 at line 4202 of Codegen, chained calls and extended primtives had their retain-release missing, and some other minute problems. BERT and GRU now work in current state! Also all library edits are functions marked private + local (a new keyword like C++'s internal which prohibits calling those functions by caller from another file even if library is imported.) AVL tree also had an issue: when a duplicate node would be added, it would skip it silently but still raise node number. Same with deletion. Now, addition silently refuses but does not increase node number, while removing missing key errors. AVL now has cmp guard against adding mixed data also with a non-recoverable error. Next up: allow Classes to have single-letter SCREAMING_CASE name that will not make it error as a constant, and continue RC to classes, block scoping, and CUDA RC, along with runtime header, typecheker header (for the class change), and spec update.
+
+M	.gitignore
+M	Specs of Mocha/Mocha_spec_v1.1.docx
+M	bert_sentiment_anal.mch
+M	lib/mocha-SymCha.mch
+M	lib/mocha-SymCha.mchi
+M	lib/mocha-bio.mch
+M	lib/mocha-bio.mchi
+M	lib/mocha-chem.mch
+M	lib/mocha-ds.mch
+M	lib/mocha-ds.mchi
+M	lib/mocha-forge.mch
+M	lib/mocha-forge.mchi
+M	lib/mocha-geo.mch
+M	lib/mocha-math.mch
+M	lib/mocha-math.mchi
+M	lib/mocha-matvec.mch
+M	lib/mocha-matvec.mchi
+M	lib/mocha-meteoro.mch
+M	lib/mocha-meteoro.mchi
+M	lib/mocha-neuron.mch
+M	lib/mocha-processing.mch
+M	lib/mocha-society.mch
+M	lib/mocha-space.mch
+M	lib/mocha-stats.mch
+M	lib/mocha-stopwatch.mch
+M	lib/mocha-string.mch
+M	lib/mocha-string.mchi
+M	mocha_ast.py
+M	mocha_codegen.py
+M	mocha_compile.py
+M	mocha_debug.py
+M	mocha_lexer.py
+M	mocha_lsp.py
+M	mocha_parser.py
+M	mocha_repl.py
+M	mocha_runtime.c
+M	mocha_typeChecker.py
+M	neuron_gru.mch
+M	zig_ffi.lib
+
+=== 39625c2 2026-07-29
+v1.1 (29th July 2026): Done RefCount for Complex numbers. Fixed memory management for many miscelleneous areas and strings inside MochaHashTable, MochaFile, and others. Removed all *gc_ and GcNode stubs and replaced with proper rc (Kept mocha_gc_stats and repurposed for RC). Signal handlers in GC got abstracted into their own function and mocha_crash_handler updated accordingly. Throughout the mocha-meteoro's C code, replaced mocha_float_* fixed-point operations with respective MACROS- ADD, SUB, MUL, and DIV for readability. Moreover, imrpoved some precision and overflow decision in the arithemetic itself; Parser now reports missing semicolon (and essentially all end-of-line) errors at the last token of that line itself, unlike how it previously reported it at the next non-comment non-empty line. Configured the mocha.installPath to now have vscode configurable settings, not my hardcoded path. Updated semver from v0.9.0 to v1.1.0 and repackaged VSIX; Created a new mocha file to display some of the workings of my list comprehension called object_comprehension.mch; Fixed a CAPE-CIN error in both mocha-meteoro.mch and runtime's respective section - now if uptill upper troposphere, if no meaningful CAPE is found, CIN returns 0 instead of previous return of negative of whatever value came out; For RC, block scoping, that of classes, type-scoping in HashTables, CUDA RC, etc. is left. Will be continued sometime in future; TODO: Decompiler of Mocha (currently called mocha_deparser.py) and, refactoring and cleaning up of files will continue now.
+
+M	lib/mocha-meteoro.mch
+M	lib/mocha-meteoro.mchi
+M	mocha-vscode/extension.js
+D	mocha-vscode/mocha-language-0.8.0.vsix
+R094	mocha-vscode/mocha-language-0.9.0.vsix	mocha-vscode/mocha-language-1.1.0.vsix
+M	mocha-vscode/package.json
+M	mocha_codegen.py
+M	mocha_parser.py
+M	mocha_runtime.c
+A	object_comprehension.mch
+A	rc_complex_test.mch
+M	watch.ps1
+M	zig_ffi.lib
+
+=== 61c6016 2026-07-26
+v1.1 (26th July 2026): Done miscelleneous updations in the spec, refactored some runtime code of C, Corrected the loop of the deparser, Fixed Rahu and Ketu's aspect in mocha-astro and made if-else into || statements which is idiomatic Mocha, and tried using Mocha in my pass-time Euler brick research and it had a good outcome.
+
+M	Specs of Mocha/Mocha_spec_v1.1.docx
+A	euler_mocha.mch
+A	euler_stream.rs
+M	lib/mocha-astro.mch
+M	mocha_deparser.py
+M	mocha_runtime.c
+
+=== cb7f262 2026-07-15
+v1.1 (15th July 2026): RefCount of 2D Arrays complete. Tried that of Classes throughly but had to revert and defer due to clang's persistent illegal redefinition error even where the LL file had no duplication.
+
+D	Mocha Spec (v0.9).docx
+D	Mocha_Spec_v1.0.docx
+A	Mocha_spec_v1.1.docx
+A	Specs of Mocha/Mocha Spec v0. 8.docx
+A	Specs of Mocha/Mocha Spec v0.9.docx
+A	Specs of Mocha/Mocha Spec v1.0.docx
+A	Specs of Mocha/Mocha_spec_v1.1.docx
+M	mocha_codegen.py
+M	mocha_runtime.c
+A	rc_2dArray_test.mch
+A	rc_class_debug.mch
+A	rc_class_test.mch
+M	watch.ps1
+M	zig_ffi.lib

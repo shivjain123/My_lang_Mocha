@@ -986,6 +986,8 @@ class TypeChecker {
                 this.checkIf(node);
             case "WhileLoop":
                 this.checkWhile(node);
+            case "DoWhileLoop":
+                this.checkDoWhile(node);
             case "ForLoop":
                 this.checkFor(node);
             case "ForEachLoop":
@@ -999,14 +1001,6 @@ class TypeChecker {
             case "ContinueStmt":
                 if (this.loop_depth == 0) {
                     this.addErrorAt("'continue' used outside of a loop", node);
-                };
-            case "PrintStmt":
-                var pi: int = 0;
-                while (pi < node.args.length) {
-                    if (node.args[pi].kind != "NamedArg") {
-                        this.checkExpr(node.args[pi]);
-                    };
-                    pi += 1;
                 };
             case "ExprStmt":
                 if (node.left.kind == "Assignment") {
@@ -1205,6 +1199,16 @@ class TypeChecker {
             this.addErrorAt("While condition must be bool, got '" + cond_type + "'", node);
         };
         this.checkBlock(node.body);
+        this.loop_depth -= 1;
+    };
+
+    function checkDoWhile(node: ASTNode) -> null {
+        this.loop_depth += 1;
+        this.checkBlock(node.body);
+        var cond_type: str = this.checkExpr(node.condition);
+        if (cond_type != "bool") {
+            this.addErrorAt("Do-while condition must be bool, got '" + cond_type + "'", node);
+        };
         this.loop_depth -= 1;
     };
 

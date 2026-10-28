@@ -65,16 +65,16 @@ function section_cpp() -> null {
     print("--- 1. C++ FFI ---");
 
     var sum: int = cpp_add(21, 21);
-    print(str(sum));           // 42
+    print(sum);           // 42
 
     var p: float = cpp_power(2.0, 10.0);
-    print(str(p));             // 1024.0
+    print(p);             // 1024.0
 
     var greeting: str = cpp_greet("Mocha");
     print(greeting);           // Hello from C++!
 
     var len: int = cpp_strlen("Hello Mocha!");
-    print(str(len));           // 12
+    print(len);           // 12
 };
 
 

@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-astro.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-astro.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#julian_day_number"><i class="ti ti-function"></i> julian_day_number</a></li><li class="sb-fn"><a href="#fractional_year"><i class="ti ti-function"></i> fractional_year</a></li><li class="sb-fn"><a href="#normalize_degrees"><i class="ti ti-function"></i> normalize_degrees</a></li><li class="sb-fn"><a href="#lahiri_ayanamsa"><i class="ti ti-function"></i> lahiri_ayanamsa</a></li><li class="sb-fn"><a href="#raman_ayanamsa"><i class="ti ti-function"></i> raman_ayanamsa</a></li><li class="sb-fn"><a href="#kp_ayanamsa"><i class="ti ti-function"></i> kp_ayanamsa</a></li><li class="sb-fn"><a href="#fagan_bradley_ayanamsa"><i class="ti ti-function"></i> fagan_bradley_ayanamsa</a></li><li class="sb-fn"><a href="#tropical_to_sidereal"><i class="ti ti-function"></i> tropical_to_sidereal</a></li><li class="sb-fn"><a href="#sidereal_to_tropical"><i class="ti ti-function"></i> sidereal_to_tropical</a></li><li class="sb-fn"><a href="#centuries_since_j2000"><i class="ti ti-function"></i> centuries_since_j2000</a></li><li class="sb-fn"><a href="#atan2_degrees"><i class="ti ti-function"></i> atan2_degrees</a></li><li class="sb-fn"><a href="#solve_kepler_equation"><i class="ti ti-function"></i> solve_kepler_equation</a></li><li class="sb-fn"><a href="#true_anomaly_from_eccentric"><i class="ti ti-function"></i> true_anomaly_from_eccentric</a></li><li class="sb-fn"><a href="#heliocentric_distance"><i class="ti ti-function"></i> heliocentric_distance</a></li><li class="sb-fn"><a href="#heliocentric_longitude"><i class="ti ti-function"></i> heliocentric_longitude</a></li><li class="sb-fn"><a href="#mean_longitude_at_time"><i class="ti ti-function"></i> mean_longitude_at_time</a></li><li class="sb-fn"><a href="#mean_anomaly_from_elements"><i class="ti ti-function"></i> mean_anomaly_from_elements</a></li><li class="sb-fn"><a href="#earth_heliocentric_distance"><i class="ti ti-function"></i> earth_heliocentric_distance</a></li><li class="sb-fn"><a href="#geocentric_longitude_from_heliocentric"><i class="ti ti-function"></i> geocentric_longitude_from_heliocentric</a></li><li class="sb-fn"><a href="#sun_mean_longitude"><i class="ti ti-function"></i> sun_mean_longitude</a></li><li class="sb-fn"><a href="#sun_mean_anomaly"><i class="ti ti-function"></i> sun_mean_anomaly</a></li><li class="sb-fn"><a href="#sun_equation_of_center"><i class="ti ti-function"></i> sun_equation_of_center</a></li><li class="sb-fn"><a href="#sun_ecliptic_longitude"><i class="ti ti-function"></i> sun_ecliptic_longitude</a></li><li class="sb-fn"><a href="#mercury_ecliptic_longitude"><i class="ti ti-function"></i> mercury_ecliptic_longitude</a></li><li class="sb-fn"><a href="#venus_ecliptic_longitude"><i class="ti ti-function"></i> venus_ecliptic_longitude</a></li><li class="sb-fn"><a href="#mars_ecliptic_longitude"><i class="ti ti-function"></i> mars_ecliptic_longitude</a></li><li class="sb-fn"><a href="#jupiter_ecliptic_longitude"><i class="ti ti-function"></i> jupiter_ecliptic_longitude</a></li><li class="sb-fn"><a href="#saturn_ecliptic_longitude"><i class="ti ti-function"></i> saturn_ecliptic_longitude</a></li><li class="sb-fn"><a href="#moon_mean_longitude"><i class="ti ti-function"></i> moon_mean_longitude</a></li><li class="sb-fn"><a href="#moon_ecliptic_longitude"><i class="ti ti-function"></i> moon_ecliptic_longitude</a></li><li class="sb-fn"><a href="#rahu_longitude"><i class="ti ti-function"></i> rahu_longitude</a></li><li class="sb-fn"><a href="#ketu_longitude"><i class="ti ti-function"></i> ketu_longitude</a></li><li class="sb-fn"><a href="#uranus_ecliptic_longitude"><i class="ti ti-function"></i> uranus_ecliptic_longitude</a></li><li class="sb-fn"><a href="#neptune_ecliptic_longitude"><i class="ti ti-function"></i> neptune_ecliptic_longitude</a></li><li class="sb-fn"><a href="#pluto_ecliptic_longitude"><i class="ti ti-function"></i> pluto_ecliptic_longitude</a></li><li class="sb-fn"><a href="#local_sidereal_time"><i class="ti ti-function"></i> local_sidereal_time</a></li><li class="sb-fn"><a href="#ecliptic_longitude_from_ra"><i class="ti ti-function"></i> ecliptic_longitude_from_ra</a></li><li class="sb-fn"><a href="#midheaven_longitude"><i class="ti ti-function"></i> midheaven_longitude</a></li><li class="sb-fn"><a href="#ascendant_longitude"><i class="ti ti-function"></i> ascendant_longitude</a></li><li class="sb-fn"><a href="#opposite_point"><i class="ti ti-function"></i> opposite_point</a></li><li class="sb-fn"><a href="#equal_house_cusp"><i class="ti ti-function"></i> equal_house_cusp</a></li><li class="sb-fn"><a href="#whole_sign_cusp"><i class="ti ti-function"></i> whole_sign_cusp</a></li><li class="sb-fn"><a href="#semi_diurnal_arc"><i class="ti ti-function"></i> semi_diurnal_arc</a></li><li class="sb-fn"><a href="#placidus_intermediate_cusp"><i class="ti ti-function"></i> placidus_intermediate_cusp</a></li><li class="sb-fn"><a href="#placidus_cusp_11"><i class="ti ti-function"></i> placidus_cusp_11</a></li><li class="sb-fn"><a href="#placidus_cusp_12"><i class="ti ti-function"></i> placidus_cusp_12</a></li><li class="sb-fn"><a href="#placidus_cusp_9"><i class="ti ti-function"></i> placidus_cusp_9</a></li><li class="sb-fn"><a href="#placidus_cusp_8"><i class="ti ti-function"></i> placidus_cusp_8</a></li><li class="sb-fn"><a href="#placidus_cusp_2"><i class="ti ti-function"></i> placidus_cusp_2</a></li><li class="sb-fn"><a href="#placidus_cusp_3"><i class="ti ti-function"></i> placidus_cusp_3</a></li><li class="sb-fn"><a href="#placidus_cusp_5"><i class="ti ti-function"></i> placidus_cusp_5</a></li><li class="sb-fn"><a href="#placidus_cusp_6"><i class="ti ti-function"></i> placidus_cusp_6</a></li><li class="sb-fn"><a href="#zodiac_sign_index"><i class="ti ti-function"></i> zodiac_sign_index</a></li><li class="sb-fn"><a href="#house_position"><i class="ti ti-function"></i> house_position</a></li><li class="sb-fn"><a href="#has_seventh_aspect"><i class="ti ti-function"></i> has_seventh_aspect</a></li><li class="sb-fn"><a href="#has_mars_special_aspect"><i class="ti ti-function"></i> has_mars_special_aspect</a></li><li class="sb-fn"><a href="#has_jupiter_special_aspect"><i class="ti ti-function"></i> has_jupiter_special_aspect</a></li><li class="sb-fn"><a href="#has_saturn_special_aspect"><i class="ti ti-function"></i> has_saturn_special_aspect</a></li><li class="sb-fn"><a href="#has_rahu_ketu_special_aspect"><i class="ti ti-function"></i> has_rahu_ketu_special_aspect</a></li><li class="sb-fn"><a href="#angular_separation"><i class="ti ti-function"></i> angular_separation</a></li><li class="sb-fn"><a href="#is_combust"><i class="ti ti-function"></i> is_combust</a></li><li class="sb-fn"><a href="#dasha_years"><i class="ti ti-function"></i> dasha_years</a></li><li class="sb-fn"><a href="#index_from_dasha_lord"><i class="ti ti-function"></i> index_from_dasha_lord</a></li><li class="sb-fn"><a href="#dasha_lord_from_index"><i class="ti ti-function"></i> dasha_lord_from_index</a></li><li class="sb-fn"><a href="#next_dasha_lord"><i class="ti ti-function"></i> next_dasha_lord</a></li><li class="sb-fn"><a href="#nakshatra_index"><i class="ti ti-function"></i> nakshatra_index</a></li><li class="sb-fn"><a href="#dasha_lord_at_birth"><i class="ti ti-function"></i> dasha_lord_at_birth</a></li><li class="sb-fn"><a href="#dasha_balance_years"><i class="ti ti-function"></i> dasha_balance_years</a></li><li class="sb-fn"><a href="#antardasha_duration"><i class="ti ti-function"></i> antardasha_duration</a></li><li class="sb-fn"><a href="#varga_part_index"><i class="ti ti-function"></i> varga_part_index</a></li><li class="sb-fn"><a href="#sign_modality"><i class="ti ti-function"></i> sign_modality</a></li><li class="sb-fn"><a href="#is_odd_sign"><i class="ti ti-function"></i> is_odd_sign</a></li><li class="sb-fn"><a href="#hora_sign_d2"><i class="ti ti-function"></i> hora_sign_d2</a></li><li class="sb-fn"><a href="#drekkana_sign_d3"><i class="ti ti-function"></i> drekkana_sign_d3</a></li><li class="sb-fn"><a href="#chaturthamsa_sign_d4"><i class="ti ti-function"></i> chaturthamsa_sign_d4</a></li><li class="sb-fn"><a href="#saptamsa_sign_d7"><i class="ti ti-function"></i> saptamsa_sign_d7</a></li><li class="sb-fn"><a href="#navamsa_sign_d9"><i class="ti ti-function"></i> navamsa_sign_d9</a></li><li class="sb-fn"><a href="#dasamsa_sign_d10"><i class="ti ti-function"></i> dasamsa_sign_d10</a></li><li class="sb-fn"><a href="#dwadasamsa_sign_d12"><i class="ti ti-function"></i> dwadasamsa_sign_d12</a></li><li class="sb-fn"><a href="#shodasamsa_sign_d16"><i class="ti ti-function"></i> shodasamsa_sign_d16</a></li><li class="sb-fn"><a href="#gochara_house_from_moon"><i class="ti ti-function"></i> gochara_house_from_moon</a></li><li class="sb-fn"><a href="#gochara_house_from_ascendant"><i class="ti ti-function"></i> gochara_house_from_ascendant</a></li><li class="sb-fn"><a href="#is_sade_sati"><i class="ti ti-function"></i> is_sade_sati</a></li><li class="sb-fn"><a href="#sade_sati_phase"><i class="ti ti-function"></i> sade_sati_phase</a></li><li class="sb-fn"><a href="#is_transit_within_orb"><i class="ti ti-function"></i> is_transit_within_orb</a></li><li class="sb-fn"><a href="#is_transit_opposition_within_orb"><i class="ti ti-function"></i> is_transit_opposition_within_orb</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-astro.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mocha-astro — Vedic Astrology (Jyotish) Computation Library for Mocha. Section 1: Ayanamsa &amp; Sidereal Foundations. NOTE ON PRECISION: This library uses mean orbital elements and linear. ayanamsa models (the same approach as Meeus&#x27;s &quot;Astronomical Algorithms&quot;. and most pre-2000 astrology software), not VSOP87/JPL-grade numerical. ephemerides. Expect arcminute-level accuracy — sufficient for dasha,. varga, and aspect work, but not observatory-grade. Ayanamsa constants. are approximate mean models; exact values from Swiss Ephemeris-based. software may differ by a few arcminutes due to periodic correction terms. Part of the Mocha Scientific Library Ecosystem. License: Polyform Non-Commercial.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="julian_day_number">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">julian_day_number</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">day</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">hour</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Julian Day Number from a Gregorian calendar date and UT hour. year, month, day = calendar date, hour = UT time as decimal hours (e.g. 12.5 = 12:30). Standard astronomical algorithm (Meeus). Reference: JD(2000-01-01 12:00 UT) = 2451545.0. Requires month in [1, 12], day in [1, 31], hour in [0, 24).</p>
+  </div>
+</div>
+
+<div class="card" id="fractional_year">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fractional_year</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">day</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Decimal (fractional) year from a Gregorian calendar date. year, month, day = calendar date. E.g. 2024-07-04 -&gt; ~2024.505. Requires month in [1, 12] and day valid for that month/year (leap-aware).</p>
+  </div>
+</div>
+
+<div class="card" id="normalize_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">normalize_degrees</span><span class="paren">(</span><span class="param-name">angle</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Normalizes an angle in degrees to the range [0, 360). Works for any real input.</p>
+  </div>
+</div>
+
+<div class="card" id="lahiri_ayanamsa">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lahiri_ayanamsa</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Lahiri (Chitrapaksha) ayanamsa in degrees for a given decimal year. Official ayanamsa of the Indian government. Linear mean model. Valid approximately for years 1800-2200; beyond that, the linear model drifts by arcminutes to degrees.</p>
+  </div>
+</div>
+
+<div class="card" id="raman_ayanamsa">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">raman_ayanamsa</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">B.V. Raman ayanamsa in degrees for a given decimal year. Approximated as Lahiri ayanamsa with documented constant offset. Same valid range as Lahiri.</p>
+  </div>
+</div>
+
+<div class="card" id="kp_ayanamsa">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kp_ayanamsa</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">KP (Krishnamurti Paddhati) ayanamsa in degrees for a given decimal year. Nearly identical to Lahiri, using a slightly different J2000 reference value. Same valid range.</p>
+  </div>
+</div>
+
+<div class="card" id="fagan_bradley_ayanamsa">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fagan_bradley_ayanamsa</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Fagan-Bradley ayanamsa in degrees for a given decimal year. Standard ayanamsa of Western sidereal astrology. Linear model, valid ~1650-2150 (centered on 1950 reference).</p>
+  </div>
+</div>
+
+<div class="card" id="tropical_to_sidereal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tropical_to_sidereal</span><span class="paren">(</span><span class="param-name">tropical_longitude</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ayanamsa</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Converts a tropical (Western) ecliptic longitude to sidereal (Vedic) longitude. sidereal = tropical - ayanamsa. Requires ayanamsa in [0, 30).</p>
+  </div>
+</div>
+
+<div class="card" id="sidereal_to_tropical">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sidereal_to_tropical</span><span class="paren">(</span><span class="param-name">sidereal_longitude</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ayanamsa</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Converts a sidereal (Vedic) ecliptic longitude to tropical (Western) longitude. tropical = sidereal + ayanamsa. Requires ayanamsa in [0, 30).</p>
+  </div>
+</div>
+
+<div class="card" id="centuries_since_j2000">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">centuries_since_j2000</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Julian centuries elapsed since epoch J2000.0 (JD 2451545.0). The universal time variable T for all formulas below. Requires jd &gt; 0 (positive Julian Day). Recommended valid range: JD 2305447.5-2488070.0 (1600-2200 CE).</p>
+  </div>
+</div>
+
+<div class="card" id="atan2_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">atan2_degrees</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Quadrant-aware arctangent (atan2 equivalent), returning degrees in [0, 360). Requires x and y not both zero (undefined angle).</p>
+  </div>
+</div>
+
+<div class="card" id="solve_kepler_equation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">solve_kepler_equation</span><span class="paren">(</span><span class="param-name">mean_anomaly_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">eccentricity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Solves Kepler&#x27;s equation (M = E - e*sin(E)) for eccentric anomaly via Newton-Raphson iteration. mean_anomaly_deg in degrees, eccentricity as decimal in [0, 1). Returns eccentric anomaly in degrees. Uses 15 iterations with convergence check (tolerance 1E-10 rad). Errors if not converged.</p>
+  </div>
+</div>
+
+<div class="card" id="true_anomaly_from_eccentric">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">true_anomaly_from_eccentric</span><span class="paren">(</span><span class="param-name">eccentric_anomaly_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">eccentricity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">True anomaly from eccentric anomaly via the half-angle relation. eccentric_anomaly_deg in degrees, eccentricity as decimal in [0, 1).</p>
+  </div>
+</div>
+
+<div class="card" id="heliocentric_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heliocentric_distance</span><span class="paren">(</span><span class="param-name">semi_major_axis</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">eccentric_anomaly_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">eccentricity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Heliocentric distance in AU from semi-major axis, eccentric anomaly, and eccentricity. r = a(1 - e*cos(E)). Requires a &gt; 0 and 0 &lt;= e &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="heliocentric_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heliocentric_longitude</span><span class="paren">(</span><span class="param-name">true_anomaly_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">perihelion_longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Heliocentric ecliptic longitude from true anomaly and longitude of perihelion. Both in degrees. No constraints (pure angle addition + normalization).</p>
+  </div>
+</div>
+
+<div class="card" id="mean_longitude_at_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_longitude_at_time</span><span class="paren">(</span><span class="param-name">l0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">l_rate_per_century</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean longitude at time T from J2000 reference value and rate per Julian century. No constraints (pure linear extrapolation).</p>
+  </div>
+</div>
+
+<div class="card" id="mean_anomaly_from_elements">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_anomaly_from_elements</span><span class="paren">(</span><span class="param-name">mean_longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">perihelion_longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean anomaly from mean longitude and longitude of perihelion. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="earth_heliocentric_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">earth_heliocentric_distance</span><span class="paren">(</span><span class="param-name">sun_mean_anomaly_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Earth&#x27;s heliocentric distance in AU from the Sun&#x27;s mean anomaly (Meeus simplified formula). Valid for realistic Sun mean anomaly values (any real input works, but model is only good for actual Earth orbit).</p>
+  </div>
+</div>
+
+<div class="card" id="geocentric_longitude_from_heliocentric">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">geocentric_longitude_from_heliocentric</span><span class="paren">(</span><span class="param-name">r_planet</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">l_planet_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r_earth</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">l_earth_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Geocentric ecliptic longitude of a planet from both bodies&#x27; heliocentric distance/longitude (2D vector method, assumes coplanar orbits). r_planet and r_earth in AU (&gt;0); longitudes in degrees. Errors if planet and Earth are at the same position (impossible — collision).</p>
+  </div>
+</div>
+
+<div class="card" id="sun_mean_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sun_mean_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sun&#x27;s mean longitude at time T (Meeus low-precision solar formula).</p>
+  </div>
+</div>
+
+<div class="card" id="sun_mean_anomaly">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sun_mean_anomaly</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sun&#x27;s mean anomaly at time T.</p>
+  </div>
+</div>
+
+<div class="card" id="sun_equation_of_center">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sun_equation_of_center</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mean_anomaly_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Equation of center correction for the Sun&#x27;s position, in degrees.</p>
+  </div>
+</div>
+
+<div class="card" id="sun_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sun_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sun&#x27;s apparent (tropical) geocentric ecliptic longitude at time T. Accuracy ~0.01°.</p>
+  </div>
+</div>
+
+<div class="card" id="mercury_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mercury_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mercury&#x27;s geocentric ecliptic longitude at time T (tropical). Full 2-body Kepler orbit, coplanar approximation.</p>
+  </div>
+</div>
+
+<div class="card" id="venus_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">venus_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Venus&#x27;s geocentric ecliptic longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="mars_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mars_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mars&#x27;s geocentric ecliptic longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="jupiter_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">jupiter_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Jupiter&#x27;s geocentric ecliptic longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="saturn_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">saturn_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Saturn&#x27;s geocentric ecliptic longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="moon_mean_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">moon_mean_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Moon&#x27;s mean longitude at time T.</p>
+  </div>
+</div>
+
+<div class="card" id="moon_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">moon_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Moon&#x27;s apparent geocentric ecliptic longitude at time T (tropical). Truncated 6-term series, ~0.1-0.3° accuracy.</p>
+  </div>
+</div>
+
+<div class="card" id="rahu_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rahu_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Rahu (mean lunar ascending node) longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="ketu_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ketu_longitude</span><span class="paren">(</span><span class="param-name">rahu_lon</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Ketu (lunar descending node) longitude — always exactly 180° opposite Rahu.</p>
+  </div>
+</div>
+
+<div class="card" id="uranus_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">uranus_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Uranus&#x27;s geocentric ecliptic longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="neptune_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neptune_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Neptune&#x27;s geocentric ecliptic longitude at time T (tropical).</p>
+  </div>
+</div>
+
+<div class="card" id="pluto_ecliptic_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pluto_ecliptic_longitude</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Pluto&#x27;s geocentric ecliptic longitude at time T (tropical). CAVEAT: Pluto&#x27;s eccentricity (0.249) and orbital inclination (~17°) are far higher than any other. body in this pipeline. The coplanar-with-ecliptic assumption used throughout this section is at its. weakest here — expect degree-level error, not the ~0.01-0.5° range typical of the other planets. Included for completeness (some modern astrological traditions use it), not for precision work.</p>
+  </div>
+</div>
+
+<div class="card" id="local_sidereal_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">local_sidereal_time</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">longitude_east_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Local Sidereal Time in degrees from Julian Day and observer&#x27;s longitude (east positive, west negative). LST = GMST(JD) + longitude. Uses standard Meeus GMST formula. Requires jd &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="ecliptic_longitude_from_ra">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ecliptic_longitude_from_ra</span><span class="paren">(</span><span class="param-name">ra_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Converts a right ascension to ecliptic longitude for a point known to lie on the ecliptic. ra_deg = right ascension in degrees, obliquity_deg = obliquity of the ecliptic in [20, 30).</p>
+  </div>
+</div>
+
+<div class="card" id="midheaven_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">midheaven_longitude</span><span class="paren">(</span><span class="param-name">lst_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Midheaven (MC) ecliptic longitude — point where ecliptic crosses local meridian. lst_deg = local sidereal time in degrees, obliquity_deg in [20, 30).</p>
+  </div>
+</div>
+
+<div class="card" id="ascendant_longitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ascendant_longitude</span><span class="paren">(</span><span class="param-name">lst_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Ascendant (Lagna) ecliptic longitude — point of ecliptic rising on eastern horizon. lst_deg = local sidereal time, latitude_deg in (-90, 90), obliquity_deg in [20, 30).</p>
+  </div>
+</div>
+
+<div class="card" id="opposite_point">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">opposite_point</span><span class="paren">(</span><span class="param-name">longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">The point diametrically opposite a given ecliptic longitude (e.g. IC from MC, Descendant from Ascendant). No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="equal_house_cusp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equal_house_cusp</span><span class="paren">(</span><span class="param-name">ascendant_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">house_number</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Equal House cusp — each house is exactly 30° from the Ascendant. ascendant_deg = Ascendant longitude, house_number must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="whole_sign_cusp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">whole_sign_cusp</span><span class="paren">(</span><span class="param-name">ascendant_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">house_number</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Whole Sign House cusp — house 1 begins at 0° of the Ascendant&#x27;s zodiac sign. ascendant_deg = Ascendant longitude, house_number must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="semi_diurnal_arc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">semi_diurnal_arc</span><span class="paren">(</span><span class="param-name">declination_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Semi-diurnal arc in degrees — half the time (as an hour angle) a point spends above horizon. declination_deg = point&#x27;s declination, latitude_deg in (-90, 90). Errors if point is circumpolar at this latitude (|cos(SDA)| &gt; 1 before clamp).</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_intermediate_cusp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_intermediate_cusp</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">fraction</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sign</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">General Placidus intermediate cusp solver via semi-arc trisection (iterative fixed-point method). ramc_deg = right ascension of MC (= LST), latitude_deg in (-66, 66) for Placidus validity,. obliquity_deg in [20, 30), fraction in (0, 1), sign = -1.0 (Asc-MC quadrant) or +1.0 (MC-Desc quadrant). Errors if iteration does not converge in 25 steps.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_11">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_11</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 11 cusp.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_12">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_12</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 12 cusp.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_9">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_9</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 9 cusp.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_8">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_8</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 8 cusp.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_2</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 2 cusp — point opposite house 8.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_3">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_3</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 3 cusp — point opposite house 9.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_5">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_5</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 5 cusp — point opposite house 11.</p>
+  </div>
+</div>
+
+<div class="card" id="placidus_cusp_6">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">placidus_cusp_6</span><span class="paren">(</span><span class="param-name">ramc_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">latitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Placidus house 6 cusp — point opposite house 12.</p>
+  </div>
+</div>
+
+<div class="card" id="zodiac_sign_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">zodiac_sign_index</span><span class="paren">(</span><span class="param-name">longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Zodiac sign index (0-11, 0=Aries) from an ecliptic longitude in [0, 360). Longitudes outside [0, 360) are rejected — use normalize_degrees() first if needed.</p>
+  </div>
+</div>
+
+<div class="card" id="house_position">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">house_position</span><span class="paren">(</span><span class="param-name">from_sign</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">to_sign</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">House position (1-12) of a target sign counted from a reference sign, using whole-sign counting. from_sign and to_sign are 0-11 indices. Same sign = 1 (conjunction), 6 signs away = 7 (opposition).</p>
+  </div>
+</div>
+
+<div class="card" id="has_seventh_aspect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">has_seventh_aspect</span><span class="paren">(</span><span class="param-name">house_distance</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Checks whether a house distance qualifies for the universal 7th-house aspect (every planet aspects its 7th). house_distance must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="has_mars_special_aspect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">has_mars_special_aspect</span><span class="paren">(</span><span class="param-name">house_distance</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Checks whether a house distance qualifies for Mars&#x27;s special aspects (4th, 7th, 8th). house_distance must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="has_jupiter_special_aspect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">has_jupiter_special_aspect</span><span class="paren">(</span><span class="param-name">house_distance</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Checks whether a house distance qualifies for Jupiter&#x27;s special aspects (5th, 7th, 9th). house_distance must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="has_saturn_special_aspect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">has_saturn_special_aspect</span><span class="paren">(</span><span class="param-name">house_distance</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Checks whether a house distance qualifies for Saturn&#x27;s special aspects (3rd, 7th, 10th). house_distance must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="has_rahu_ketu_special_aspect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">has_rahu_ketu_special_aspect</span><span class="paren">(</span><span class="param-name">house_distance</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Checks whether a house distance qualifies for Rahu/Ketu&#x27;s special aspects, using the widely-adopted. convention of treating the lunar nodes like Jupiter (5th, 7th, 9th). Not universal across all classical texts. house_distance must be in [1, 12].</p>
+  </div>
+</div>
+
+<div class="card" id="angular_separation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">angular_separation</span><span class="paren">(</span><span class="param-name">lon1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lon2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shortest angular separation between two ecliptic longitudes in degrees (0-180). No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="is_combust">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_combust</span><span class="paren">(</span><span class="param-name">planet_lon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sun_lon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">orb_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Checks whether a planet is combust (too close to the Sun to be visible/effective). planet_lon and sun_lon in degrees, orb_deg = combustion orb threshold in [0, 180) — typically 3-15° by planet and text.</p>
+  </div>
+</div>
+
+<div class="card" id="dasha_years">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dasha_years</span><span class="paren">(</span><span class="param-name">lord</span><span class="colon">:</span> <span class="param-type">DashaLord</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Full mahadasha duration in years for a given dasha lord (Vimshottari system, 120-year total cycle).</p>
+  </div>
+</div>
+
+<div class="card" id="index_from_dasha_lord">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">index_from_dasha_lord</span><span class="paren">(</span><span class="param-name">lord</span><span class="colon">:</span> <span class="param-type">DashaLord</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Position (0-8) of a dasha lord within the fixed Vimshottari sequence.</p>
+  </div>
+</div>
+
+<div class="card" id="dasha_lord_from_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dasha_lord_from_index</span><span class="paren">(</span><span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DashaLord</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Dasha lord at a given position (0-8) in the Vimshottari sequence, wrapping automatically for any integer.</p>
+  </div>
+</div>
+
+<div class="card" id="next_dasha_lord">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">next_dasha_lord</span><span class="paren">(</span><span class="param-name">current</span><span class="colon">:</span> <span class="param-type">DashaLord</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DashaLord</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">The next dasha lord in the fixed Vimshottari sequence, wrapping after Mercury back to Ketu.</p>
+  </div>
+</div>
+
+<div class="card" id="nakshatra_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">nakshatra_index</span><span class="paren">(</span><span class="param-name">moon_longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Nakshatra index (0-26) from the Moon&#x27;s sidereal ecliptic longitude in [0, 360). Each nakshatra spans 13°20&#x27;. Longitudes outside [0, 360) are rejected.</p>
+  </div>
+</div>
+
+<div class="card" id="dasha_lord_at_birth">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dasha_lord_at_birth</span><span class="paren">(</span><span class="param-name">moon_longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DashaLord</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">The dasha lord ruling at birth, determined by the Moon&#x27;s nakshatra at birth. moon_longitude_deg must be in [0, 360).</p>
+  </div>
+</div>
+
+<div class="card" id="dasha_balance_years">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dasha_balance_years</span><span class="paren">(</span><span class="param-name">moon_longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Remaining years of the first (birth) mahadasha, based on how far the Moon has progressed through its nakshatra. moon_longitude_deg must be in [0, 360).</p>
+  </div>
+</div>
+
+<div class="card" id="antardasha_duration">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">antardasha_duration</span><span class="paren">(</span><span class="param-name">antar_lord</span><span class="colon">:</span> <span class="param-type">DashaLord</span>, <span class="param-name">maha_years</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Duration in years of an antardasha (sub-period) within a mahadasha. antar_lord = sub-period&#x27;s ruling planet, maha_years = full mahadasha duration in (0, 20] years.</p>
+  </div>
+</div>
+
+<div class="card" id="varga_part_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">varga_part_index</span><span class="paren">(</span><span class="param-name">longitude_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">division_count</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Which part (0 to division_count-1) of its current sign a longitude falls into, for a given varga division. longitude_deg must be in [0, 360). division_count must be a positive integer.</p>
+  </div>
+</div>
+
+<div class="card" id="sign_modality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sign_modality</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Modality of a sign: 0 = movable/cardinal, 1 = fixed, 2 = dual/mutable. sign_index must be in [0, 11].</p>
+  </div>
+</div>
+
+<div class="card" id="is_odd_sign">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_odd_sign</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Whether a sign is classically &quot;odd&quot; (Aries, Gemini, Leo, Libra, Sagittarius, Aquarius). sign_index must be in [0, 11].</p>
+  </div>
+</div>
+
+<div class="card" id="hora_sign_d2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hora_sign_d2</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D2 Hora (wealth) chart sign. Odd signs: 1st half -&gt; Leo (Sun), 2nd half -&gt; Cancer (Moon). Even signs: reversed. sign_index in [0, 11], part_index in [0, 1].</p>
+  </div>
+</div>
+
+<div class="card" id="drekkana_sign_d3">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">drekkana_sign_d3</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D3 Drekkana (siblings) chart sign. Parts map to same, 5th, and 9th sign (trine pattern). sign_index in [0, 11], part_index in [0, 2].</p>
+  </div>
+</div>
+
+<div class="card" id="chaturthamsa_sign_d4">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">chaturthamsa_sign_d4</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D4 Chaturthamsa (fortune/property) chart sign. Parts map to same, 4th, 7th, 10th sign (kendra pattern). sign_index in [0, 11], part_index in [0, 3].</p>
+  </div>
+</div>
+
+<div class="card" id="saptamsa_sign_d7">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">saptamsa_sign_d7</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D7 Saptamsa (children) chart sign. Odd signs count from themselves; even signs count from the 7th (opposite) sign. sign_index in [0, 11], part_index in [0, 6].</p>
+  </div>
+</div>
+
+<div class="card" id="navamsa_sign_d9">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">navamsa_sign_d9</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D9 Navamsa (spouse/dharma) chart sign — the most important divisional chart in Vedic astrology. Movable signs count from themselves, fixed signs from the 9th sign, dual signs from the 5th sign. sign_index in [0, 11], part_index in [0, 8].</p>
+  </div>
+</div>
+
+<div class="card" id="dasamsa_sign_d10">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dasamsa_sign_d10</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D10 Dasamsa (career) chart sign. Odd signs count from themselves; even signs count from the 9th sign. sign_index in [0, 11], part_index in [0, 9].</p>
+  </div>
+</div>
+
+<div class="card" id="dwadasamsa_sign_d12">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dwadasamsa_sign_d12</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D12 Dwadasamsa (parents) chart sign. Always counts forward from the birth sign itself. sign_index in [0, 11], part_index in [0, 11].</p>
+  </div>
+</div>
+
+<div class="card" id="shodasamsa_sign_d16">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shodasamsa_sign_d16</span><span class="paren">(</span><span class="param-name">sign_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">part_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">D16 Shodasamsa (vehicles/comforts) chart sign. Movable signs begin from Aries, fixed from Leo, dual from Sagittarius. sign_index in [0, 11], part_index in [0, 15].</p>
+  </div>
+</div>
+
+<div class="card" id="gochara_house_from_moon">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gochara_house_from_moon</span><span class="paren">(</span><span class="param-name">natal_moon_sign</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">transit_sign</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Transit house position counted from the natal Moon sign (the classical primary Gochara method). natal_moon_sign and transit_sign are 0-11 sign indices.</p>
+  </div>
+</div>
+
+<div class="card" id="gochara_house_from_ascendant">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gochara_house_from_ascendant</span><span class="paren">(</span><span class="param-name">natal_ascendant_sign</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">transit_sign</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Transit house position counted from the natal Ascendant sign (secondary/modern Gochara method). natal_ascendant_sign and transit_sign are 0-11 sign indices.</p>
+  </div>
+</div>
+
+<div class="card" id="is_sade_sati">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_sade_sati</span><span class="paren">(</span><span class="param-name">natal_moon_sign</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">transiting_saturn_sign</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Whether transiting Saturn is currently in a Sade Sati period relative to the natal Moon. Sade Sati is active when Saturn transits the 12th, 1st (same), or 2nd sign from natal Moon. natal_moon_sign and transiting_saturn_sign are 0-11 sign indices.</p>
+  </div>
+</div>
+
+<div class="card" id="sade_sati_phase">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sade_sati_phase</span><span class="paren">(</span><span class="param-name">natal_moon_sign</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">transiting_saturn_sign</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Which phase of Sade Sati is currently active: 0 = not active, 1 = rising (12th from Moon),. 2 = peak (same sign as Moon), 3 = setting (2nd from Moon). natal_moon_sign and transiting_saturn_sign are 0-11 sign indices.</p>
+  </div>
+</div>
+
+<div class="card" id="is_transit_within_orb">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_transit_within_orb</span><span class="paren">(</span><span class="param-name">transit_longitude</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">natal_longitude</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">orb_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Whether a transiting planet is within a given orb of exact conjunction with a natal point. transit_longitude and natal_longitude in degrees, orb_deg in [0, 180).</p>
+  </div>
+</div>
+
+<div class="card" id="is_transit_opposition_within_orb">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_transit_opposition_within_orb</span><span class="paren">(</span><span class="param-name">transit_longitude</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">natal_longitude</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">orb_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Whether a transiting planet is within a given orb of exact opposition to a natal point. transit_longitude and natal_longitude in degrees, orb_deg in [0, 180).</p>
+  </div>
+</div>
+</main>
+</body>
+</html>

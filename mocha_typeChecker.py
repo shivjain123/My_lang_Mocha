@@ -1083,9 +1083,10 @@ class TypeChecker:
                         else:
                             name = a.target.name if isinstance(a.target, Identifier) else "?"
                             self.error(f"merge() unknown keyword argument '{name}'", node)
-                if func_name == "copy":
-                    return "dict"
                 return "dict"
+            if func_name == "copy":
+                return "dict"
+            return "dict"
             
         # HashTable method return types
         if obj_type == "HashTable":
@@ -1187,15 +1188,6 @@ class TypeChecker:
                             f"Both sets must be the same type.", node
                         )
                 return "bool"
-            if func_name in ("jaccard", "dice", "overlap"):
-                if node.args:
-                    arg_type = self.check_expr(node.args[0])
-                    if arg_type != obj_type:
-                        self.error(
-                            f"Cannot call '{func_name}' on '{obj_type}' with '{arg_type}'. "
-                            f"Both sets must be the same type.", node
-                        )
-                return "float"
             if func_name in ("jaccard", "dice", "overlap"):
                 if node.args:
                     arg_type = self.check_expr(node.args[0])
@@ -1490,7 +1482,7 @@ class TypeChecker:
                 self.error(f"Dict key must be str, got '{row_type}'", node)
             if col_type != "str":
                 self.error(f"Dict key must be str, got '{col_type}'", node)
-            return "dict"
+            return "any"
         
         row_type = self.check_expr(node.row)
         col_type = self.check_expr(node.col)
@@ -1636,7 +1628,24 @@ class TypeChecker:
 
         elif isinstance(node.target, MemberAccess):
             # this.field = value - basic check
-            self.check_expr(node.target)
+            field_type = self.check_expr(node.target)
+            # null is not a number: it can't clear an int/vast/float/bool field
+            if type(node.value).__name__ == "NullLiteral" and field_type in ("int", "vast", "float", "bool"):
+                self.error(
+                    f"Cannot assign null to '{node.target.member}' which is '{field_type}'. "
+                    f"null is only valid for str, class, array and other pointer types; "
+                    f"use 0 to reset a number.",
+                    node
+                )
+            # primitive field: the value's primitive type must be compatible (same rule as variables)
+            elif field_type in ("int", "vast", "float", "bool", "str") \
+                    and value_type in ("int", "vast", "float", "bool", "str") \
+                    and not self.types_compatible(field_type, value_type):
+                self.error(
+                    f"Type mismatch: cannot assign '{value_type}' "
+                    f"to field '{node.target.member}' which is '{field_type}'",
+                    node
+                )
 
         elif isinstance(node.target, IndexAccess):
             # Const check

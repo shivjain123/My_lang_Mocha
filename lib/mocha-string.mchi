@@ -51,6 +51,7 @@ class Tokenizer;
 class Tokenizer field vocab: str[];
 class Tokenizer field vocab_size: int;
 class Tokenizer function find(word: str) -> int;
+class Tokenizer function word(i: int) -> str;
 class Tokenizer function fit(texts: str[]) -> null;
 class Tokenizer function encode(text: str) -> int[];
 class Tokenizer function decode(ids: int[]) -> str;

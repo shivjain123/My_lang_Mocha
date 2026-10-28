@@ -156,7 +156,6 @@ function unit_cell_volume(a: float, b: float, c: float, alpha: float, beta: floa
     const CG2: float = COS_G * COS_G;
     const CROSS: float = 2.0 * COS_A * COS_B * COS_G;
     const INNER: float = 1.0 - CA2 - CB2 - CG2 + CROSS;
-    print(INNER);
     // GUARD: INNER must be non-negative (impossible geometry check)
     if (INNER < 1E-10) {
         c_print_err("MochaLibError (mocha-geo): Invalid lattice angles — cell geometry impossible.");

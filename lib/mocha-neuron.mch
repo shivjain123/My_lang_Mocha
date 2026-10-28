@@ -53,7 +53,8 @@ function mocha_lsm_scale_reservoir(w: vast, target_sr: float) -> null native moc
 function mocha_ridge_regression(x: vast, y: vast, lamb_da: float, max_iter: int) -> vast native mocha_ridge_regression;
 function mocha_tensor_get_row(t: vast, row: int) -> vast native mocha_tensor_get_row;
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 // =============================================
 // TENSOR CLASS
 // =============================================
@@ -62,12 +63,14 @@ class Tensor {
     var ptr:  vast;
     var nrows: int;
     var ncols: int;
+    var freed: int;
 
     function constructor(rows: int, cols: int) -> null {
         mocha_cuda_init();
         this.ptr  = mocha_tensor_new(rows, cols);
         this.nrows = rows;
         this.ncols = cols;
+        this.freed = 0;
     };
 
     function put(row: int, col: int, val: float) -> null {
@@ -83,7 +86,15 @@ class Tensor {
     };
 
     function dispose() -> null {
-        mocha_tensor_free(this.ptr);
+        if (this.freed == 0) {
+            mocha_tensor_free(this.ptr);
+            this.freed = 1;
+        };
+    };
+
+    // runs automatically when the last reference to this Tensor dies
+    function finalize() -> null {
+        this.dispose();
     };
 
     function matmul(other: Tensor) -> Tensor {
@@ -229,6 +240,8 @@ function neuron_save_tensor(db: null, name: str, t: Tensor) -> null {
     mocha_tensor_download(t.ptr);
     var rows: int = t.nrows;
     var cols: int = t.ncols;
+    // drop any older copy of this tensor so re-saving replaces it
+    sqlite3_exec(db, "DELETE FROM arrays WHERE name = '" + name + "';");
     neuron_db_write_meta(db, name + "_rows", str(rows));
     neuron_db_write_meta(db, name + "_cols", str(cols));
     var i: int = 0;
@@ -243,14 +256,32 @@ function neuron_save_tensor(db: null, name: str, t: Tensor) -> null {
 };
 
 function neuron_load_tensor(db: null, name: str) -> Tensor {
+    sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS arrays_lookup ON arrays (name, idx);");
     var rows: int = neuron_db_read_meta(db, name + "_rows").toInt();
     var cols: int = neuron_db_read_meta(db, name + "_cols").toInt();
     var t: Tensor = Tensor(rows, cols);
+    var total: int = rows * cols;
+
+    // one query for the whole tensor, in index order
+    sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' ORDER BY idx;");
+    var fast: int = 0;
+    if (sqlite3_query_rows(db) == total) {
+        fast = 1;
+    };
+
     var i: int = 0;
     while (i < rows) {
         var j: int = 0;
         while (j < cols) {
-            var val: float = neuron_db_read_array_cell(db, name, i * cols + j).toFloat();
+            var k: int = i * cols + j;
+            var val: float = 0.0;
+            var cell: str = "";
+            if (fast == 1) {
+                cell = sqlite3_query_cell(db, k, 0);
+            } else {
+                cell = neuron_db_read_array_cell(db, name, k);
+            };
+            val = cell.toFloat();
             t.put(i, j, val);
             j++;
         };
@@ -459,14 +490,15 @@ class Network {
         // compute loss
         var loss_val: float = 0.0;
         var dout: Tensor = Tensor(output.nrows, output.ncols);
-        mocha_tensor_free(dout.ptr);
 
         if (loss == "mse") {
             loss_val = mocha_tensor_mse_loss(output.ptr, labels.ptr);
+            mocha_tensor_free(dout.ptr);
             dout.ptr = mocha_tensor_mse_grad(output.ptr, labels.ptr);
         };
         if (loss == "crossentropy") {
             loss_val = mocha_tensor_ce_loss(output.ptr, labels.ptr);
+            mocha_tensor_free(dout.ptr);
             dout.ptr = mocha_tensor_softmax_ce_grad(output.ptr, labels.ptr);
         };
 
@@ -579,11 +611,27 @@ class Gru {
     var last_rhx:  Tensor;
     var has_input: bool;
 
+    // per-timestep caches for backprop through time
+    var seq_x:    Tensor[];
+    var seq_h:    Tensor[];
+    var seq_r:    Tensor[];
+    var seq_z:    Tensor[];
+    var seq_cand: Tensor[];
+    var seq_hx:   Tensor[];
+    var seq_rhx:  Tensor[];
+
     function constructor(input_size: int, hidden_size: int) -> null {
         this.input_size  = input_size;
         this.hidden_size = hidden_size;
         this.t           = 0;
         this.has_input   = false;
+        this.seq_x    = [];
+        this.seq_h    = [];
+        this.seq_r    = [];
+        this.seq_z    = [];
+        this.seq_cand = [];
+        this.seq_hx   = [];
+        this.seq_rhx  = [];
 
         var combined: int = input_size + hidden_size;
         var limit: float = ((6.0 / (combined + hidden_size)).sqrt()).real;
@@ -669,6 +717,15 @@ class Gru {
         this.last_rhx  = rhx.clone_tensor();
         this.has_input = true;
 
+        // per-timestep caches (separate clones, last_* above stays as is for now)
+        this.seq_x.push(x.clone_tensor());
+        this.seq_h.push(h.clone_tensor());
+        this.seq_r.push(r_pre.clone_tensor());
+        this.seq_z.push(z_pre.clone_tensor());
+        this.seq_cand.push(cand.clone_tensor());
+        this.seq_hx.push(hx.clone_tensor());
+        this.seq_rhx.push(rhx.clone_tensor());
+
         // cleanup intermediates not needed after caching
         rh.dispose();
         one_minus_z_h.dispose();
@@ -677,10 +734,12 @@ class Gru {
         return h_new;
     };
 
-    // backward one timestep
-    // @param dh_new: gradient of loss w.r.t h_new [batch x hidden_size]
-    // @param lr: learning rate
-    // @return: gradient w.r.t input x [batch x input_size]
+    // backward ONE timestep only (uses the last_* caches from the latest forward).
+    // For training on sequences use forward_seq + backward_seq: this function
+    // cannot chain gradients back through earlier steps.
+    ~~ @param dh_new: gradient of loss w.r.t h_new [batch x hidden_size]
+    ~~ @param lr: learning rate
+    ~~ @return: gradient w.r.t input x [batch x input_size]
     function backward(dh_new: Tensor, lr: float) -> Tensor {
         this.t = this.t + 1;
         var beta1t: float = fast_pow(0.9, this.t);
@@ -701,6 +760,7 @@ class Gru {
 
         // sigmoid grad for z
         var dz: Tensor = Tensor(dz_raw.nrows, dz_raw.ncols);
+        mocha_tensor_free(dz.ptr);
         dz.ptr = mocha_tensor_sigmoid_grad(dz_raw.ptr, this.last_z.ptr);
         dz_raw.dispose();
 
@@ -709,6 +769,7 @@ class Gru {
 
         // tanh grad for candidate
         var dcand: Tensor = Tensor(dcand_raw.nrows, dcand_raw.ncols);
+        mocha_tensor_free(dcand.ptr);
         dcand.ptr = mocha_tensor_tanh_grad(dcand_raw.ptr, this.last_cand.ptr);
         dcand_raw.dispose();
 
@@ -733,6 +794,8 @@ class Gru {
 
         // dr = dr_h * h (element-wise, then sigmoid grad)
         var dr_raw: Tensor = dr_h.mul(this.last_h);
+        // gradient reaching h through r*h
+        var dh_rh: Tensor = dr_h.mul(this.last_r);
         dr_h.dispose();
         var dr: Tensor = Tensor(dr_raw.nrows, dr_raw.ncols);
         mocha_tensor_free(dr.ptr);
@@ -777,10 +840,13 @@ class Gru {
         dx_cand.dispose();
 
         // also: dh_new flows back through (1-z)*h path
-        var dh_direct: Tensor = dh_new.one_minus_mul(this.last_z);
-        var dh_prev_total: Tensor = dh_prev.add(dh_direct);
+        var dh_direct: Tensor = this.last_z.one_minus_mul(dh_new);
+        var dh_prev_a: Tensor = dh_prev.add(dh_direct);
         dh_prev.dispose();
         dh_direct.dispose();
+        var dh_prev_total: Tensor = dh_prev_a.add(dh_rh);
+        dh_prev_a.dispose();
+        dh_rh.dispose();
 
         // adam updates for all 6 weight matrices
         mocha_adam_update(this.Wr.ptr, this.mWr.ptr, this.vWr.ptr, dWr.ptr,
@@ -815,7 +881,229 @@ class Gru {
         this.last_rhx.dispose();
         this.has_input = false;
 
+        // TEMPORARY: empty the per-step caches until backward_seq uses them
+        this.clear_seq();
+
         return dx;
+    };
+
+    ~~ runs forward over a whole sequence, returns the LAST hidden state
+    ~~ @param xs: one [1 x input_size] tensor per timestep
+    function forward_seq(xs: Tensor[]) -> Tensor {
+        this.clear_seq();
+        var h: Tensor = Tensor(1, this.hidden_size);
+        h.zeros();
+        var i: int = 0;
+        while (i < xs.length) {
+            var h_new: Tensor = this.forward(xs[i], h);
+            h.dispose();
+            h = h_new.clone_tensor();
+            h_new.dispose();
+            i++;
+        };
+        return h;
+    };
+
+    function sig_grad(d: Tensor, out: Tensor) -> Tensor {
+        var r: Tensor = Tensor(d.nrows, d.ncols);
+        mocha_tensor_free(r.ptr);
+        r.ptr = mocha_tensor_sigmoid_grad(d.ptr, out.ptr);
+        return r;
+    };
+
+    function tanh_grad(d: Tensor, out: Tensor) -> Tensor {
+        var r: Tensor = Tensor(d.nrows, d.ncols);
+        mocha_tensor_free(r.ptr);
+        r.ptr = mocha_tensor_tanh_grad(d.ptr, out.ptr);
+        return r;
+    };
+
+    function bias_grad(d: Tensor) -> Tensor {
+        var r: Tensor = Tensor(1, this.hidden_size);
+        mocha_tensor_free(r.ptr);
+        r.ptr = mocha_tensor_bias_grad(d.ptr);
+        return r;
+    };
+
+    function tr(t: Tensor) -> Tensor {
+        return t.transpose();
+    };
+
+    function cl(t: Tensor) -> Tensor {
+        return t.clone_tensor();
+    };
+
+    function omm(a: Tensor, b: Tensor) -> Tensor {
+        return a.one_minus_mul(b);
+    };
+
+    // backprop through time after forward_seq
+    // @param dh_last: gradient w.r.t the last hidden state [1 x hidden_size]
+    // @param dX: output, [seq_len x input_size], row k = gradient w.r.t input at step k
+    function backward_seq(dh_last: Tensor, dX: Tensor, lr: float) -> null {
+        this.t = this.t + 1;
+        var beta1t: float = fast_pow(0.9, this.t);
+        var beta2t: float = fast_pow(0.999, this.t);
+        var combined: int = this.input_size + this.hidden_size;
+
+        var aWr: Tensor = Tensor(combined, this.hidden_size); aWr.zeros();
+        var aWz: Tensor = Tensor(combined, this.hidden_size); aWz.zeros();
+        var aWh: Tensor = Tensor(combined, this.hidden_size); aWh.zeros();
+        var abr: Tensor = Tensor(1, this.hidden_size); abr.zeros();
+        var abz: Tensor = Tensor(1, this.hidden_size); abz.zeros();
+        var abh: Tensor = Tensor(1, this.hidden_size); abh.zeros();
+
+        var dh: Tensor = dh_last.clone_tensor();
+        var k: int = this.seq_x.length - 1;
+        while (k >= 0) {
+            // update gate: dz = dh * (cand - h), through sigmoid
+            var h_neg: Tensor = this.cl(this.seq_h[k]);
+            h_neg.scale(0.0 - 1.0);
+            var cand_sub_h: Tensor = h_neg.add(this.seq_cand[k]);
+            h_neg.dispose();
+            var dz_raw: Tensor = dh.mul(cand_sub_h);
+            cand_sub_h.dispose();
+            var dz: Tensor = this.sig_grad(dz_raw, this.seq_z[k]);
+            dz_raw.dispose();
+
+            // candidate: dcand = dh * z, through tanh
+            var dcand_raw: Tensor = dh.mul(this.seq_z[k]);
+            var dcand: Tensor = this.tanh_grad(dcand_raw, this.seq_cand[k]);
+            dcand_raw.dispose();
+
+            var Wh_t: Tensor = this.Wh.transpose();
+            var drhx: Tensor = dcand.matmul(Wh_t);
+            Wh_t.dispose();
+            var rhx_t: Tensor = this.tr(this.seq_rhx[k]);
+            var dWh: Tensor = rhx_t.matmul(dcand);
+            rhx_t.dispose();
+            aWh.add_inplace(dWh);
+            dWh.dispose();
+            var dbh: Tensor = this.bias_grad(dcand);
+            abh.add_inplace(dbh);
+            dbh.dispose();
+            dcand.dispose();
+
+            var dr_h: Tensor = Tensor(drhx.nrows, this.hidden_size);
+            mocha_tensor_free(dr_h.ptr);
+            dr_h.ptr = mocha_tensor_split_a(drhx.ptr, this.hidden_size);
+            var dx_cand: Tensor = Tensor(drhx.nrows, this.input_size);
+            mocha_tensor_free(dx_cand.ptr);
+            dx_cand.ptr = mocha_tensor_split_b(drhx.ptr, this.hidden_size);
+            drhx.dispose();
+
+            // reset gate
+            var dr_raw: Tensor = dr_h.mul(this.seq_h[k]);
+            var dr: Tensor = this.sig_grad(dr_raw, this.seq_r[k]);
+            dr_raw.dispose();
+            // NEW: gradient reaching h through r*h
+            var dh_rh: Tensor = dr_h.mul(this.seq_r[k]);
+            dr_h.dispose();
+
+            var Wr_t: Tensor = this.Wr.transpose();
+            var Wz_t: Tensor = this.Wz.transpose();
+            var dhx_r: Tensor = dr.matmul(Wr_t);
+            var dhx_z: Tensor = dz.matmul(Wz_t);
+            Wr_t.dispose();
+            Wz_t.dispose();
+
+            var hx_t: Tensor = this.tr(this.seq_hx[k]);
+            var dWr: Tensor = hx_t.matmul(dr);
+            var dWz: Tensor = hx_t.matmul(dz);
+            hx_t.dispose();
+            aWr.add_inplace(dWr);
+            aWz.add_inplace(dWz);
+            dWr.dispose();
+            dWz.dispose();
+            var dbr: Tensor = this.bias_grad(dr);
+            abr.add_inplace(dbr);
+            dbr.dispose();
+            var dbz: Tensor = this.bias_grad(dz);
+            abz.add_inplace(dbz);
+            dbz.dispose();
+            dr.dispose();
+            dz.dispose();
+
+            var dhx: Tensor = dhx_r.add(dhx_z);
+            dhx_r.dispose();
+            dhx_z.dispose();
+            var dh_prev: Tensor = Tensor(dhx.nrows, this.hidden_size);
+            mocha_tensor_free(dh_prev.ptr);
+            dh_prev.ptr = mocha_tensor_split_a(dhx.ptr, this.hidden_size);
+            var dx_gates: Tensor = Tensor(dhx.nrows, this.input_size);
+            mocha_tensor_free(dx_gates.ptr);
+            dx_gates.ptr = mocha_tensor_split_b(dhx.ptr, this.hidden_size);
+            dhx.dispose();
+
+            // gradient w.r.t this step's input goes into row k of dX
+            var dx: Tensor = dx_gates.add(dx_cand);
+            dx_gates.dispose();
+            dx_cand.dispose();
+            var c: int = 0;
+            while (c < this.input_size) {
+                dX.put(k, c, dx.at(0, c));
+                c++;
+            };
+            dx.dispose();
+
+            // direct path (1-z)*dh, FIXED argument order
+            var dh_direct: Tensor = this.omm(this.seq_z[k], dh);
+            var dh_a: Tensor = dh_prev.add(dh_direct);
+            dh_prev.dispose();
+            dh_direct.dispose();
+            var dh_next: Tensor = dh_a.add(dh_rh);
+            dh_a.dispose();
+            dh_rh.dispose();
+            dh.dispose();
+            dh = dh_next.clone_tensor();
+            dh_next.dispose();
+
+            k = k - 1;
+        };
+        dh.dispose();
+
+        mocha_adam_update(this.Wr.ptr, this.mWr.ptr, this.vWr.ptr, aWr.ptr,
+            lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
+        mocha_adam_update(this.Wz.ptr, this.mWz.ptr, this.vWz.ptr, aWz.ptr,
+            lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
+        mocha_adam_update(this.Wh.ptr, this.mWh.ptr, this.vWh.ptr, aWh.ptr,
+            lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
+        mocha_adam_update(this.br.ptr, this.mbr.ptr, this.vbr.ptr, abr.ptr,
+            lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
+        mocha_adam_update(this.bz.ptr, this.mbz.ptr, this.vbz.ptr, abz.ptr,
+            lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
+        mocha_adam_update(this.bh.ptr, this.mbh.ptr, this.vbh.ptr, abh.ptr,
+            lr, 0.9, 0.999, 0.00000001, beta1t, beta2t);
+
+        aWr.dispose(); aWz.dispose(); aWh.dispose();
+        abr.dispose(); abz.dispose(); abh.dispose();
+        this.clear_seq();
+    };
+
+    function free_t(t: Tensor) -> null {
+        t.dispose();
+    };
+
+    // frees every cached timestep and empties the arrays
+    function clear_seq() -> null {
+        var i: int = 0;
+        while (i < this.seq_x.length) {
+            this.free_t(this.seq_x[i]);
+            this.free_t(this.seq_h[i]);
+            this.free_t(this.seq_r[i]);
+            this.free_t(this.seq_z[i]);
+            this.free_t(this.seq_cand[i]);
+            this.free_t(this.seq_hx[i]);
+            this.free_t(this.seq_rhx[i]);
+            i++;
+        };
+        this.seq_x    = [];
+        this.seq_h    = [];
+        this.seq_r    = [];
+        this.seq_z    = [];
+        this.seq_cand = [];
+        this.seq_hx   = [];
+        this.seq_rhx  = [];
     };
 
     function dispose() -> null {
@@ -993,6 +1281,41 @@ class BiGru {
 // =============================================
 // HOPFIELD NETWORK
 // =============================================
+~~ Returns a copy of a +1 / -1 pattern with n_flips distinct random bits flipped
+~~ @param values: float[] pattern of +1.0 / -1.0
+~~ @param n_flips: how many bits to flip, from 0 to values.length
+function flip_bits(values: float[], n_flips: int) -> float[] {
+    if (n_flips < 0) {
+        c_print_err("MochaLibError (mocha-neuron): flip_bits n_flips cannot be negative.");
+        c_exit(2);
+    };
+    if (n_flips > values.length) {
+        c_print_err("MochaLibError (mocha-neuron): flip_bits n_flips cannot exceed the pattern length.");
+        c_exit(2);
+    };
+    var out: float[] = [];
+    var order: int[] = [];
+    var i: int = 0;
+    while (i < values.length) {
+        out.push(values[i]);
+        order.push(i);
+        i++;
+    };
+    var j: int = values.length - 1;
+    while (j > 0) {
+        var r: int = rand_int(0, j);
+        var tmp: int = order[j];
+        order[j] = order[r];
+        order[r] = tmp;
+        j--;
+    };
+    var k: int = 0;
+    while (k < n_flips) {
+        out[order[k]] = -out[order[k]];
+        k++;
+    };
+    return out;
+};
 
 class Hopfield {
     var weights:  Tensor;
@@ -1010,6 +1333,14 @@ class Hopfield {
     ~~ Store a pattern in the network
     ~~ @param pattern: [1 x size] tensor with values +1 or -1
     function store(pattern: Tensor) -> null {
+        if (pattern.nrows != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield pattern must be a single row [1 x size].");
+            c_exit(2);
+        };
+        if (pattern.ncols != this.size) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield pattern length must equal the network size.");
+            c_exit(2);
+        };
         // outer product of pattern with itself
         var op: Tensor = pattern.outer(pattern);
         // w += op
@@ -1020,10 +1351,61 @@ class Hopfield {
         op.dispose();
     };
 
-    ~~ Normalize weights by number of stored patterns
+    ~~ Store a pattern given as a plain array of +1 / -1 values
+    ~~ @param values: float[] of length size, each +1.0 or -1.0
+    function store_values(values: float[]) -> null {
+        if (values.length != this.size) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield pattern length must equal the network size.");
+            c_exit(2);
+        };
+        var p: Tensor = Tensor(1, this.size);
+        var i: int = 0;
+        while (i < this.size) {
+            p.put(0, i, values[i]);
+            i = i + 1;
+        };
+        this.store(p);
+        p.dispose();
+    };
+    
+    ~~ Normalize weights by number of stored patterns.
+    ~~ Call once, after ALL store() calls: storing after this would weight
+    ~~ the new pattern more heavily than the earlier ones.
     function normalize() -> null {
+        if (this.n_stored == 0) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield normalize() needs at least one stored pattern.");
+            c_exit(2);
+        };
         mocha_tensor_scale(this.weights.ptr, 1.0 / this.n_stored);
     };
+
+    ~~ Recall from a plain array of +1 / -1 values, returns a plain array
+    ~~ @param values: float[] of length size, each +1.0 or -1.0
+    ~~ @param max_iter: maximum iterations before giving up
+    function recall_values(values: float[], max_iter: int) -> float[] {
+        if (values.length != this.size) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield input length must equal the network size.");
+            c_exit(2);
+        };
+        var inp: Tensor = Tensor(1, this.size);
+        var i: int = 0;
+        while (i < this.size) {
+            inp.put(0, i, values[i]);
+            i = i + 1;
+        };
+        var res: Tensor = this.recall(inp, max_iter);
+        inp.dispose();
+        var out: float[] = [];
+        var j: int = 0;
+        while (j < this.size) {
+            out.push(res.at(0, j));
+            j = j + 1;
+        };
+        res.dispose();
+        return out;
+    };
+
+    ~~ Recall a pattern from a noisy/partial input
 
     ~~ Recall a pattern from a noisy/partial input
     ~~ @param input: [1 x size] tensor with values +1 or -1
@@ -2245,6 +2627,277 @@ class BertClassifier {
     function dispose() -> null {
         this.emb.dispose();
         this.bert.dispose();
+        this.head.dispose();
+    };
+};
+
+class GruClassifier {
+    var tok:      Tokenizer;
+    var emb:      Embedding;
+    var gru:      Gru;
+    var head:     Dense;
+    var d_model:  int;
+    var d_hidden: int;
+
+    function gc_fit(tk: Tokenizer, texts: str[]) -> null {
+        tk.fit(texts);
+    };
+
+    function gc_size(tk: Tokenizer) -> int {
+        return tk.size();
+    };
+
+    function gc_encode(tk: Tokenizer, text: str) -> int[] {
+        return tk.encode(text);
+    };
+
+    function gc_free(t: Tensor) -> null {
+        t.dispose();
+    };
+
+    // splits [seq_len x d_model] into one [1 x d_model] tensor per word
+    function gc_rows(t: Tensor) -> Tensor[] {
+        var out: Tensor[] = [];
+        var i: int = 0;
+        while (i < t.nrows) {
+            out.push(t.get_row(i));
+            i++;
+        };
+        return out;
+    };
+
+    function gc_free_rows(xs: Tensor[]) -> null {
+        var i: int = 0;
+        while (i < xs.length) {
+            this.gc_free(xs[i]);
+            i++;
+        };
+    };
+
+    function gc_join(a: str[], b: str[]) -> str[] {
+        var out: str[] = [];
+        var i: int = 0;
+        while (i < a.length) {
+            out.push(a[i]);
+            i++;
+        };
+        var j: int = 0;
+        while (j < b.length) {
+            out.push(b[j]);
+            j++;
+        };
+        return out;
+    };
+
+    function gc_make_labels(n_pos: int, n_neg: int) -> float[] {
+        var out: float[] = [];
+        var i: int = 0;
+        while (i < n_pos) {
+            out.push(1.0);
+            i++;
+        };
+        var j: int = 0;
+        while (j < n_neg) {
+            out.push(0.0);
+            j++;
+        };
+        return out;
+    };
+
+    function gc_shuffled_order(n: int) -> int[] {
+        var order: int[] = [];
+        var i: int = 0;
+        while (i < n) {
+            order.push(i);
+            i++;
+        };
+        var j: int = n - 1;
+        while (j > 0) {
+            var r: int = rand_int(0, j);
+            var tmp: int = order[j];
+            order[j] = order[r];
+            order[r] = tmp;
+            j = j - 1;
+        };
+        return order;
+    };
+
+    function constructor(positive: str[], negative: str[], d_model: int, d_hidden: int) -> null {
+        this.d_model = d_model;
+        this.d_hidden = d_hidden;
+
+        var all: str[] = this.gc_join(positive, negative);
+        this.tok = Tokenizer();
+        this.gc_fit(this.tok, all);
+
+        this.emb  = Embedding(this.gc_size(this.tok), d_model);
+        this.gru  = Gru(d_model, d_hidden);
+        this.head = Dense(d_hidden, 1, Activation.SIGMOID);
+    };
+
+    function train(positive: str[], negative: str[], epochs: int, lr: float) -> null {
+        var texts: str[] = this.gc_join(positive, negative);
+        var labels: float[] = this.gc_make_labels(positive.length, negative.length);
+        this.train_labelled(texts, labels, epochs, lr);
+    };
+
+    function train_labelled(texts: str[], labels: float[], epochs: int, lr: float) -> null {
+        var epoch: int = 0;
+        while (epoch < epochs) {
+            var order: int[] = this.gc_shuffled_order(texts.length);
+            var total_loss: float = 0.0;
+            var i: int = 0;
+            while (i < texts.length) {
+                var k: int = order[i];
+                var ids: int[] = this.gc_encode(this.tok, texts[k]);
+
+                var embedded: Tensor = this.emb.forward(ids);
+                var seq_len: int = embedded.nrows;
+                var xs: Tensor[] = this.gc_rows(embedded);
+                embedded.dispose();
+
+                var h_last: Tensor = this.gru.forward_seq(xs);
+                var pred: Tensor = this.head.forward(h_last);
+
+                var label: Tensor = Tensor(1, 1);
+                label.put(0, 0, labels[k]);
+
+                var loss: float = mocha_tensor_mse_loss(pred.ptr, label.ptr);
+                total_loss = total_loss + loss;
+
+                var dout: Tensor = Tensor(1, 1);
+                mocha_tensor_free(dout.ptr);
+                dout.ptr = mocha_tensor_mse_grad(pred.ptr, label.ptr);
+
+                var dh: Tensor = this.head.backward(dout, lr);
+                dout.dispose();
+
+                var dX: Tensor = Tensor(seq_len, this.d_model);
+                dX.zeros();
+                this.gru.backward_seq(dh, dX, lr);
+                dh.dispose();
+
+                this.emb.backward(dX, ids, lr);
+                dX.dispose();
+
+                pred.dispose();
+                label.dispose();
+                h_last.dispose();
+                this.gc_free_rows(xs);
+
+                i++;
+            };
+
+            if (epoch % 100 == 0) {
+                var avg_loss: float = total_loss / (texts.length + 0.0);
+                print("Epoch ", epoch, " loss: ", avg_loss, "\n");
+            };
+            epoch++;
+        };
+    };
+
+    function predict(text: str) -> float {
+        var ids: int[] = this.gc_encode(this.tok, text);
+        var embedded: Tensor = this.emb.forward(ids);
+        var xs: Tensor[] = this.gc_rows(embedded);
+        embedded.dispose();
+        var h_last: Tensor = this.gru.forward_seq(xs);
+        var pred: Tensor = this.head.forward(h_last);
+        var score: float = pred.at(0, 0);
+        pred.dispose();
+        h_last.dispose();
+        this.gc_free_rows(xs);
+        this.gru.clear_seq();
+        return score;
+    };
+
+    function accuracy(positive: str[], negative: str[]) -> float {
+        var correct: int = 0;
+        var i: int = 0;
+        while (i < positive.length) {
+            var sp: float = this.predict(positive[i]);
+            print("[pos] ", positive[i], " -> ", sp, "\n");
+            if (sp > 0.5) { correct++; };
+            i++;
+        };
+        var j: int = 0;
+        while (j < negative.length) {
+            var sn: float = this.predict(negative[j]);
+            print("[neg] ", negative[j], " -> ", sn, "\n");
+            if (sn < 0.5) { correct++; };
+            j++;
+        };
+        var total: int = positive.length + negative.length;
+        var acc: float = (correct + 0.0) / (total + 0.0);
+        print("Correct: ", correct, " / ", total, "\n");
+        return acc;
+    };
+
+    function gc_word(tk: Tokenizer, i: int) -> str {
+        return tk.word(i);
+    };
+
+    function save(path: str) -> null {
+        this.emb.save(path + ".emb");
+        this.gru.save(path + ".gru");
+        this.head.save(path + ".head");
+
+        var db: null = sqlite3_open(path);
+        neuron_db_setup(db);
+        sqlite3_exec(db, "BEGIN TRANSACTION;");
+        neuron_db_write_meta(db, "model_type", "GruClassifier");
+        neuron_db_write_meta(db, "d_model", str(this.d_model));
+        neuron_db_write_meta(db, "d_hidden", str(this.d_hidden));
+        var n: int = this.gc_size(this.tok);
+        neuron_db_write_meta(db, "vocab_size", str(n));
+        var i: int = 0;
+        while (i < n) {
+            neuron_db_write_meta(db, "word_" + str(i), this.gc_word(this.tok, i));
+            i++;
+        };
+        sqlite3_exec(db, "COMMIT;");
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        var dm: int = neuron_db_read_meta(db, "d_model").toInt();
+        var dh: int = neuron_db_read_meta(db, "d_hidden").toInt();
+        var n: int = neuron_db_read_meta(db, "vocab_size").toInt();
+
+        // words after the 4 special tokens, in saved order
+        var sentence: str = "";
+        var i: int = 4;
+        while (i < n) {
+            var w: str = neuron_db_read_meta(db, "word_" + str(i));
+            sentence = sentence + w + " ";
+            i++;
+        };
+        sqlite3_close(db);
+
+        this.d_model = dm;
+        this.d_hidden = dh;
+
+        this.tok = Tokenizer();
+        var one: str[] = [];
+        one.push(sentence);
+        this.gc_fit(this.tok, one);
+
+        this.emb.dispose();
+        this.gru.dispose();
+        this.head.dispose();
+
+        this.emb = Embedding(n, dm);
+        this.emb.load(path + ".emb");
+        this.gru = Gru(dm, dh);
+        this.gru.load(path + ".gru");
+        this.head = Dense(dh, 1, Activation.SIGMOID);
+        this.head.load(path + ".head");
+    };
+
+    function dispose() -> null {
+        this.emb.dispose();
+        this.gru.dispose();
         this.head.dispose();
     };
 };

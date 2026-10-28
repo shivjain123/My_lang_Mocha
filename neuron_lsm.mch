@@ -45,11 +45,11 @@ function main(didLoad) -> null {
     print("Training done!", newLine=true);
 
     // test: run 20 more steps and compare prediction vs actual
-    lsm.reset();
+    //lsm.reset();
     print("Predictions vs actual:", newLine=true);
     print("\n");
-    var t2: int = 0;
-    while (t2 < 20) {
+    var t2: int = 200;
+    while (t2 < 240) {
         var angle: float = t2 * 0.1;
         var val: float = angle.sin();
         var next_angle: float = (t2 + 1) * 0.1;

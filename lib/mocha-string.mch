@@ -702,6 +702,11 @@ class Tokenizer {
         return -1;
     };
 
+    ~~ Get the word for a token ID
+    function word(i: int) -> str {
+        return this.vocab[i];
+    };
+
     ~~ Build vocabulary from array of sentences
     ~~ @param texts: str[] of sentences
     function fit(texts: str[]) -> null {
