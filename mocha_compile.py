@@ -1273,7 +1273,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.3")
+    print(f"🔥 Mocha Compiler v1.4")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):
@@ -1751,7 +1751,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
             link_cmd.append(WREN_OBJ)
         if needs_rust:
             link_cmd.append(RUST_LIB)
-        if needs_rust:
+        if needs_rust and IS_WINDOWS:
             link_cmd += [
                 "-lntdll",
                 "-lws2_32",

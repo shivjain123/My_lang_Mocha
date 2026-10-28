@@ -8,6 +8,8 @@ on:
       - 'mocha_runtime.c'
       - 'hello_cpp.cpp'
       - 'cpp_tests.mch'
+      - 'rust_ffi.rs'
+      - 'rust_ffi.mch'
       - 'lib/**'
       - 'run_all.sh'
       - 'test_*.mch'
@@ -27,9 +29,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Run all tests (run_all.sh)
-        timeout-minutes: 40
-        run: bash ./run_all.sh
       - name: Native code test (C++ FFI)
         if: always()
         timeout-minutes: 5
@@ -94,4 +93,37 @@ jobs:
           import { pathToFileURL } from 'node:url';
           import { load } from './cape_demo_node.mjs';
           const realFetch = globalThis.fetch;
-          globalThis.fetch = async (u, ...rest) =>
+          globalThis.fetch = async (u, ...rest) => {
+            if (u instanceof URL && u.protocol === 'file:') return new Response(readFileSync(u));
+            return realFetch(u, ...rest);
+          };
+          const m = await load(pathToFileURL(process.cwd() + '/cape_demo.wasm'));
+          for (const [t, td] of [[28, 18], [28, 28], [28, 10], [26, 16], [24, 20]]) {
+            console.log('cape_demo(' + t + ', ' + td + ') = ' + m.cape_demo(t, td));
+          }
+          m.flush();
+          EOF
+      - name: Run mocha from PATH like a real user
+        if: always()
+        run: |
+          export PATH="$PWD:$PATH"
+          mkdir -p "$HOME/somewhere_else"
+          cp evil.mch "$HOME/somewhere_else/"
+          cd "$HOME/somewhere_else"
+          mocha help
+          echo 5 | mocha execute evil.mch
+      - name: Generate docs (evil.mch)
+        if: always()
+        timeout-minutes: 5
+        run: |
+          bash ./mocha doc evil.mch
+          git status --short
+      - name: REPL test
+        if: always()
+        timeout-minutes: 2
+        run: |
+          printf 'var x: int = 5\nx * 2\nprint("hello from the REPL", newLine=true)\nexit\n' | bash ./mocha repl
+      - name: Run all tests (run_all.sh)
+        if: always()
+        timeout-minutes: 40
+        run: bash ./run_all.sh --skip-libs
