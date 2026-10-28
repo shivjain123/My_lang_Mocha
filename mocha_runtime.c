@@ -441,6 +441,13 @@ static char* mocha_rc_copy(const char* s) {
     return rc_strdup(s ? s : "");
 }
 
+/* Exported for external FFI code (C++, Zig, Rust...): copy a borrowed C string
+   into a fresh RC string. A native function declared -> str must return this,
+   never a raw char*, because Mocha will rc_release the result. */
+char* mocha_ffi_str_copy(const char* s) {
+    return mocha_rc_copy(s);
+}
+
 void mocha_signal_handlers_init() {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, mocha_seh_crash_handler);

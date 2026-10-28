@@ -110,3 +110,6 @@ jobs:
         timeout-minutes: 2
         run: |
           printf 'var x: int = 5\nx * 2\nprint("hello from the REPL", newLine=true)\nexit\n' | bash ./mocha repl
+      - name: Native code test (C++ FFI)
+        timeout-minutes: 5
+        run: bash ./mocha execute cpp_tests.mch
