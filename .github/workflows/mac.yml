@@ -40,7 +40,7 @@ jobs:
         run: |
           rm -f rust_ffi.a
           rustc --version
-          rustc --crate-type staticlib -O rust_ffi.rs -o rust_ffi.a
+          rustc --crate-type staticlib -C panic=abort -O rust_ffi.rs -o rust_ffi.a
           bash ./mocha execute rust_ffi.mch
 
   basics:
