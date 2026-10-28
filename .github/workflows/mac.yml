@@ -34,6 +34,14 @@ jobs:
         if: always()
         timeout-minutes: 5
         run: bash ./mocha execute cpp_tests.mch
+      - name: Native code test (Rust FFI)
+        if: always()
+        timeout-minutes: 10
+        run: |
+          rm -f rust_ffi.a
+          rustc --version
+          rustc --crate-type staticlib -O rust_ffi.rs -o rust_ffi.a
+          bash ./mocha execute rust_ffi.mch
 
   basics:
     if: github.event_name == 'workflow_dispatch'
