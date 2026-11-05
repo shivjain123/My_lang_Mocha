@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-space.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-space.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#unsafe_mul"><i class="ti ti-function"></i> unsafe_mul</a></li><li class="sb-fn"><a href="#unsafe_div"><i class="ti ti-function"></i> unsafe_div</a></li><li class="sb-fn"><a href="#unsafe_add"><i class="ti ti-function"></i> unsafe_add</a></li><li class="sb-fn"><a href="#unsafe_sub"><i class="ti ti-function"></i> unsafe_sub</a></li><li class="sb-fn"><a href="#c_exp"><i class="ti ti-function"></i> c_exp</a></li><li class="sb-fn"><a href="#atan2"><i class="ti ti-function"></i> atan2</a></li><li class="sb-fn"><a href="#orbital_period"><i class="ti ti-function"></i> orbital_period</a></li><li class="sb-fn"><a href="#semi_major_axis"><i class="ti ti-function"></i> semi_major_axis</a></li><li class="sb-fn"><a href="#orbital_velocity_circular"><i class="ti ti-function"></i> orbital_velocity_circular</a></li><li class="sb-fn"><a href="#orbital_velocity_visviva"><i class="ti ti-function"></i> orbital_velocity_visviva</a></li><li class="sb-fn"><a href="#escape_velocity"><i class="ti ti-function"></i> escape_velocity</a></li><li class="sb-fn"><a href="#periapsis"><i class="ti ti-function"></i> periapsis</a></li><li class="sb-fn"><a href="#apoapsis"><i class="ti ti-function"></i> apoapsis</a></li><li class="sb-fn"><a href="#orbital_energy"><i class="ti ti-function"></i> orbital_energy</a></li><li class="sb-fn"><a href="#specific_angular_momentum"><i class="ti ti-function"></i> specific_angular_momentum</a></li><li class="sb-fn"><a href="#mean_motion"><i class="ti ti-function"></i> mean_motion</a></li><li class="sb-fn"><a href="#mean_anomaly"><i class="ti ti-function"></i> mean_anomaly</a></li><li class="sb-fn"><a href="#eccentric_anomaly"><i class="ti ti-function"></i> eccentric_anomaly</a></li><li class="sb-fn"><a href="#true_anomaly_from_eccentric"><i class="ti ti-function"></i> true_anomaly_from_eccentric</a></li><li class="sb-fn"><a href="#true_anomaly_from_mean"><i class="ti ti-function"></i> true_anomaly_from_mean</a></li><li class="sb-fn"><a href="#radial_distance"><i class="ti ti-function"></i> radial_distance</a></li><li class="sb-fn"><a href="#flight_path_angle"><i class="ti ti-function"></i> flight_path_angle</a></li><li class="sb-fn"><a href="#synodic_period"><i class="ti ti-function"></i> synodic_period</a></li><li class="sb-fn"><a href="#hohmann_transfer_sma"><i class="ti ti-function"></i> hohmann_transfer_sma</a></li><li class="sb-fn"><a href="#hohmann_dv1"><i class="ti ti-function"></i> hohmann_dv1</a></li><li class="sb-fn"><a href="#hohmann_dv2"><i class="ti ti-function"></i> hohmann_dv2</a></li><li class="sb-fn"><a href="#hohmann_dv_total"><i class="ti ti-function"></i> hohmann_dv_total</a></li><li class="sb-fn"><a href="#sphere_of_influence"><i class="ti ti-function"></i> sphere_of_influence</a></li><li class="sb-fn"><a href="#hill_sphere"><i class="ti ti-function"></i> hill_sphere</a></li><li class="sb-fn"><a href="#roche_limit_rigid"><i class="ti ti-function"></i> roche_limit_rigid</a></li><li class="sb-fn"><a href="#roche_limit_fluid"><i class="ti ti-function"></i> roche_limit_fluid</a></li><li class="sb-fn"><a href="#inclination_change_dv"><i class="ti ti-function"></i> inclination_change_dv</a></li><li class="sb-fn"><a href="#orbit_type"><i class="ti ti-function"></i> orbit_type</a></li><li class="sb-fn"><a href="#luminosity_from_radius_temp"><i class="ti ti-function"></i> luminosity_from_radius_temp</a></li><li class="sb-fn"><a href="#radius_from_luminosity_temp"><i class="ti ti-function"></i> radius_from_luminosity_temp</a></li><li class="sb-fn"><a href="#temp_from_luminosity_radius"><i class="ti ti-function"></i> temp_from_luminosity_radius</a></li><li class="sb-fn"><a href="#wien_peak_wavelength"><i class="ti ti-function"></i> wien_peak_wavelength</a></li><li class="sb-fn"><a href="#wien_temp_from_wavelength"><i class="ti ti-function"></i> wien_temp_from_wavelength</a></li><li class="sb-fn"><a href="#parallax_to_distance_pc"><i class="ti ti-function"></i> parallax_to_distance_pc</a></li><li class="sb-fn"><a href="#distance_to_parallax"><i class="ti ti-function"></i> distance_to_parallax</a></li><li class="sb-fn"><a href="#distance_modulus"><i class="ti ti-function"></i> distance_modulus</a></li><li class="sb-fn"><a href="#distance_from_modulus"><i class="ti ti-function"></i> distance_from_modulus</a></li><li class="sb-fn"><a href="#absolute_magnitude"><i class="ti ti-function"></i> absolute_magnitude</a></li><li class="sb-fn"><a href="#apparent_magnitude"><i class="ti ti-function"></i> apparent_magnitude</a></li><li class="sb-fn"><a href="#flux_ratio_from_magnitudes"><i class="ti ti-function"></i> flux_ratio_from_magnitudes</a></li><li class="sb-fn"><a href="#magnitude_diff_from_flux_ratio"><i class="ti ti-function"></i> magnitude_diff_from_flux_ratio</a></li><li class="sb-fn"><a href="#luminosity_to_solar"><i class="ti ti-function"></i> luminosity_to_solar</a></li><li class="sb-fn"><a href="#luminosity_from_solar"><i class="ti ti-function"></i> luminosity_from_solar</a></li><li class="sb-fn"><a href="#main_sequence_luminosity"><i class="ti ti-function"></i> main_sequence_luminosity</a></li><li class="sb-fn"><a href="#main_sequence_lifetime"><i class="ti ti-function"></i> main_sequence_lifetime</a></li><li class="sb-fn"><a href="#schwarzschild_radius"><i class="ti ti-function"></i> schwarzschild_radius</a></li><li class="sb-fn"><a href="#photon_energy"><i class="ti ti-function"></i> photon_energy</a></li><li class="sb-fn"><a href="#equilibrium_temp"><i class="ti ti-function"></i> equilibrium_temp</a></li><li class="sb-fn"><a href="#equilibrium_temp_from_star"><i class="ti ti-function"></i> equilibrium_temp_from_star</a></li><li class="sb-fn"><a href="#solar_flux_at_distance"><i class="ti ti-function"></i> solar_flux_at_distance</a></li><li class="sb-fn"><a href="#absorbed_power"><i class="ti ti-function"></i> absorbed_power</a></li><li class="sb-fn"><a href="#scale_height"><i class="ti ti-function"></i> scale_height</a></li><li class="sb-fn"><a href="#atmospheric_pressure_at_height"><i class="ti ti-function"></i> atmospheric_pressure_at_height</a></li><li class="sb-fn"><a href="#surface_gravity"><i class="ti ti-function"></i> surface_gravity</a></li><li class="sb-fn"><a href="#escape_velocity_from_mass_radius"><i class="ti ti-function"></i> escape_velocity_from_mass_radius</a></li><li class="sb-fn"><a href="#habitable_zone_distance_simple"><i class="ti ti-function"></i> habitable_zone_distance_simple</a></li><li class="sb-fn"><a href="#mean_free_path"><i class="ti ti-function"></i> mean_free_path</a></li><li class="sb-fn"><a href="#jeans_escape_parameter"><i class="ti ti-function"></i> jeans_escape_parameter</a></li><li class="sb-fn"><a href="#thermal_velocity"><i class="ti ti-function"></i> thermal_velocity</a></li><li class="sb-fn"><a href="#hour_angle"><i class="ti ti-function"></i> hour_angle</a></li><li class="sb-fn"><a href="#equatorial_to_horizontal"><i class="ti ti-function"></i> equatorial_to_horizontal</a></li><li class="sb-fn"><a href="#horizontal_to_equatorial"><i class="ti ti-function"></i> horizontal_to_equatorial</a></li><li class="sb-fn"><a href="#angular_separation"><i class="ti ti-function"></i> angular_separation</a></li><li class="sb-fn"><a href="#angular_separation_small"><i class="ti ti-function"></i> angular_separation_small</a></li><li class="sb-fn"><a href="#equatorial_to_ecliptic"><i class="ti ti-function"></i> equatorial_to_ecliptic</a></li><li class="sb-fn"><a href="#ecliptic_to_equatorial"><i class="ti ti-function"></i> ecliptic_to_equatorial</a></li><li class="sb-fn"><a href="#equatorial_to_galactic"><i class="ti ti-function"></i> equatorial_to_galactic</a></li><li class="sb-fn"><a href="#parallax_angle_to_distance"><i class="ti ti-function"></i> parallax_angle_to_distance</a></li><li class="sb-fn"><a href="#proper_motion_total"><i class="ti ti-function"></i> proper_motion_total</a></li><li class="sb-fn"><a href="#proper_motion_total_raw"><i class="ti ti-function"></i> proper_motion_total_raw</a></li><li class="sb-fn"><a href="#position_angle"><i class="ti ti-function"></i> position_angle</a></li><li class="sb-fn"><a href="#atmospheric_refraction"><i class="ti ti-function"></i> atmospheric_refraction</a></li><li class="sb-fn"><a href="#precess_ra_dec"><i class="ti ti-function"></i> precess_ra_dec</a></li><li class="sb-fn"><a href="#hours_to_degrees"><i class="ti ti-function"></i> hours_to_degrees</a></li><li class="sb-fn"><a href="#degrees_to_hours"><i class="ti ti-function"></i> degrees_to_hours</a></li><li class="sb-fn"><a href="#dms_to_degrees"><i class="ti ti-function"></i> dms_to_degrees</a></li><li class="sb-fn"><a href="#degrees_to_dms"><i class="ti ti-function"></i> degrees_to_dms</a></li><li class="sb-fn"><a href="#hms_to_degrees"><i class="ti ti-function"></i> hms_to_degrees</a></li><li class="sb-fn"><a href="#degrees_to_hms"><i class="ti ti-function"></i> degrees_to_hms</a></li><li class="sb-fn"><a href="#julian_date"><i class="ti ti-function"></i> julian_date</a></li><li class="sb-fn"><a href="#julian_date_to_mjd"><i class="ti ti-function"></i> julian_date_to_mjd</a></li><li class="sb-fn"><a href="#mjd_to_julian_date"><i class="ti ti-function"></i> mjd_to_julian_date</a></li><li class="sb-fn"><a href="#j2000_centuries"><i class="ti ti-function"></i> j2000_centuries</a></li><li class="sb-fn"><a href="#j2000_days"><i class="ti ti-function"></i> j2000_days</a></li><li class="sb-fn"><a href="#gmst_degrees"><i class="ti ti-function"></i> gmst_degrees</a></li><li class="sb-fn"><a href="#lst_degrees"><i class="ti ti-function"></i> lst_degrees</a></li><li class="sb-fn"><a href="#unix_to_julian_date"><i class="ti ti-function"></i> unix_to_julian_date</a></li><li class="sb-fn"><a href="#julian_date_to_unix"><i class="ti ti-function"></i> julian_date_to_unix</a></li><li class="sb-fn"><a href="#utc_to_tt"><i class="ti ti-function"></i> utc_to_tt</a></li><li class="sb-fn"><a href="#tt_to_utc"><i class="ti ti-function"></i> tt_to_utc</a></li><li class="sb-fn"><a href="#besselian_epoch"><i class="ti ti-function"></i> besselian_epoch</a></li><li class="sb-fn"><a href="#besselian_epoch_to_jd"><i class="ti ti-function"></i> besselian_epoch_to_jd</a></li><li class="sb-fn"><a href="#julian_epoch"><i class="ti ti-function"></i> julian_epoch</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-space.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_mul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_div">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_div</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_add</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_sub">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_sub</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exp</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="atan2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">atan2</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="orbital_period">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">orbital_period</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Kepler&#x27;s 3rd law: orbital period in seconds from semi-major axis a (m) and mu (m³/s²). t = 2π √(a³/μ). Requires a &gt; 0 and mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="semi_major_axis">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">semi_major_axis</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Semi-major axis in m from orbital period t (s) and mu (m³/s²). a = (μ(t/2π)²)^(1/3). Requires t &gt; 0 and mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="orbital_velocity_circular">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">orbital_velocity_circular</span><span class="paren">(</span><span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Circular orbital velocity in m/s at radius r (m) with gravitational parameter mu (m³/s²). v = √(μ/r). Requires r &gt; 0 and mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="orbital_velocity_visviva">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">orbital_velocity_visviva</span><span class="paren">(</span><span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Orbital velocity in m/s at radius r (m) via vis-viva equation. v = √(μ(2/r - 1/a)). Requires r &gt; 0, a &gt; 0, and mu &gt; 0. For hyperbolic orbits use a &gt; 0 convention or pass negative a.</p>
+  </div>
+</div>
+
+<div class="card" id="escape_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">escape_velocity</span><span class="paren">(</span><span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Escape velocity in m/s at radius r (m) with gravitational parameter mu (m³/s²). v = √(2μ/r). Requires r &gt; 0 and mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="periapsis">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">periapsis</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Periapsis distance in m from semi-major axis a (m) and eccentricity e. r_p = a(1 - e). Requires a &gt; 0 and 0 &lt;= e &lt; 1 (elliptical).</p>
+  </div>
+</div>
+
+<div class="card" id="apoapsis">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">apoapsis</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Apoapsis distance in m from semi-major axis a (m) and eccentricity e. r_a = a(1 + e). Requires a &gt; 0 and 0 &lt;= e &lt; 1 (elliptical).</p>
+  </div>
+</div>
+
+<div class="card" id="orbital_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">orbital_energy</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Specific orbital energy in J/kg from semi-major axis a (m) and mu (m³/s²). ε = -μ/(2a). Requires a non-zero and mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="specific_angular_momentum">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">specific_angular_momentum</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Specific angular momentum in m²/s from a (m), e, mu (m³/s²). h = √(μ·a·(1-e²)). Requires a &gt; 0, 0 &lt;= e &lt;= 1 (elliptical/parabolic boundary).</p>
+  </div>
+</div>
+
+<div class="card" id="mean_motion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_motion</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean motion in rad/s from semi-major axis a (m) and mu (m³/s²). n = √(μ/a³). Requires a &gt; 0 and mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="mean_anomaly">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_anomaly</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_p</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean anomaly m (rad) at time t (s) given mean motion n (rad/s) and time of periapsis t_p (s). m = n(t - t_p).</p>
+  </div>
+</div>
+
+<div class="card" id="eccentric_anomaly">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">eccentric_anomaly</span><span class="paren">(</span><span class="param-name">m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Eccentric anomaly E (rad) from mean anomaly m (rad) and eccentricity e via Newton&#x27;s method. Solves Kepler&#x27;s equation m = E - e·sin(E). Converges to 1E-10 in ≤50 iterations for e &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="true_anomaly_from_eccentric">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">true_anomaly_from_eccentric</span><span class="paren">(</span><span class="param-name">E_cap</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">True anomaly ν (rad) from eccentric anomaly E (rad) and eccentricity e. tan(ν/2) = √((1+e)/(1-e))·tan(E/2). Requires 0 &lt;= e &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="true_anomaly_from_mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">true_anomaly_from_mean</span><span class="paren">(</span><span class="param-name">m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">True anomaly ν (rad) from mean anomaly m (rad) and eccentricity e. Combines Kepler solver + true anomaly conversion. Requires 0 &lt;= e &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="radial_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">radial_distance</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">E_cap</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Radial distance in m at eccentric anomaly E (rad). r = a(1 - e·cos(E)). Requires a &gt; 0 and 0 &lt;= e &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="flight_path_angle">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">flight_path_angle</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">nu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Flight path angle γ (rad) from eccentricity e and true anomaly ν (rad). γ = atan2(e·sin(ν), 1 + e·cos(ν)). Requires e &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="synodic_period">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">synodic_period</span><span class="paren">(</span><span class="param-name">p1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Synodic period in s between two orbital periods p1 (s) and p2 (s). 1/P_syn = |1/p1 - 1/p2|. Requires p1 &gt; 0, p2 &gt; 0, and p1 != p2.</p>
+  </div>
+</div>
+
+<div class="card" id="hohmann_transfer_sma">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hohmann_transfer_sma</span><span class="paren">(</span><span class="param-name">r1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hohmann transfer ellipse semi-major axis in m from inner radius r1 (m) and outer radius r2 (m). a_t = (r1 + r2)/2. Requires r1 &gt; 0 and r2 &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="hohmann_dv1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hohmann_dv1</span><span class="paren">(</span><span class="param-name">r1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hohmann departure burn Δv in m/s from r1 (m), r2 (m), mu (m³/s²). Δv1 = √(μ/r1)·(√(2r2/(r1+r2)) - 1). Requires r1 &gt; 0, r2 &gt; 0, mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="hohmann_dv2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hohmann_dv2</span><span class="paren">(</span><span class="param-name">r1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hohmann arrival burn Δv in m/s from r1 (m), r2 (m), mu (m³/s²). Δv2 = √(μ/r2)·(1 - √(2r1/(r1+r2))). Requires r1 &gt; 0, r2 &gt; 0, mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="hohmann_dv_total">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hohmann_dv_total</span><span class="paren">(</span><span class="param-name">r1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total Hohmann transfer Δv magnitude in m/s (sum of departure and arrival burns). Requires r1 &gt; 0, r2 &gt; 0, mu &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="sphere_of_influence">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sphere_of_influence</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_small</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_large</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sphere of influence radius in m from semi-major axis a (m) and mass ratio. r_SOI = a·(m_small/m_large)^(2/5). Requires a &gt; 0, m_small &gt; 0, m_large &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="hill_sphere">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hill_sphere</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_small</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_large</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hill sphere radius in m from a (m), e, m_small (kg), m_large (kg). r_H = a(1-e)·(m_small/(3·m_large))^(1/3). Requires a &gt; 0, 0 &lt;= e &lt; 1, masses &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="roche_limit_rigid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">roche_limit_rigid</span><span class="paren">(</span><span class="param-name">R_primary</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rho_primary</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rho_secondary</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Roche limit in m for a rigid satellite from primary radius R (m) and densities (kg/m³). d = 2.46·R_primary·(ρ_primary/ρ_secondary)^(1/3). Requires R &gt; 0 and both densities &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="roche_limit_fluid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">roche_limit_fluid</span><span class="paren">(</span><span class="param-name">R_primary</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">M_primary</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">M_secondary</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Roche limit in m for a fluid satellite from primary radius R (m) and masses (kg). d = 2.44·R_primary·(M_primary/M_secondary)^(1/3). Requires R &gt; 0 and both masses &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="inclination_change_dv">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inclination_change_dv</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_i_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Δv in m/s for a pure inclination change from velocity v (m/s) and inclination change Δi (deg). Δv = 2v·sin(Δi/2). Requires v &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="orbit_type">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">orbit_type</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">OrbitType</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Classifies orbit by eccentricity e into OrbitType (CIRCULAR, ELLIPTICAL, PARABOLIC, HYPERBOLIC). Requires e &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="luminosity_from_radius_temp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">luminosity_from_radius_temp</span><span class="paren">(</span><span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Stefan-Boltzmann law: stellar luminosity in W from radius r (m) and effective temperature t (K). L = 4π R² σ T⁴. Requires r &gt; 0 and t &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="radius_from_luminosity_temp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">radius_from_luminosity_temp</span><span class="paren">(</span><span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Stellar radius in m from luminosity l (W) and effective temperature t (K). R = √(L / (4π σ T⁴)). Requires l &gt; 0 and t &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="temp_from_luminosity_radius">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">temp_from_luminosity_radius</span><span class="paren">(</span><span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Effective temperature in K from luminosity l (W) and radius r (m). T = (L / (4π R² σ))^(1/4). Requires l &gt; 0 and r &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="wien_peak_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wien_peak_wavelength</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Wien&#x27;s displacement law: peak emission wavelength in m from temperature t (K). λ_max = b / T. Requires t &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="wien_temp_from_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wien_temp_from_wavelength</span><span class="paren">(</span><span class="param-name">lambda_max</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Inverse Wien&#x27;s law: temperature in K from peak wavelength lambda_max (m). T = b / λ_max. Requires lambda_max &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="parallax_to_distance_pc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">parallax_to_distance_pc</span><span class="paren">(</span><span class="param-name">p_arcsec</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Stellar distance in parsecs from parallax angle p_arcsec (arcsec). d = 1 / p″. Requires p_arcsec &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="distance_to_parallax">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">distance_to_parallax</span><span class="paren">(</span><span class="param-name">d_pc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Parallax angle in arcsec from distance d_pc (parsecs). p″ = 1 / d. Requires d_pc &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="distance_modulus">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">distance_modulus</span><span class="paren">(</span><span class="param-name">m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">M_abs</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Distance modulus in magnitudes from apparent magnitude m and absolute magnitude M_abs. μ = m - M. No constraint on magnitudes (negative values valid for bright objects).</p>
+  </div>
+</div>
+
+<div class="card" id="distance_from_modulus">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">distance_from_modulus</span><span class="paren">(</span><span class="param-name">mu</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Distance in parsecs from distance modulus mu. d = 10^((μ+5)/5). No constraint on μ (any real value valid).</p>
+  </div>
+</div>
+
+<div class="card" id="absolute_magnitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">absolute_magnitude</span><span class="paren">(</span><span class="param-name">m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d_pc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Absolute magnitude from apparent magnitude m and distance d_pc (parsecs). M = m - 5·log10(d) + 5. Requires d_pc &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="apparent_magnitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">apparent_magnitude</span><span class="paren">(</span><span class="param-name">M_abs</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d_pc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Apparent magnitude from absolute magnitude M_abs and distance d_pc (parsecs). m = M + 5·log10(d) - 5. Requires d_pc &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="flux_ratio_from_magnitudes">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">flux_ratio_from_magnitudes</span><span class="paren">(</span><span class="param-name">m1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Flux ratio F1/F2 from two magnitudes m1 and m2. F1/F2 = 10^(0.4·(m2-m1)). No constraint (any real magnitudes valid).</p>
+  </div>
+</div>
+
+<div class="card" id="magnitude_diff_from_flux_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">magnitude_diff_from_flux_ratio</span><span class="paren">(</span><span class="param-name">ratio</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Magnitude difference Δm from flux ratio F1/F2. Δm = -2.5·log10(F1/F2). Requires ratio &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="luminosity_to_solar">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">luminosity_to_solar</span><span class="paren">(</span><span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Luminosity in solar units (dimensionless) from absolute luminosity l (W). No constraint (any real luminosity valid).</p>
+  </div>
+</div>
+
+<div class="card" id="luminosity_from_solar">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">luminosity_from_solar</span><span class="paren">(</span><span class="param-name">l_sun</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Luminosity in W from solar-unit luminosity l_sun. No constraint (any real value valid).</p>
+  </div>
+</div>
+
+<div class="card" id="main_sequence_luminosity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">main_sequence_luminosity</span><span class="paren">(</span><span class="param-name">mass_solar</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mass-luminosity relation for main sequence stars: L/L_sun ≈ (M/M_sun)^3.5. Valid roughly 0.5–20 solar masses. Requires mass_solar &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="main_sequence_lifetime">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">main_sequence_lifetime</span><span class="paren">(</span><span class="param-name">mass_solar</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Approximate main sequence lifetime in years from stellar mass in solar units. t ≈ 10^10 · (M/M_sun) / (L/L_sun). Requires mass_solar &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="schwarzschild_radius">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">schwarzschild_radius</span><span class="paren">(</span><span class="param-name">mass</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Event horizon radius in m for a non-rotating mass (Schwarzschild radius). r_s = 2GM/c². Requires mass &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="photon_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">photon_energy</span><span class="paren">(</span><span class="param-name">wavelength</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Energy of a photon in J at wavelength (m). E = hc/λ. Requires wavelength &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="equilibrium_temp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equilibrium_temp</span><span class="paren">(</span><span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">albedo</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Planetary equilibrium temperature in K from stellar luminosity l (W), orbital distance d (m), and Bond albedo. T_eq = (L(1-A) / (16π σ D²))^(1/4). Requires l &gt; 0, d &gt; 0, and 0 &lt;= albedo &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="equilibrium_temp_from_star">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equilibrium_temp_from_star</span><span class="paren">(</span><span class="param-name">t_star</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r_star</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">albedo</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Planetary equilibrium temperature in K from stellar temperature t_star (K), stellar radius r_star (m), orbital distance d (m), and Bond albedo. T_eq = T_star · √(R_star / (2D)) · (1-A)^(1/4). Requires t_star &gt; 0, r_star &gt; 0, d &gt; 0, and 0 &lt;= albedo &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="solar_flux_at_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">solar_flux_at_distance</span><span class="paren">(</span><span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Stellar flux (insolation) in W/m² received at orbital distance d (m) from luminosity l (W). S = L / (4π D²). Requires l &gt; 0 and d &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="absorbed_power">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">absorbed_power</span><span class="paren">(</span><span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r_planet</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">albedo</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total power absorbed by a planet in W from stellar luminosity l (W), orbital distance d (m), planet radius r_planet (m), and Bond albedo. P_abs = (1-A) · L · (π R_planet²) / (4π D²). Requires l &gt; 0, d &gt; 0, r_planet &gt; 0, and 0 &lt;= albedo &lt; 1.</p>
+  </div>
+</div>
+
+<div class="card" id="scale_height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">scale_height</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Atmospheric scale height in m from temperature t (K), molar mass (kg/mol), and surface gravity g (m/s²). H = RT / (Mg). Requires t &gt; 0, molar_mass &gt; 0, and g &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="atmospheric_pressure_at_height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">atmospheric_pressure_at_height</span><span class="paren">(</span><span class="param-name">p0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">h</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">scale_h</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Atmospheric pressure in Pa at altitude h (m) from surface pressure p0 (Pa) and scale height scale_h (m). P(h) = P0 · e^(-h/H). Requires p0 &gt; 0 and scale_h &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="surface_gravity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">surface_gravity</span><span class="paren">(</span><span class="param-name">mass</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">radius</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Surface gravitational acceleration in m/s² from body mass (kg) and radius (m). g = GM/r². Requires mass &gt; 0 and radius &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="escape_velocity_from_mass_radius">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">escape_velocity_from_mass_radius</span><span class="paren">(</span><span class="param-name">mass</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">radius</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Escape velocity in m/s from body mass (kg) and radius (m). v_esc = √(2GM/r). Requires mass &gt; 0 and radius &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="habitable_zone_distance_simple">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">habitable_zone_distance_simple</span><span class="paren">(</span><span class="param-name">l_solar</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Simplified Earth-equivalent-insolation habitable zone distance in AU from stellar luminosity l_solar (solar units). d_HZ = √(L / L_sun). First-pass estimate — for the full Kasting et al. (1993) model, use the temperature-dependent version. Requires l_solar &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="mean_free_path">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_free_path</span><span class="paren">(</span><span class="param-name">temp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pressure</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molecule_diameter</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean free path of gas molecules in m from temperature temp (K), pressure (Pa), and molecule diameter (m). λ = kT / (√2 · π · d² · P). Requires temp &gt; 0, pressure &gt; 0, and molecule_diameter &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="jeans_escape_parameter">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">jeans_escape_parameter</span><span class="paren">(</span><span class="param-name">escape_v</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">thermal_v</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Jeans escape parameter λ_J — ratio governing atmospheric retention. Values &gt;&gt; 1 indicate the gas is gravitationally bound (retained); values &lt;&lt; 1 indicate rapid thermal escape. λ_J = (v_esc / v_thermal)². Requires escape_v &gt;= 0 and thermal_v &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="thermal_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">thermal_velocity</span><span class="paren">(</span><span class="param-name">temp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Most probable thermal speed of gas molecules in m/s from temperature (K) and molar mass (kg/mol). v_thermal = √(2RT/M) (Maxwell-Boltzmann most probable speed). Requires temp &gt; 0 and molar_mass &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="hour_angle">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hour_angle</span><span class="paren">(</span><span class="param-name">lst</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ra</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Local hour angle in degrees from local sidereal time lst (deg) and right ascension ra (deg). H = LST - RA. Result wrapped to [-180, 180). No input constraints (any angle valid).</p>
+  </div>
+</div>
+
+<div class="card" id="equatorial_to_horizontal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equatorial_to_horizontal</span><span class="paren">(</span><span class="param-name">ra</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lst</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert equatorial (RA/Dec) to horizontal (Alt/Az) coordinates in degrees. Azimuth measured from North, through East (0°=N, 90°=E, 180°=S, 270°=W). Returns (altitude, azimuth). Latitude must be in [-90, 90].</p>
+  </div>
+</div>
+
+<div class="card" id="horizontal_to_equatorial">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">horizontal_to_equatorial</span><span class="paren">(</span><span class="param-name">alt</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">az</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lst</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert horizontal (Alt/Az) to equatorial (RA/Dec) coordinates in degrees. Azimuth is North-based (0°=N, 90°=E). Returns (ra, dec). Latitude must be in [-90, 90].</p>
+  </div>
+</div>
+
+<div class="card" id="angular_separation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">angular_separation</span><span class="paren">(</span><span class="param-name">ra1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ra2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Angular separation in degrees between two celestial coordinates via spherical law of cosines. Exact for any separation. No input constraints (any RA/Dec valid).</p>
+  </div>
+</div>
+
+<div class="card" id="angular_separation_small">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">angular_separation_small</span><span class="paren">(</span><span class="param-name">ra1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ra2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Fast small-angle approximation for angular separation in degrees. γ ≈ √((Δra·cos(dec))² + Δdec²). Valid only for separations under a few degrees — for larger separations use angular_separation.</p>
+  </div>
+</div>
+
+<div class="card" id="equatorial_to_ecliptic">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equatorial_to_ecliptic</span><span class="paren">(</span><span class="param-name">ra</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert equatorial to ecliptic coordinates in degrees. Returns (ecliptic longitude, ecliptic latitude). Obliquity in degrees (23.4392911 for J2000).</p>
+  </div>
+</div>
+
+<div class="card" id="ecliptic_to_equatorial">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ecliptic_to_equatorial</span><span class="paren">(</span><span class="param-name">lon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">obliquity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert ecliptic to equatorial coordinates in degrees. Returns (right ascension, declination). Obliquity in degrees.</p>
+  </div>
+</div>
+
+<div class="card" id="equatorial_to_galactic">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equatorial_to_galactic</span><span class="paren">(</span><span class="param-name">ra</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert J2000 equatorial coordinates to galactic coordinates in degrees. Returns (galactic longitude, galactic latitude). No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="parallax_angle_to_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">parallax_angle_to_distance</span><span class="paren">(</span><span class="param-name">p_mas</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Distance in parsecs from parallax angle in milliarcseconds. d = 1000 / p_mas. Requires p_mas &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="proper_motion_total">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">proper_motion_total</span><span class="paren">(</span><span class="param-name">pm_ra</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pm_dec</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total proper motion magnitude in mas/year from pm_ra (assumed already pre-multiplied by cos(dec) — true angle) and pm_dec. μ_total = √(pm_ra² + pm_dec²). No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="proper_motion_total_raw">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">proper_motion_total_raw</span><span class="paren">(</span><span class="param-name">pm_ra_raw</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pm_dec</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total proper motion in mas/year from raw μ_α (not pre-multiplied by cos(dec)) and μ_dec. μ_total = √((μ_α·cos(dec))² + μ_dec²). No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="position_angle">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">position_angle</span><span class="paren">(</span><span class="param-name">ra1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ra2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Position angle of object 2 relative to object 1 in degrees (0=North, 90=East, counterclockwise from North). No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="atmospheric_refraction">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">atmospheric_refraction</span><span class="paren">(</span><span class="param-name">apparent_alt</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Approximate atmospheric refraction correction in arcminutes from apparent altitude in degrees. R = cot(alt) — Bennett&#x27;s simplified low-precision form. Valid only for altitudes above ~15°. Requires apparent_alt in (0, 90).</p>
+  </div>
+</div>
+
+<div class="card" id="precess_ra_dec">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precess_ra_dec</span><span class="paren">(</span><span class="param-name">ra</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dec</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">years</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Approximate precession correction in degrees over a number of years, using general precession rate. Not a substitute for rigorous Meeus precession algorithm. Returns (new_ra, new_dec). Valid only for dec in (-90, 90) — pole is undefined. Recommended for spans under ~100 years.</p>
+  </div>
+</div>
+
+<div class="card" id="hours_to_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hours_to_degrees</span><span class="paren">(</span><span class="param-name">hours</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert hour-angle units (hours) to degrees. 1h = 15°. No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="degrees_to_hours">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degrees_to_hours</span><span class="paren">(</span><span class="param-name">deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert degrees to hour-angle units (hours). 1° = 1/15 h. No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="dms_to_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dms_to_degrees</span><span class="paren">(</span><span class="param-name">d</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert degrees/arcminutes/arcseconds to decimal degrees. Sign of d determines overall sign. No input constraints (any real d, m, s valid).</p>
+  </div>
+</div>
+
+<div class="card" id="degrees_to_dms">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degrees_to_dms</span><span class="paren">(</span><span class="param-name">deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 3)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert decimal degrees to (degrees, arcminutes, arcseconds). Sign carried on degrees component. No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="hms_to_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hms_to_degrees</span><span class="paren">(</span><span class="param-name">h</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert hours/minutes/seconds (RA format) to decimal degrees. No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="degrees_to_hms">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degrees_to_hms</span><span class="paren">(</span><span class="param-name">deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 3)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert decimal degrees (RA) to (hours, minutes, seconds). No input constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="julian_date">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">julian_date</span><span class="paren">(</span><span class="param-name">year</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">day</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert a Gregorian calendar date to Julian Date. day may include a fractional part for time-of-day. Valid only for Gregorian calendar dates (after 1582-10-15). Requires month in [1, 12] and day in (0, 32).</p>
+  </div>
+</div>
+
+<div class="card" id="julian_date_to_mjd">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">julian_date_to_mjd</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert Julian Date to Modified Julian Date. MJD = JD - 2400000.5. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="mjd_to_julian_date">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mjd_to_julian_date</span><span class="paren">(</span><span class="param-name">mjd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert Modified Julian Date to Julian Date. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="j2000_centuries">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">j2000_centuries</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Number of Julian centuries (36525 days) elapsed since J2000.0 (JD 2451545.0). Standard time variable T for astronomical formulas. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="j2000_days">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">j2000_days</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Number of days elapsed since J2000.0 (JD 2451545.0). No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="gmst_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gmst_degrees</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Greenwich Mean Sidereal Time in degrees (0-360) at the given Julian Date. IAU 1982 polynomial (Meeus / USNO Circular 179), accurate to ~0.1s over modern eras. Valid for dates within ±200 years of J2000.0 — for very distant epochs, the polynomial drifts.</p>
+  </div>
+</div>
+
+<div class="card" id="lst_degrees">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lst_degrees</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">longitude</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Local Sidereal Time in degrees (0-360) from Julian Date jd and observer longitude in degrees (east positive). No constraints (any real longitude valid; wrapping handles out-of-range).</p>
+  </div>
+</div>
+
+<div class="card" id="unix_to_julian_date">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unix_to_julian_date</span><span class="paren">(</span><span class="param-name">unix_seconds</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert a Unix timestamp (seconds since 1970-01-01 00:00 UTC) to Julian Date. Negative timestamps (pre-1970) are valid. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="julian_date_to_unix">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">julian_date_to_unix</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert Julian Date to a Unix timestamp (seconds since 1970-01-01 00:00 UTC). Negative results (pre-1970) are valid. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="utc_to_tt">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">utc_to_tt</span><span class="paren">(</span><span class="param-name">jd_utc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert a Julian Date in UTC to Terrestrial Time (TT). Uses fixed offset of 69.184s (37 leap seconds + 32.184s), valid only for 2017-01-01 through the next leap second announcement. Requires jd_utc in [2457754.5, 2465065.25] (2017 through ~2037).</p>
+  </div>
+</div>
+
+<div class="card" id="tt_to_utc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tt_to_utc</span><span class="paren">(</span><span class="param-name">jd_tt</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert a Julian Date in Terrestrial Time (TT) to UTC. Same validity caveats as utc_to_tt.</p>
+  </div>
+</div>
+
+<div class="card" id="besselian_epoch">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">besselian_epoch</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert Julian Date to Besselian epoch (e.g. B1950.0). Used in older star catalogs. B = 1900.0 + (JD - 2415020.31352)/365.242198781. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="besselian_epoch_to_jd">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">besselian_epoch_to_jd</span><span class="paren">(</span><span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert Besselian epoch to Julian Date. No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="julian_epoch">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">julian_epoch</span><span class="paren">(</span><span class="param-name">jd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert Julian Date to Julian epoch (e.g. J2000.0). Modern star catalogs (post-1984) use Julian epochs. J = 2000.0 + (JD - 2451545.0)/365.25. No constraints.</p>
+  </div>
+</div>
+</main>
+</body>
+</html>

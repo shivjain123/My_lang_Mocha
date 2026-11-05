@@ -5,12 +5,12 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
-function c_erf(x: float) -> float native mocha_wrap_erf;
-function c_tgamma(x: float) -> float native mocha_wrap_tgamma;
-function c_lgamma(x: float) -> float native mocha_wrap_lgamma;
-function c_exp(x: float) -> float native mocha_wrap_exp;
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
+local function c_erf(x: float) -> float;
+local function c_tgamma(x: float) -> float;
+local function c_lgamma(x: float) -> float;
+local function c_exp(x: float) -> float;
 const EARTH_RADIUS_KM: float = 6371.0;
 extend float[] function mean() -> float;
 extend float[] function median() -> float;

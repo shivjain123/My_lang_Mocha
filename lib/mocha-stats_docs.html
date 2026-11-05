@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-stats.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-stats.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#c_erf"><i class="ti ti-function"></i> c_erf</a></li><li class="sb-fn"><a href="#c_tgamma"><i class="ti ti-function"></i> c_tgamma</a></li><li class="sb-fn"><a href="#c_lgamma"><i class="ti ti-function"></i> c_lgamma</a></li><li class="sb-fn"><a href="#c_exp"><i class="ti ti-function"></i> c_exp</a></li><li class="sb-fn"><a href="#covar"><i class="ti ti-function"></i> covar</a></li><li class="sb-fn"><a href="#corr"><i class="ti ti-function"></i> corr</a></li><li class="sb-fn"><a href="#chi"><i class="ti ti-function"></i> chi</a></li><li class="sb-fn"><a href="#ranks_of"><i class="ti ti-function"></i> ranks_of</a></li><li class="sb-fn"><a href="#spearman"><i class="ti ti-function"></i> spearman</a></li><li class="sb-fn"><a href="#euclidean"><i class="ti ti-function"></i> euclidean</a></li><li class="sb-fn"><a href="#manhattan"><i class="ti ti-function"></i> manhattan</a></li><li class="sb-fn"><a href="#chebyshev"><i class="ti ti-function"></i> chebyshev</a></li><li class="sb-fn"><a href="#minkowski"><i class="ti ti-function"></i> minkowski</a></li><li class="sb-fn"><a href="#cosine"><i class="ti ti-function"></i> cosine</a></li><li class="sb-fn"><a href="#haversine"><i class="ti ti-function"></i> haversine</a></li><li class="sb-fn"><a href="#hamming"><i class="ti ti-function"></i> hamming</a></li><li class="sb-class"><a href="#normaldist"><i class="ti ti-box"></i> NormalDist</a><ul class="sb-methods"><li><a href="#normaldist-constructor">constructor</a></li><li><a href="#normaldist-pdf">pdf</a></li><li><a href="#normaldist-cdf">cdf</a></li><li><a href="#normaldist-survival">survival</a></li><li><a href="#normaldist-contains">contains</a></li></ul></li><li class="sb-class"><a href="#poissondist"><i class="ti ti-box"></i> PoissonDist</a><ul class="sb-methods"><li><a href="#poissondist-constructor">constructor</a></li><li><a href="#poissondist-pmf">pmf</a></li><li><a href="#poissondist-cdf">cdf</a></li><li><a href="#poissondist-survival">survival</a></li><li><a href="#poissondist-mean">mean</a></li><li><a href="#poissondist-variance">variance</a></li></ul></li><li class="sb-class"><a href="#binomialdist"><i class="ti ti-box"></i> BinomialDist</a><ul class="sb-methods"><li><a href="#binomialdist-constructor">constructor</a></li><li><a href="#binomialdist-choose">choose</a></li><li><a href="#binomialdist-pmf">pmf</a></li><li><a href="#binomialdist-cdf">cdf</a></li><li><a href="#binomialdist-survival">survival</a></li><li><a href="#binomialdist-mean">mean</a></li><li><a href="#binomialdist-variance">variance</a></li></ul></li><li class="sb-class"><a href="#exponentialdist"><i class="ti ti-box"></i> ExponentialDist</a><ul class="sb-methods"><li><a href="#exponentialdist-constructor">constructor</a></li><li><a href="#exponentialdist-pdf">pdf</a></li><li><a href="#exponentialdist-cdf">cdf</a></li><li><a href="#exponentialdist-survival">survival</a></li><li><a href="#exponentialdist-mean">mean</a></li><li><a href="#exponentialdist-variance">variance</a></li><li><a href="#exponentialdist-median">median</a></li><li><a href="#exponentialdist-memoryless">memoryless</a></li></ul></li><li class="sb-class"><a href="#gammadist"><i class="ti ti-box"></i> GammaDist</a><ul class="sb-methods"><li><a href="#gammadist-constructor">constructor</a></li><li><a href="#gammadist-pdf">pdf</a></li><li><a href="#gammadist-mean">mean</a></li><li><a href="#gammadist-variance">variance</a></li><li><a href="#gammadist-mode">mode</a></li><li><a href="#gammadist-is_exponential">is_exponential</a></li><li><a href="#gammadist-is_chi_squared">is_chi_squared</a></li></ul></li><li class="sb-class"><a href="#betadist"><i class="ti ti-box"></i> BetaDist</a><ul class="sb-methods"><li><a href="#betadist-constructor">constructor</a></li><li><a href="#betadist-beta_func">beta_func</a></li><li><a href="#betadist-pdf">pdf</a></li><li><a href="#betadist-mean">mean</a></li><li><a href="#betadist-variance">variance</a></li><li><a href="#betadist-mode">mode</a></li><li><a href="#betadist-is_uniform">is_uniform</a></li><li><a href="#betadist-is_symmetric">is_symmetric</a></li><li><a href="#betadist-skewness">skewness</a></li><li><a href="#betadist-update">update</a></li></ul></li><li class="sb-class"><a href="#gaussianmixture"><i class="ti ti-box"></i> GaussianMixture</a><ul class="sb-methods"><li><a href="#gaussianmixture-constructor">constructor</a></li><li><a href="#gaussianmixture-pdf">pdf</a></li><li><a href="#gaussianmixture-cdf">cdf</a></li><li><a href="#gaussianmixture-mean">mean</a></li><li><a href="#gaussianmixture-variance">variance</a></li><li><a href="#gaussianmixture-dominant_component">dominant_component</a></li><li><a href="#gaussianmixture-responsibility">responsibility</a></li></ul></li><li class="sb-class"><a href="#fdist"><i class="ti ti-box"></i> FDist</a><ul class="sb-methods"><li><a href="#fdist-constructor">constructor</a></li><li><a href="#fdist-log_beta">log_beta</a></li><li><a href="#fdist-beta_cf">beta_cf</a></li><li><a href="#fdist-reg_incomplete_beta">reg_incomplete_beta</a></li><li><a href="#fdist-pdf">pdf</a></li><li><a href="#fdist-cdf">cdf</a></li><li><a href="#fdist-survival">survival</a></li><li><a href="#fdist-mean">mean</a></li><li><a href="#fdist-variance">variance</a></li></ul></li><li class="sb-fn"><a href="#one_way_anova"><i class="ti ti-function"></i> one_way_anova</a></li><li class="sb-fn"><a href="#one_way_anova_unequal"><i class="ti ti-function"></i> one_way_anova_unequal</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-stats.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_erf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_erf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_tgamma">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_tgamma</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_lgamma">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_lgamma</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exp</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="covar">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">covar</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="corr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">corr</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="chi">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">chi</span><span class="paren">(</span><span class="param-name">observed</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">expected</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="ranks_of">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ranks_of</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="spearman">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">spearman</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="euclidean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">euclidean</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="manhattan">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">manhattan</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="chebyshev">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">chebyshev</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="minkowski">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">minkowski</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cosine">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cosine</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="haversine">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">haversine</span><span class="paren">(</span><span class="param-name">lat1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lon1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lon2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="hamming">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hamming</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="one_way_anova">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">one_way_anova</span><span class="paren">(</span><span class="param-name">groups</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 4)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="one_way_anova_unequal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">one_way_anova_unequal</span><span class="paren">(</span><span class="param-name">groups</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">sizes</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 4)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="normaldist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">NormalDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="normaldist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">mean</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">std</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="normaldist-pdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="normaldist-cdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="normaldist-survival">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">survival</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="normaldist-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">prob</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="poissondist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">PoissonDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="poissondist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="poissondist-pmf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pmf</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="poissondist-cdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cdf</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="poissondist-survival">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">survival</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="poissondist-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="poissondist-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="binomialdist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BinomialDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="binomialdist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="binomialdist-choose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">choose</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="binomialdist-pmf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pmf</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="binomialdist-cdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cdf</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="binomialdist-survival">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">survival</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="binomialdist-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="binomialdist-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="exponentialdist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">ExponentialDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="exponentialdist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-pdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-cdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-survival">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">survival</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-median">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">median</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="exponentialdist-memoryless">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">memoryless</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="gammadist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">GammaDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="gammadist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">alpha</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gammadist-pdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gammadist-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gammadist-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gammadist-mode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mode</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gammadist-is_exponential">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_exponential</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gammadist-is_chi_squared">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_chi_squared</span><span class="paren">(</span><span class="param-name">df</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="betadist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BetaDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="betadist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">alpha_val</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta_val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-beta_func">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">beta_func</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-pdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-mode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mode</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-is_uniform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_uniform</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-is_symmetric">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_symmetric</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-skewness">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">skewness</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="betadist-update">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">update</span><span class="paren">(</span><span class="param-name">successes</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">failures</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">BetaDist</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="gaussianmixture">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">GaussianMixture</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="gaussianmixture-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">means</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">stds</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">weights</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gaussianmixture-pdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gaussianmixture-cdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gaussianmixture-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gaussianmixture-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gaussianmixture-dominant_component">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dominant_component</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gaussianmixture-responsibility">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">responsibility</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="fdist">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">FDist</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="fdist-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">d1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-log_beta">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">log_beta</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-beta_cf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">beta_cf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-reg_incomplete_beta">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reg_incomplete_beta</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-pdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-cdf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cdf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-survival">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">survival</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="fdist-variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">variance</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

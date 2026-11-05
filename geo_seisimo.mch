@@ -1,5 +1,5 @@
 from "mocha-geo" import *;
-
+local function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
 function main(didLoad) -> null {
 
     // ----- Section 1: Seismology -----

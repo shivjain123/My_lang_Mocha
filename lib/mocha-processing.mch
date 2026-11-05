@@ -6,6 +6,8 @@ Functions: filter/map/reduce (int, float, str variants)
 Classes: StandardScaler, MinMaxScaler, RobustScaler, PCAReducer
 Part of the Mocha Scientific Library Ecosystem
 """
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 
 function filter(arr: int[], pred: lambda) -> int[] {
     var result: int[] = [];

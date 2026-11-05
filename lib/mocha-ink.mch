@@ -303,7 +303,7 @@ extend NetworkChart {
 };
 
 // =============================================
-// NetworkChart methods
+// SankeyChart methods
 // =============================================
 
 extend SankeyChart {

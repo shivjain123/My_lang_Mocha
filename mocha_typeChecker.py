@@ -154,6 +154,8 @@ class SymbolTable:
         Raises error if already declared in this scope.
         """
         current = self.scopes[-1]
+        if name in current and str(current[name].get("file") or "").startswith("mchi:"):
+            del current[name]  # an imported local helper never blocks a file's own declaration
         if name in current:
             raise MochaTypeError(
                 f"'{name}' is already declared in this scope."
@@ -215,6 +217,7 @@ class TypeChecker:
         self.diamond_conflicts = {}
         self.interface_methods = {}
         self.tag_types = set()
+        self.function_nodes = {}   # NEW: function name -> its FunctionDecl (for argument count checks)
 
         # Pre-declare built-in functions
         self.symbols.declare("print", "null", is_function=True)
@@ -820,14 +823,28 @@ class TypeChecker:
         return "unknown"
     
     def lookup_member(self, obj_type: str, member: str):
-        """Look up a field/method, walking up the inheritance chain"""
-        current = obj_type
-        while current:
+        """Look up a field/method, walking up ALL parents (depth-first, declaration order)"""
+        all_parents = getattr(self, 'all_parents', {})
+        seen = set()
+
+        def walk(current):
+            if not current or current in seen:
+                return None, None
+            seen.add(current)
             symbol = self.symbols.lookup_safe(f"{current}.{member}")
             if symbol:
                 return symbol, current  # returns (symbol, class_it_was_found_in)
-            current = self.inheritance.get(current)
-        return None, None
+            parents = all_parents.get(current)
+            if parents is None:
+                single = self.inheritance.get(current)
+                parents = [single] if single else []
+            for parent in parents:
+                found = walk(parent)
+                if found[0]:
+                    return found
+            return None, None
+
+        return walk(obj_type)
     
     def op_name(self, op: str) -> str:
         return {
@@ -1002,12 +1019,87 @@ class TypeChecker:
         else:
             func_name = "unknown"
             obj_type  = None
+
+        # Complex(a, b) arguments must be numbers, and at most 2 of them
+        if func_name == "Complex" and obj_type is None:
+            if len(node.args) > 2:
+                self.error(
+                    f"Complex() takes at most 2 arguments (real, imag), got {len(node.args)}",
+                    node
+                )
+            for arg in node.args:
+                arg_type = self.check_expr(arg)
+                if arg_type not in ("int", "vast", "float", "unknown"):
+                    self.error(
+                        f"Complex() arguments must be int, vast or float, not '{arg_type}'",
+                        node
+                    )
         
         # Lambda invocation — pred(x) where pred is of type "lambda"
         symbol = self.symbols.lookup_safe(func_name)
         if symbol and symbol.get("type") == "lambda":
             # Can't statically know return type — return "unknown" and let codegen handle it
             return "unknown"
+
+    
+        # Too many arguments to a user-defined function would be silently dropped
+        if obj_type is None and func_name in self.function_nodes:
+            decl = self.function_nodes[func_name]
+            max_args = len([p for p in decl.params if p.name != "didLoad"])
+            given = len([a for a in node.args if not isinstance(a, Assignment)])
+            if given > max_args:
+                self.error(
+                    f"Function '{func_name}' takes at most {max_args} argument(s), got {given}",
+                    node
+                )
+
+        # Too many arguments to a method would be silently dropped
+        # (walks up the parent chain so inherited methods are checked too)
+        if obj_type in self.class_nodes:
+            current = obj_type
+            seen = set()
+            found = False
+            while current in self.class_nodes and current not in seen and not found:
+                seen.add(current)
+                cls_node = self.class_nodes[current]
+                if not hasattr(cls_node, "body"):
+                    break
+                for member in cls_node.body:
+                    if isinstance(member, (FunctionDecl, MethodDecl)) and member.name == func_name:
+                        max_args = len([p for p in member.params if p.name != "didLoad"])
+                        given = len([a for a in node.args if not isinstance(a, Assignment)])
+                        if given > max_args:
+                            self.error(
+                                f"Method '{obj_type}.{func_name}' takes at most {max_args} argument(s), got {given}",
+                                node
+                            )
+                        found = True
+                        break
+                current = self.inheritance.get(current)
+
+        # Too many arguments to a constructor would be silently dropped
+        # (walks up the parent chain in case the constructor is inherited)
+        if obj_type is None and func_name in self.class_nodes:
+            current = func_name
+            seen = set()
+            found = False
+            while current in self.class_nodes and current not in seen and not found:
+                seen.add(current)
+                cls_node = self.class_nodes[current]
+                if not hasattr(cls_node, "body"):
+                    break
+                for member in cls_node.body:
+                    if isinstance(member, (FunctionDecl, MethodDecl)) and member.name == "constructor":
+                        max_args = len([p for p in member.params if p.name != "didLoad"])
+                        given = len([a for a in node.args if not isinstance(a, Assignment)])
+                        if given > max_args:
+                            self.error(
+                                f"Constructor of '{func_name}' takes at most {max_args} argument(s), got {given}",
+                                node
+                            )
+                        found = True
+                        break
+                current = self.inheritance.get(current)
 
         # Diamond conflict check — unqualified call on ambiguous method
         if obj_type and obj_type != "unknown":
@@ -1585,6 +1677,17 @@ class TypeChecker:
             self.error("Cannot assign to tuple element. Tuples are immutable in Mocha.", node)
             return
         
+        # Complex is immutable: c.real = 9 would be silently ignored by codegen
+        if isinstance(node.target, MemberAccess):
+            target_obj_type = self.check_expr(node.target.obj)
+            if target_obj_type == "Complex":
+                self.error(
+                    f"Cannot assign to '{node.target.member}': Complex is immutable in Mocha. "
+                    f"Create a new one instead, e.g. c = Complex(9, c.imag)",
+                    node
+                )
+                return
+        
         value_type = self.check_expr(node.value)
         # C-backed handle types have no RC: storing a variable of one into a field or an
         # array/dict slot would leave two owners of one object
@@ -1662,6 +1765,12 @@ class TypeChecker:
             # Dict assignment — always valid, values are dynamic
             if obj_type == "dict":
                 self.check_expr(node.target.index)  # just check key is valid expr
+                if isinstance(node.target.obj, Identifier) and isinstance(node.value, Identifier) \
+                        and node.target.obj.name == node.value.name:
+                    self.error(
+                        f"Cannot store dict '{node.value.name}' inside itself. "
+                        f"That creates a cycle, and printing or releasing it would never end", node
+                    )
                 return
 
             elem_type = self.extract_element_type(obj_type)
@@ -1715,6 +1824,17 @@ class TypeChecker:
         """
         target_type = self.check_expr(node.target)
         value_type  = self.check_expr(node.value)
+
+        # Complex is immutable: c.real += 5 must not reach codegen
+        if isinstance(node.target, MemberAccess):
+            target_obj_type = self.check_expr(node.target.obj)
+            if target_obj_type == "Complex":
+                self.error(
+                    f"Cannot use '{node.op}' on '{node.target.member}': Complex is immutable in Mocha. "
+                    f"Create a new one instead, e.g. c = Complex(c.real + 5, c.imag)",
+                    node
+                )
+                return
 
         if isinstance(node.target, Identifier):
             symbol = self.symbols.lookup_safe(node.target.name)
@@ -1937,7 +2057,8 @@ class TypeChecker:
         return False
     
     def check_function(self, node):
-        if not self.symbols.lookup_safe(node.name):
+        _ex = self.symbols.lookup_safe(node.name)
+        if not _ex or str(_ex.get("file") or "").startswith("mchi:"):
             visibility = "local" if getattr(node, 'is_local', False) else "public"
             self.symbols.declare(
                 node.name, node.return_type, is_function=True,
@@ -1989,12 +2110,25 @@ class TypeChecker:
         self.current_file = prev_file
     
     def is_subclass_of(self, cls: str, parent: str) -> bool:
-        """Walk up the inheritance chain to see if cls descends from parent"""
-        current = cls
-        while current in self.inheritance:
-            current = self.inheritance[current]
+        """True if cls descends from parent through any of its parents"""
+        all_parents = getattr(self, 'all_parents', {})
+
+        def parents_of(name):
+            if name in all_parents:
+                return all_parents[name]
+            single = self.inheritance.get(name)
+            return [single] if single else []
+
+        seen = set()
+        stack = list(parents_of(cls))
+        while stack:
+            current = stack.pop()
             if current == parent:
                 return True
+            if current in seen:
+                continue
+            seen.add(current)
+            stack.extend(parents_of(current))
         return False
 
     def check_class(self, node: ClassDecl):
@@ -2009,6 +2143,9 @@ class TypeChecker:
         # Track inheritance
         if node.parents:
             self.inheritance[node.name] = node.parents[0]
+            if not hasattr(self, 'all_parents'):
+                self.all_parents = {}
+            self.all_parents[node.name] = list(node.parents)
 
         prev_class = self.current_class
         self.current_class = node.name
@@ -2228,7 +2365,7 @@ class TypeChecker:
         for node in program.statements:
             if isinstance(node, FunctionDecl):
                 existing = self.symbols.lookup_safe(node.name)
-                if existing:
+                if existing and not str(existing.get("file") or "").startswith("mchi:"):
                     existing_node = next(
                         n for n in program.statements
                         if isinstance(n, FunctionDecl) and n.name == node.name
@@ -2255,6 +2392,7 @@ class TypeChecker:
                         node.name, node.return_type, is_function=True,
                         visibility=visibility, file=getattr(node, 'source_file', None)
                     )
+                    self.function_nodes[node.name] = node
             elif isinstance(node, ClassDecl):
                 self.class_nodes[node.name] = node
                 if not self.symbols.lookup_safe(node.name):

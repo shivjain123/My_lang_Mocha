@@ -5,6 +5,8 @@
 
 // mocha-lib-deps: mocha-stats, mocha-matvec
 
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
 function filter(arr: int[], pred: lambda) -> int[];
 function filterFloat(arr: float[], pred: lambda) -> float[];
 function filterStr(arr: str[], pred: lambda) -> str[];

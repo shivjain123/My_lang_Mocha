@@ -1,17 +1,17 @@
-~~ mocha-astro — Vedic Astrology (Jyotish) Computation Library for Mocha
-~~ Section 1: Ayanamsa & Sidereal Foundations
-~~
-~~ NOTE ON PRECISION: This library uses mean orbital elements and linear
-~~ ayanamsa models (the same approach as Meeus's "Astronomical Algorithms"
-~~ and most pre-2000 astrology software), not VSOP87/JPL-grade numerical
-~~ ephemerides. Expect arcminute-level accuracy — sufficient for dasha,
-~~ varga, and aspect work, but not observatory-grade. Ayanamsa constants
-~~ are approximate mean models; exact values from Swiss Ephemeris-based
-~~ software may differ by a few arcminutes due to periodic correction terms.
-~~
-~~ Part of the Mocha Scientific Library Ecosystem
-~~ License: Polyform Non-Commercial
+"""
+ mocha-astro — Vedic Astrology (Jyotish) Computation Library for Mocha
 
+ NOTE ON PRECISION: This library uses mean orbital elements and linear
+ ayanamsa models (the same approach as Meeus's "Astronomical Algorithms"
+ and most pre-2000 astrology software), not VSOP87/JPL-grade numerical
+ ephemerides. Expect arcminute-level accuracy — sufficient for dasha,
+ varga, and aspect work, but not observatory-grade. Ayanamsa constants
+ are approximate mean models; exact values from Swiss Ephemeris-based
+ software may differ by a few arcminutes due to periodic correction terms.
+
+ Part of the Mocha Scientific Library Ecosystem
+ License: Polyform Non-Commercial
+"""
 // mocha-lib-deps: mocha-math
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
@@ -19,9 +19,9 @@ local function c_exit(code: int) -> null native mocha_exit;
 
 const PRECESSION_RATE_DEG_YEAR: float = 0.0139552354;
 const LAHIRI_AYANAMSA_2000: float = 23.85675;
-const KP_AYANAMSA_2000: float = 23.71799;
+const KP_AYANAMSA_2000: float = 23.7602;
 const FAGAN_BRADLEY_1950: float = 24.0419;
-const RAMAN_OFFSET: float = 0.6167;
+const RAMAN_OFFSET: float = 1.4463;
 
 // ================================================================
 // SECTION 1: AYANAMSA & SIDEREAL FOUNDATIONS
@@ -793,7 +793,7 @@ function placidus_intermediate_cusp(ramc_deg: float, latitude_deg: float, obliqu
         lamb_da = ecliptic_longitude_from_ra(target_alpha, obliquity_deg);
         if (abs(lamb_da - prev_lamb_da) < 1E-6) {
             converged = true;
-            iter = 25;
+            break;
         };
         prev_lamb_da = lamb_da;
         iter++;

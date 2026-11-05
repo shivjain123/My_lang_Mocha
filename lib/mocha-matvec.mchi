@@ -5,8 +5,8 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
 extend int[] function scalar(n: int) -> int[];
 extend int[] function vector(other: int[]) -> int;
 extend int[] function hadamard(other: int[]) -> int[];
@@ -21,7 +21,7 @@ extend float[] function add(other: float[]) -> float[];
 extend float[] function sub(other: float[]) -> float[];
 extend float[] function magn() -> float;
 extend float[] function unit_vector() -> float[];
-function newton_sqrt(x: float) -> float;
+local function newton_sqrt(x: float) -> float;
 function complex_dot(a: Complex[], b: Complex[]) -> Complex;
 function complex_norm(v: Complex[]) -> float;
 extend int[][] function scalar(n: int) -> int[][];

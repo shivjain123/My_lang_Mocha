@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-SymCha.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-SymCha.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-class"><a href="#expr"><i class="ti ti-box"></i> Expr</a><ul class="sb-methods"><li><a href="#expr-constructor">constructor</a></li></ul></li><li class="sb-fn"><a href="#num"><i class="ti ti-function"></i> num</a></li><li class="sb-fn"><a href="#var_e"><i class="ti ti-function"></i> var_e</a></li><li class="sb-fn"><a href="#add"><i class="ti ti-function"></i> add</a></li><li class="sb-fn"><a href="#sub"><i class="ti ti-function"></i> sub</a></li><li class="sb-fn"><a href="#mul"><i class="ti ti-function"></i> mul</a></li><li class="sb-fn"><a href="#div_e"><i class="ti ti-function"></i> div_e</a></li><li class="sb-fn"><a href="#pow_e"><i class="ti ti-function"></i> pow_e</a></li><li class="sb-fn"><a href="#neg"><i class="ti ti-function"></i> neg</a></li><li class="sb-fn"><a href="#sin_e"><i class="ti ti-function"></i> sin_e</a></li><li class="sb-fn"><a href="#cos_e"><i class="ti ti-function"></i> cos_e</a></li><li class="sb-fn"><a href="#ln_e"><i class="ti ti-function"></i> ln_e</a></li><li class="sb-fn"><a href="#exp_e"><i class="ti ti-function"></i> exp_e</a></li><li class="sb-fn"><a href="#tan_e"><i class="ti ti-function"></i> tan_e</a></li><li class="sb-fn"><a href="#asin_e"><i class="ti ti-function"></i> asin_e</a></li><li class="sb-fn"><a href="#acos_e"><i class="ti ti-function"></i> acos_e</a></li><li class="sb-fn"><a href="#atan_e"><i class="ti ti-function"></i> atan_e</a></li><li class="sb-fn"><a href="#sinh_e"><i class="ti ti-function"></i> sinh_e</a></li><li class="sb-fn"><a href="#cosh_e"><i class="ti ti-function"></i> cosh_e</a></li><li class="sb-fn"><a href="#tanh_e"><i class="ti ti-function"></i> tanh_e</a></li><li class="sb-fn"><a href="#sym_diff_pass"><i class="ti ti-function"></i> sym_diff_pass</a></li><li class="sb-fn"><a href="#sym_grad"><i class="ti ti-function"></i> sym_grad</a></li><li class="sb-fn"><a href="#sym_partial2"><i class="ti ti-function"></i> sym_partial2</a></li><li class="sb-fn"><a href="#to_superscript"><i class="ti ti-function"></i> to_superscript</a></li><li class="sb-fn"><a href="#sym_precedence"><i class="ti ti-function"></i> sym_precedence</a></li><li class="sb-fn"><a href="#sym_print_parens"><i class="ti ti-function"></i> sym_print_parens</a></li><li class="sb-fn"><a href="#sym_print"><i class="ti ti-function"></i> sym_print</a></li><li class="sb-fn"><a href="#is_num"><i class="ti ti-function"></i> is_num</a></li><li class="sb-fn"><a href="#is_zero"><i class="ti ti-function"></i> is_zero</a></li><li class="sb-fn"><a href="#is_one"><i class="ti ti-function"></i> is_one</a></li><li class="sb-fn"><a href="#sym_equal"><i class="ti ti-function"></i> sym_equal</a></li><li class="sb-fn"><a href="#sym_simplify"><i class="ti ti-function"></i> sym_simplify</a></li><li class="sb-fn"><a href="#sym_simplify_fix"><i class="ti ti-function"></i> sym_simplify_fix</a></li><li class="sb-fn"><a href="#sym_simplify_full"><i class="ti ti-function"></i> sym_simplify_full</a></li><li class="sb-fn"><a href="#sym_diff"><i class="ti ti-function"></i> sym_diff</a></li><li class="sb-fn"><a href="#sym_eval"><i class="ti ti-function"></i> sym_eval</a></li><li class="sb-fn"><a href="#linear_coeff"><i class="ti ti-function"></i> linear_coeff</a></li><li class="sb-fn"><a href="#sym_antidv"><i class="ti ti-function"></i> sym_antidv</a></li><li class="sb-fn"><a href="#sym_print_antidv"><i class="ti ti-function"></i> sym_print_antidv</a></li><li class="sb-fn"><a href="#sym_integral"><i class="ti ti-function"></i> sym_integral</a></li><li class="sb-fn"><a href="#sym_has_div"><i class="ti ti-function"></i> sym_has_div</a></li><li class="sb-fn"><a href="#sym_lhopital"><i class="ti ti-function"></i> sym_lhopital</a></li><li class="sb-fn"><a href="#sym_limit"><i class="ti ti-function"></i> sym_limit</a></li><li class="sb-fn"><a href="#sym_limit_numerical"><i class="ti ti-function"></i> sym_limit_numerical</a></li><li class="sb-fn"><a href="#sym_taylor_step"><i class="ti ti-function"></i> sym_taylor_step</a></li><li class="sb-fn"><a href="#sym_taylor"><i class="ti ti-function"></i> sym_taylor</a></li><li class="sb-fn"><a href="#sym_solve"><i class="ti ti-function"></i> sym_solve</a></li><li class="sb-fn"><a href="#sym_lagrange"><i class="ti ti-function"></i> sym_lagrange</a></li><li class="sb-fn"><a href="#sym_fourier"><i class="ti ti-function"></i> sym_fourier</a></li><li class="sb-fn"><a href="#detect_pole_order"><i class="ti ti-function"></i> detect_pole_order</a></li><li class="sb-fn"><a href="#sym_laurent"><i class="ti ti-function"></i> sym_laurent</a></li><li class="sb-fn"><a href="#cheby_t"><i class="ti ti-function"></i> cheby_T</a></li><li class="sb-fn"><a href="#cheby_t_step"><i class="ti ti-function"></i> cheby_T_step</a></li><li class="sb-fn"><a href="#cheby_t_expr"><i class="ti ti-function"></i> cheby_T_expr</a></li><li class="sb-fn"><a href="#cheby_coeff"><i class="ti ti-function"></i> cheby_coeff</a></li><li class="sb-fn"><a href="#sym_chebyshev"><i class="ti ti-function"></i> sym_chebyshev</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-SymCha.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="num">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">num</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="var_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">var_e</span><span class="paren">(</span><span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sub">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sub</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="div_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">div_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="pow_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pow_e</span><span class="paren">(</span><span class="param-name">base</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">exp</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neg">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neg</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sin_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sin_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cos_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cos_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="ln_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ln_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="exp_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">exp_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="tan_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tan_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="asin_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">asin_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="acos_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">acos_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="atan_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">atan_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sinh_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sinh_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cosh_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cosh_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="tanh_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tanh_e</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_diff_pass">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_diff_pass</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_grad</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var1</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">var2</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_partial2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_partial2</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var1</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">var2</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="to_superscript">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">to_superscript</span><span class="paren">(</span><span class="param-name">s</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_precedence">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_precedence</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_print_parens">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_print_parens</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">parent_prec</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_print">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_print</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="is_num">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_num</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">v</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="is_zero">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_zero</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="is_one">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_one</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_equal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_equal</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_simplify">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_simplify</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_simplify_fix">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_simplify_fix</span><span class="paren">(</span><span class="param-name">prev</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">next</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_simplify_full">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_simplify_full</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_diff">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_diff</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_eval">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_eval</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="linear_coeff">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">linear_coeff</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_antidv">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_antidv</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_print_antidv">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_print_antidv</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_integral">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_integral</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_has_div">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_has_div</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_lhopital">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_lhopital</span><span class="paren">(</span><span class="param-name">orig</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">lh_num</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">lh_den</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">point</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">iter</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_limit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_limit</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">point</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_limit_numerical">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_limit_numerical</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">point</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_taylor_step">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_taylor_step</span><span class="paren">(</span><span class="param-name">current</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">point</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">terms</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">factorial</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">result</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_taylor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_taylor</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">point</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">terms</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_solve">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_solve</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">initial</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_lagrange">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_lagrange</span><span class="paren">(</span><span class="param-name">xs</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">ys</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_fourier">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_fourier</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">terms</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="detect_pole_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">detect_pole_order</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_laurent">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_laurent</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">terms</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cheby_t">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cheby_T</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cheby_t_step">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cheby_T_step</span><span class="paren">(</span><span class="param-name">t_prev</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">t_curr</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cheby_t_expr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cheby_T_expr</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cheby_coeff">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cheby_coeff</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">num_points</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="sym_chebyshev">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sym_chebyshev</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">var_name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">terms</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Expr</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="expr">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Expr</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="expr-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">kind</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">left</span><span class="colon">:</span> <span class="param-type">Expr</span>, <span class="param-name">right</span><span class="colon">:</span> <span class="param-type">Expr</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

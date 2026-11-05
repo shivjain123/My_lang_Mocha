@@ -5,13 +5,13 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
 const PRECESSION_RATE_DEG_YEAR: float = 0.0139552354;
 const LAHIRI_AYANAMSA_2000: float = 23.85675;
-const KP_AYANAMSA_2000: float = 23.71799;
+const KP_AYANAMSA_2000: float = 23.7602;
 const FAGAN_BRADLEY_1950: float = 24.0419;
-const RAMAN_OFFSET: float = 0.6167;
+const RAMAN_OFFSET: float = 1.4463;
 function julian_day_number(year: int, month: int, day: int, hour: float) -> float;
 function fractional_year(year: int, month: int, day: int) -> float;
 function normalize_degrees(angle: float) -> float;

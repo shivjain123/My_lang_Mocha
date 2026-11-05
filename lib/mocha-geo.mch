@@ -1,9 +1,12 @@
-~~ mocha-geo — Geoscience Library for Mocha
-~~ Section 1: Seismology
-~~ Section 2: Mineralogy & Crystallography
-~~
-~~ Part of the Mocha Scientific Library Ecosystem
-~~ License: Polyform Non-Commercial
+"""
+mocha-geo — Geoscience Library for Mocha
+Section 1: Seismology
+Section 2: Mineralogy & Crystallography
+
+Part of the Mocha Scientific Library Ecosystem
+License: Polyform Non-Commercial
+
+"""
 
 // mocha-lib-deps: mocha-math
 local function c_exp(x: float) -> float native mocha_wrap_exp;

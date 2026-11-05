@@ -1,0 +1,3155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-forge.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-forge.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#forge_db_setup"><i class="ti ti-function"></i> forge_db_setup</a></li><li class="sb-fn"><a href="#forge_db_write_meta"><i class="ti ti-function"></i> forge_db_write_meta</a></li><li class="sb-fn"><a href="#forge_db_read_meta"><i class="ti ti-function"></i> forge_db_read_meta</a></li><li class="sb-fn"><a href="#forge_db_write_array"><i class="ti ti-function"></i> forge_db_write_array</a></li><li class="sb-fn"><a href="#forge_db_read_array_len"><i class="ti ti-function"></i> forge_db_read_array_len</a></li><li class="sb-fn"><a href="#forge_db_read_array_cell"><i class="ti ti-function"></i> forge_db_read_array_cell</a></li><li class="sb-fn"><a href="#forge_db_write_tree_node"><i class="ti ti-function"></i> forge_db_write_tree_node</a></li><li class="sb-fn"><a href="#forge_db_read_tree_node_isleaf"><i class="ti ti-function"></i> forge_db_read_tree_node_isleaf</a></li><li class="sb-fn"><a href="#forge_db_read_tree_node_value"><i class="ti ti-function"></i> forge_db_read_tree_node_value</a></li><li class="sb-fn"><a href="#forge_db_read_tree_node_feature"><i class="ti ti-function"></i> forge_db_read_tree_node_feature</a></li><li class="sb-fn"><a href="#forge_db_read_tree_node_threshold"><i class="ti ti-function"></i> forge_db_read_tree_node_threshold</a></li><li class="sb-fn"><a href="#forge_db_read_tree_node_leftid"><i class="ti ti-function"></i> forge_db_read_tree_node_leftid</a></li><li class="sb-fn"><a href="#forge_db_read_tree_node_rightid"><i class="ti ti-function"></i> forge_db_read_tree_node_rightid</a></li><li class="sb-fn"><a href="#forge_serialize_dtnode"><i class="ti ti-function"></i> forge_serialize_dtnode</a></li><li class="sb-fn"><a href="#forge_serialize_surrogatenode"><i class="ti ti-function"></i> forge_serialize_surrogatenode</a></li><li class="sb-fn"><a href="#forge_deserialize_dtnode"><i class="ti ti-function"></i> forge_deserialize_dtnode</a></li><li class="sb-fn"><a href="#forge_deserialize_surrogatenode"><i class="ti ti-function"></i> forge_deserialize_surrogatenode</a></li><li class="sb-class"><a href="#onehotencoder"><i class="ti ti-box"></i> OneHotEncoder</a><ul class="sb-methods"><li><a href="#onehotencoder-constructor">constructor</a></li><li><a href="#onehotencoder-fit">fit</a></li><li><a href="#onehotencoder-transform">transform</a></li><li><a href="#onehotencoder-inverse_transform">inverse_transform</a></li><li><a href="#onehotencoder-get_feature_names">get_feature_names</a></li><li><a href="#onehotencoder-save">save</a></li><li><a href="#onehotencoder-load">load</a></li></ul></li><li class="sb-class"><a href="#ordinalencoder"><i class="ti ti-box"></i> OrdinalEncoder</a><ul class="sb-methods"><li><a href="#ordinalencoder-constructor">constructor</a></li><li><a href="#ordinalencoder-fit">fit</a></li><li><a href="#ordinalencoder-transform">transform</a></li><li><a href="#ordinalencoder-inverse_transform">inverse_transform</a></li><li><a href="#ordinalencoder-get_order">get_order</a></li><li><a href="#ordinalencoder-save">save</a></li><li><a href="#ordinalencoder-load">load</a></li></ul></li><li class="sb-class"><a href="#targetencoder"><i class="ti ti-box"></i> TargetEncoder</a><ul class="sb-methods"><li><a href="#targetencoder-constructor">constructor</a></li><li><a href="#targetencoder-fit">fit</a></li><li><a href="#targetencoder-transform">transform</a></li><li><a href="#targetencoder-inverse_transform">inverse_transform</a></li><li><a href="#targetencoder-get_categories">get_categories</a></li><li><a href="#targetencoder-save">save</a></li><li><a href="#targetencoder-load">load</a></li></ul></li><li class="sb-class"><a href="#linearregression"><i class="ti ti-box"></i> LinearRegression</a><ul class="sb-methods"><li><a href="#linearregression-constructor">constructor</a></li><li><a href="#linearregression-ridge">ridge</a></li><li><a href="#linearregression-lasso">lasso</a></li><li><a href="#linearregression-fit">fit</a></li><li><a href="#linearregression-predict">predict</a></li><li><a href="#linearregression-mse">mse</a></li><li><a href="#linearregression-rmse">rmse</a></li><li><a href="#linearregression-r2">r2</a></li><li><a href="#linearregression-summary">summary</a></li><li><a href="#linearregression-save">save</a></li><li><a href="#linearregression-load">load</a></li></ul></li><li class="sb-class"><a href="#logisticclassification"><i class="ti ti-box"></i> LogisticClassification</a><ul class="sb-methods"><li><a href="#logisticclassification-constructor">constructor</a></li><li><a href="#logisticclassification-confusion">confusion</a></li><li><a href="#logisticclassification-sigmoid">sigmoid</a></li><li><a href="#logisticclassification-fit">fit</a></li><li><a href="#logisticclassification-predict_probab">predict_probab</a></li><li><a href="#logisticclassification-predict">predict</a></li><li><a href="#logisticclassification-accuracy">accuracy</a></li><li><a href="#logisticclassification-precision">precision</a></li><li><a href="#logisticclassification-recall">recall</a></li><li><a href="#logisticclassification-f1">f1</a></li><li><a href="#logisticclassification-summary">summary</a></li><li><a href="#logisticclassification-save">save</a></li><li><a href="#logisticclassification-load">load</a></li></ul></li><li class="sb-class"><a href="#knnclassifier"><i class="ti ti-box"></i> KNNClassifier</a><ul class="sb-methods"><li><a href="#knnclassifier-constructor">constructor</a></li><li><a href="#knnclassifier-confusion">confusion</a></li><li><a href="#knnclassifier-use_euclidean">use_euclidean</a></li><li><a href="#knnclassifier-use_manhattan">use_manhattan</a></li><li><a href="#knnclassifier-use_cosine">use_cosine</a></li><li><a href="#knnclassifier-use_chebyshev">use_chebyshev</a></li><li><a href="#knnclassifier-fit">fit</a></li><li><a href="#knnclassifier-compute_distance">compute_distance</a></li><li><a href="#knnclassifier-predict_one">predict_one</a></li><li><a href="#knnclassifier-predict">predict</a></li><li><a href="#knnclassifier-accuracy">accuracy</a></li><li><a href="#knnclassifier-precision">precision</a></li><li><a href="#knnclassifier-recall">recall</a></li><li><a href="#knnclassifier-f1">f1</a></li><li><a href="#knnclassifier-fit_reg">fit_reg</a></li><li><a href="#knnclassifier-predict_reg">predict_reg</a></li><li><a href="#knnclassifier-save">save</a></li><li><a href="#knnclassifier-load">load</a></li></ul></li><li class="sb-class"><a href="#kmeans"><i class="ti ti-box"></i> KMeans</a><ul class="sb-methods"><li><a href="#kmeans-constructor">constructor</a></li><li><a href="#kmeans-set_threshold">set_threshold</a></li><li><a href="#kmeans-fit">fit</a></li><li><a href="#kmeans-get_labels">get_labels</a></li><li><a href="#kmeans-get_centroids">get_centroids</a></li><li><a href="#kmeans-inertia">inertia</a></li><li><a href="#kmeans-save">save</a></li><li><a href="#kmeans-load">load</a></li></ul></li><li class="sb-class"><a href="#dtnode"><i class="ti ti-box"></i> DTNode</a><ul class="sb-methods"><li><a href="#dtnode-constructor">constructor</a></li></ul></li><li class="sb-fn"><a href="#dt_leaf"><i class="ti ti-function"></i> dt_leaf</a></li><li class="sb-fn"><a href="#dt_node"><i class="ti ti-function"></i> dt_node</a></li><li class="sb-class"><a href="#decisiontree"><i class="ti ti-box"></i> DecisionTree</a><ul class="sb-methods"><li><a href="#decisiontree-constructor">constructor</a></li><li><a href="#decisiontree-fast_gini">fast_gini</a></li><li><a href="#decisiontree-gini">gini</a></li><li><a href="#decisiontree-entropy">entropy</a></li><li><a href="#decisiontree-impurity">impurity</a></li><li><a href="#decisiontree-majority">majority</a></li><li><a href="#decisiontree-build">build</a></li><li><a href="#decisiontree-fit">fit</a></li><li><a href="#decisiontree-predict_one">predict_one</a></li><li><a href="#decisiontree-predict">predict</a></li><li><a href="#decisiontree-confusion">confusion</a></li><li><a href="#decisiontree-accuracy">accuracy</a></li><li><a href="#decisiontree-precision">precision</a></li><li><a href="#decisiontree-recall">recall</a></li><li><a href="#decisiontree-f1">f1</a></li><li><a href="#decisiontree-save">save</a></li><li><a href="#decisiontree-load">load</a></li></ul></li><li class="sb-class"><a href="#randomforest"><i class="ti ti-box"></i> RandomForest</a><ul class="sb-methods"><li><a href="#randomforest-constructor">constructor</a></li><li><a href="#randomforest-fast_gini">fast_gini</a></li><li><a href="#randomforest-gini">gini</a></li><li><a href="#randomforest-entropy">entropy</a></li><li><a href="#randomforest-impurity">impurity</a></li><li><a href="#randomforest-majority">majority</a></li><li><a href="#randomforest-build_tree">build_tree</a></li><li><a href="#randomforest-fit">fit</a></li><li><a href="#randomforest-predict_one_tree">predict_one_tree</a></li><li><a href="#randomforest-predict">predict</a></li><li><a href="#randomforest-confusion">confusion</a></li><li><a href="#randomforest-accuracy">accuracy</a></li><li><a href="#randomforest-precision">precision</a></li><li><a href="#randomforest-recall">recall</a></li><li><a href="#randomforest-f1">f1</a></li><li><a href="#randomforest-save">save</a></li><li><a href="#randomforest-load">load</a></li></ul></li><li class="sb-class"><a href="#svm"><i class="ti ti-box"></i> Svm</a><ul class="sb-methods"><li><a href="#svm-constructor">constructor</a></li><li><a href="#svm-linear">linear</a></li><li><a href="#svm-rbf">rbf</a></li><li><a href="#svm-ridge">ridge</a></li><li><a href="#svm-kernel">kernel</a></li><li><a href="#svm-fit">fit</a></li><li><a href="#svm-fit_linear">fit_linear</a></li><li><a href="#svm-fit_rbf">fit_rbf</a></li><li><a href="#svm-decision_rbf">decision_rbf</a></li><li><a href="#svm-predict">predict</a></li><li><a href="#svm-predict_linear">predict_linear</a></li><li><a href="#svm-predict_rbf">predict_rbf</a></li><li><a href="#svm-confusion">confusion</a></li><li><a href="#svm-accuracy">accuracy</a></li><li><a href="#svm-precision">precision</a></li><li><a href="#svm-recall">recall</a></li><li><a href="#svm-f1">f1</a></li><li><a href="#svm-save">save</a></li><li><a href="#svm-load">load</a></li></ul></li><li class="sb-class"><a href="#traintestsplit"><i class="ti ti-box"></i> TrainTestSplit</a><ul class="sb-methods"><li><a href="#traintestsplit-constructor">constructor</a></li></ul></li><li class="sb-fn"><a href="#train_test_split"><i class="ti ti-function"></i> train_test_split</a></li><li class="sb-fn"><a href="#cross_val_split"><i class="ti ti-function"></i> cross_val_split</a></li><li class="sb-class"><a href="#confusionmatrix"><i class="ti ti-box"></i> ConfusionMatrix</a><ul class="sb-methods"><li><a href="#confusionmatrix-constructor">constructor</a></li><li><a href="#confusionmatrix-tp">tp</a></li><li><a href="#confusionmatrix-fp">fp</a></li><li><a href="#confusionmatrix-fn">fn</a></li><li><a href="#confusionmatrix-tn">tn</a></li><li><a href="#confusionmatrix-accuracy">accuracy</a></li><li><a href="#confusionmatrix-precision">precision</a></li><li><a href="#confusionmatrix-recall">recall</a></li><li><a href="#confusionmatrix-f1">f1</a></li><li><a href="#confusionmatrix-pad">pad</a></li><li><a href="#confusionmatrix-print_matrix">print_matrix</a></li></ul></li><li class="sb-fn"><a href="#confusion_matrix"><i class="ti ti-function"></i> confusion_matrix</a></li><li class="sb-class"><a href="#polynomialfeatures"><i class="ti ti-box"></i> PolynomialFeatures</a><ul class="sb-methods"><li><a href="#polynomialfeatures-constructor">constructor</a></li><li><a href="#polynomialfeatures-inter_only">inter_only</a></li><li><a href="#polynomialfeatures-fit">fit</a></li><li><a href="#polynomialfeatures-decode_index">decode_index</a></li><li><a href="#polynomialfeatures-count_indices">count_indices</a></li><li><a href="#polynomialfeatures-transform">transform</a></li><li><a href="#polynomialfeatures-fit_transform">fit_transform</a></li></ul></li><li class="sb-class"><a href="#surrogatenode"><i class="ti ti-box"></i> SurrogateNode</a><ul class="sb-methods"><li><a href="#surrogatenode-constructor">constructor</a></li></ul></li><li class="sb-fn"><a href="#surrogate_leaf"><i class="ti ti-function"></i> surrogate_leaf</a></li><li class="sb-fn"><a href="#surrogate_node"><i class="ti ti-function"></i> surrogate_node</a></li><li class="sb-class"><a href="#surrogaterf"><i class="ti ti-box"></i> SurrogateRF</a><ul class="sb-methods"><li><a href="#surrogaterf-constructor">constructor</a></li><li><a href="#surrogaterf-build_surrogate">build_surrogate</a></li><li><a href="#surrogaterf-predict_one_surrogate">predict_one_surrogate</a></li><li><a href="#surrogaterf-fit_surrogate">fit_surrogate</a></li><li><a href="#surrogaterf-predict_mean">predict_mean</a></li><li><a href="#surrogaterf-predict_variance">predict_variance</a></li></ul></li><li class="sb-class"><a href="#paramspec"><i class="ti ti-box"></i> ParamSpec</a><ul class="sb-methods"><li><a href="#paramspec-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#searchresult"><i class="ti ti-box"></i> SearchResult</a><ul class="sb-methods"><li><a href="#searchresult-constructor">constructor</a></li><li><a href="#searchresult-print_result">print_result</a></li></ul></li><li class="sb-class"><a href="#bayesiansearch"><i class="ti ti-box"></i> BayesianSearch</a><ul class="sb-methods"><li><a href="#bayesiansearch-constructor">constructor</a></li><li><a href="#bayesiansearch-add_int_param">add_int_param</a></li><li><a href="#bayesiansearch-add_float_param">add_float_param</a></li><li><a href="#bayesiansearch-sample_random">sample_random</a></li><li><a href="#bayesiansearch-ei">ei</a></li><li><a href="#bayesiansearch-next_point">next_point</a></li><li><a href="#bayesiansearch-eval_knn">eval_knn</a></li><li><a href="#bayesiansearch-eval_dt">eval_dt</a></li><li><a href="#bayesiansearch-eval_svm">eval_svm</a></li><li><a href="#bayesiansearch-run_search">run_search</a></li><li><a href="#bayesiansearch-search_knn">search_knn</a></li><li><a href="#bayesiansearch-search_dt">search_dt</a></li><li><a href="#bayesiansearch-search_svm">search_svm</a></li></ul></li><li class="sb-fn"><a href="#subsample_indices"><i class="ti ti-function"></i> subsample_indices</a></li><li class="sb-fn"><a href="#gb_build_tree"><i class="ti ti-function"></i> gb_build_tree</a></li><li class="sb-fn"><a href="#gb_predict_one"><i class="ti ti-function"></i> gb_predict_one</a></li><li class="sb-fn"><a href="#gb_sigmoid"><i class="ti ti-function"></i> gb_sigmoid</a></li><li class="sb-class"><a href="#gradientboosting"><i class="ti ti-box"></i> GradientBoosting</a><ul class="sb-methods"><li><a href="#gradientboosting-constructor">constructor</a></li><li><a href="#gradientboosting-use_classification">use_classification</a></li><li><a href="#gradientboosting-fit">fit</a></li><li><a href="#gradientboosting-predict">predict</a></li><li><a href="#gradientboosting-mse">mse</a></li><li><a href="#gradientboosting-rmse">rmse</a></li><li><a href="#gradientboosting-r2">r2</a></li><li><a href="#gradientboosting-predict_proba">predict_proba</a></li><li><a href="#gradientboosting-predict_class">predict_class</a></li><li><a href="#gradientboosting-accuracy">accuracy</a></li><li><a href="#gradientboosting-precision">precision</a></li><li><a href="#gradientboosting-recall">recall</a></li><li><a href="#gradientboosting-f1">f1</a></li><li><a href="#gradientboosting-save">save</a></li><li><a href="#gradientboosting-load">load</a></li></ul></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-forge.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="forge_db_setup">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_setup</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_write_meta">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_write_meta</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_meta">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_meta</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_write_array">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_write_array</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_array_len">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_array_len</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_array_cell">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_array_cell</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_write_tree_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_write_tree_node</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">is_leaf</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">feature</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">threshold</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left_id</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">right_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_tree_node_isleaf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_tree_node_isleaf</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_tree_node_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_tree_node_value</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_tree_node_feature">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_tree_node_feature</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_tree_node_threshold">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_tree_node_threshold</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_tree_node_leftid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_tree_node_leftid</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_db_read_tree_node_rightid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_db_read_tree_node_rightid</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_serialize_dtnode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_serialize_dtnode</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node</span><span class="colon">:</span> <span class="param-type">DTNode</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">counter</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_serialize_surrogatenode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_serialize_surrogatenode</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">counter</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_deserialize_dtnode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_deserialize_dtnode</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DTNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="forge_deserialize_surrogatenode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forge_deserialize_surrogatenode</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">node_id</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SurrogateNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="dt_leaf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dt_leaf</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DTNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="dt_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dt_node</span><span class="paren">(</span><span class="param-name">feature_idx</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">threshold</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left</span><span class="colon">:</span> <span class="param-type">DTNode</span>, <span class="param-name">right</span><span class="colon">:</span> <span class="param-type">DTNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DTNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="train_test_split">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train_test_split</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">test_size</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">seed</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">TrainTestSplit</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="cross_val_split">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cross_val_split</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">seed</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">TrainTestSplit[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="confusion_matrix">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confusion_matrix</span><span class="paren">(</span><span class="param-name">y_true</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">y_pred</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">ConfusionMatrix</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="surrogate_leaf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">surrogate_leaf</span><span class="paren">(</span><span class="param-name">value</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SurrogateNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="surrogate_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">surrogate_node</span><span class="paren">(</span><span class="param-name">feature_idx</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">threshold</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span>, <span class="param-name">right</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SurrogateNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="subsample_indices">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">subsample_indices</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="gb_build_tree">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gb_build_tree</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">max_depth</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SurrogateNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="gb_predict_one">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gb_predict_one</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">node</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="gb_sigmoid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gb_sigmoid</span><span class="paren">(</span><span class="param-name">z</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="onehotencoder">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">OneHotEncoder</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="onehotencoder-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="onehotencoder-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="onehotencoder-transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transform</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[][]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="onehotencoder-inverse_transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inverse_transform</span><span class="paren">(</span><span class="param-name">encoded</span><span class="colon">:</span> <span class="param-type">int[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="onehotencoder-get_feature_names">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get_feature_names</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="onehotencoder-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="onehotencoder-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="ordinalencoder">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">OrdinalEncoder</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="ordinalencoder-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="ordinalencoder-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">order</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="ordinalencoder-transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transform</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="ordinalencoder-inverse_transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inverse_transform</span><span class="paren">(</span><span class="param-name">encoded</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="ordinalencoder-get_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get_order</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="ordinalencoder-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="ordinalencoder-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="targetencoder">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">TargetEncoder</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="targetencoder-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="targetencoder-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="targetencoder-transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transform</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="targetencoder-inverse_transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inverse_transform</span><span class="paren">(</span><span class="param-name">encoded</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="targetencoder-get_categories">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get_categories</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="targetencoder-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="targetencoder-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="linearregression">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">LinearRegression</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="linearregression-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">iterations</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-ridge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ridge</span><span class="paren">(</span><span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-lasso">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lasso</span><span class="paren">(</span><span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-mse">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mse</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-rmse">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rmse</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-r2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">r2</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-summary">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">summary</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="linearregression-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="logisticclassification">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">LogisticClassification</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="logisticclassification-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">iterations</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-confusion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confusion</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-sigmoid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sigmoid</span><span class="paren">(</span><span class="param-name">z</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-predict_probab">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_probab</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-summary">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">summary</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="logisticclassification-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="knnclassifier">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">KNNClassifier</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="knnclassifier-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-confusion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confusion</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-use_euclidean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">use_euclidean</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-use_manhattan">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">use_manhattan</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-use_cosine">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">use_cosine</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-use_chebyshev">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">use_chebyshev</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-compute_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">compute_distance</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-predict_one">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_one</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-fit_reg">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit_reg</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-predict_reg">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_reg</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="knnclassifier-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="kmeans">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">KMeans</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="kmeans-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-set_threshold">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">set_threshold</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-get_labels">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get_labels</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-get_centroids">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get_centroids</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[][]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-inertia">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inertia</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="kmeans-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="dtnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">DTNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="dtnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">feature_idx</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">threshold</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left</span><span class="colon">:</span> <span class="param-type">DTNode</span>, <span class="param-name">right</span><span class="colon">:</span> <span class="param-type">DTNode</span>, <span class="param-name">is_leaf</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">label</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="decisiontree">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">DecisionTree</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="decisiontree-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">max_depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-fast_gini">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fast_gini</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-gini">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gini</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-entropy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">entropy</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-impurity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">impurity</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-majority">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">majority</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-build">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">build</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DTNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-predict_one">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_one</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">node</span><span class="colon">:</span> <span class="param-type">DTNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-confusion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confusion</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="decisiontree-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="randomforest">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">RandomForest</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="randomforest-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">n_trees</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">max_depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-fast_gini">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fast_gini</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-gini">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gini</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-entropy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">entropy</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-impurity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">impurity</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-majority">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">majority</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-build_tree">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">build_tree</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DTNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-predict_one_tree">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_one_tree</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">node</span><span class="colon">:</span> <span class="param-type">DTNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-confusion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confusion</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="randomforest-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="svm">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Svm</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="svm-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">max_iter</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-linear">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">linear</span><span class="paren">(</span><span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-rbf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rbf</span><span class="paren">(</span><span class="param-name">c_param</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">gamma</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-ridge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ridge</span><span class="paren">(</span><span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-kernel">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kernel</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">n_feat</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-fit_linear">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit_linear</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-fit_rbf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit_rbf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-decision_rbf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">decision_rbf</span><span class="paren">(</span><span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-predict_linear">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_linear</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-predict_rbf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_rbf</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-confusion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confusion</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="svm-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="traintestsplit">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">TrainTestSplit</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="traintestsplit-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">x_train</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">x_test</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y_train</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">y_test</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">n_train</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">n_test</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="confusionmatrix">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">ConfusionMatrix</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="confusionmatrix-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">tp</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">fp</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">fn</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">tn</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-tp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tp</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-fp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fp</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-fn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fn</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-tn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tn</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-pad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pad</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">width</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="confusionmatrix-print_matrix">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_matrix</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="polynomialfeatures">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">PolynomialFeatures</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="polynomialfeatures-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">degree</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="polynomialfeatures-inter_only">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inter_only</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="polynomialfeatures-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="polynomialfeatures-decode_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">decode_index</span><span class="paren">(</span><span class="param-name">encoded</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="polynomialfeatures-count_indices">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">count_indices</span><span class="paren">(</span><span class="param-name">encoded</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="polynomialfeatures-transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transform</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[][]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="polynomialfeatures-fit_transform">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit_transform</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[][]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="surrogatenode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">SurrogateNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="surrogatenode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">is_leaf</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">feature_idx</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">threshold</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span>, <span class="param-name">right</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="surrogaterf">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">SurrogateRF</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="surrogaterf-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">n_trees</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">max_depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="surrogaterf-build_surrogate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">build_surrogate</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">depth</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SurrogateNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="surrogaterf-predict_one_surrogate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_one_surrogate</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">node</span><span class="colon">:</span> <span class="param-type">SurrogateNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="surrogaterf-fit_surrogate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit_surrogate</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="surrogaterf-predict_mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_mean</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="surrogaterf-predict_variance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_variance</span><span class="paren">(</span><span class="param-name">sample</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="paramspec">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">ParamSpec</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="paramspec-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">low</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">high</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">is_int</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="searchresult">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">SearchResult</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="searchresult-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">best_params</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">best_score</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_params</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="searchresult-print_result">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_result</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="bayesiansearch">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BayesianSearch</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="bayesiansearch-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">n_warmup</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">n_iterations</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-add_int_param">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add_int_param</span><span class="paren">(</span><span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">low</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">high</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-add_float_param">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add_float_param</span><span class="paren">(</span><span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">low</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">high</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-sample_random">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sample_random</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-ei">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ei</span><span class="paren">(</span><span class="param-name">mean</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">variance</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">best</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-next_point">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">next_point</span><span class="paren">(</span><span class="param-name">surrogate</span><span class="colon">:</span> <span class="param-type">SurrogateRF</span>, <span class="param-name">best_score</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-eval_knn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">eval_knn</span><span class="paren">(</span><span class="param-name">params</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-eval_dt">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">eval_dt</span><span class="paren">(</span><span class="param-name">params</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-eval_svm">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">eval_svm</span><span class="paren">(</span><span class="param-name">params</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-run_search">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">run_search</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span>, <span class="param-name">mode</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SearchResult</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-search_knn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">search_knn</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SearchResult</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-search_dt">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">search_dt</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SearchResult</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bayesiansearch-search_svm">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">search_svm</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">folds</span><span class="colon">:</span> <span class="param-type">TrainTestSplit[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SearchResult</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="gradientboosting">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">GradientBoosting</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="gradientboosting-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">n_trees</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">max_depth</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">subsample</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-use_classification">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">use_classification</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-mse">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mse</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-rmse">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rmse</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-r2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">r2</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-predict_proba">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_proba</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-predict_class">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict_class</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-precision">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">precision</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-f1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">f1</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[][]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gradientboosting-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

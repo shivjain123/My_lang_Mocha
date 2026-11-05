@@ -1,8 +1,32 @@
 // mocha-lib-deps: mocha-math
 """
-    mocha-bio v0.1 — Mocha Biology Library
-    Sections:=
-    1. Cardiovascular
+    mocha-bio v0.3 — Mocha Biology Library
+
+    Built for clinicians and researchers who want clinical formulas with a
+    clean syntax and warnings that explain unusual results.
+
+    This is a decision-support aid. It does not replace clinical judgement.
+    It has not been formally validated or certified as a medical device.
+    Always check important results against the original source and your
+    local clinical protocols before acting on them.
+
+    Sections:
+    1.  Cardiovascular
+    2.  Pulmonary
+    3.  Neurology
+    4.  Renal
+    5.  Endocrine and body composition
+    6.  Pharmacokinetics
+    7.  Hematology
+    8.  Burns and fluid resuscitation
+    9.  IV therapy and infusion
+    10. Gynecology and reproductive (female and male)
+    11. Population ecology
+    12. Molecular and biochemical
+    13. Genetics
+
+    Part of Mocha Scientific Library Ecosystem
+    License: Polyform Noncommercial
 """
 
 //FFI Wrappers
@@ -255,7 +279,7 @@ function svr(map: float, cvp: float, cardiac_output: float) -> float {
     return result;
 };
 
-~~ QTc (Bazett) = QT_ms / sqrt(RR_s)
+~~ QTc (Bazett) = QT_ms / sqrt(RR_s),
 ~~ where RR_s = 60.0 / heart_rate (in seconds)
 ~~ Result in ms
 ~~ Normal: < 440 ms (male), < 460 ms (female)
@@ -330,10 +354,13 @@ function vo2_max_fick(cardiac_output: float, cao2: float, cvo2: float) -> float 
     return cardiac_output * 10.0 * av_diff;
 };
 
-~~ Framingham 10-year Hard CHD risk (D'Agostino et al.)
+~~ Framingham 10-year Hard CHD risk (NCEP ATP III, 2002)
+~~ Framingham-based continuous equations from the ATP III final report
+~~ (NCEP Expert Panel, Circulation 2002;106:3143-3421)
+~~ These are NOT the D'Agostino 2008 general cardiovascular risk equations
 ~~ Uses natural log of inputs — do NOT pass pre-logged values
 ~~ total_cholesterol, hdl_cholesterol in mg/dL
-~~ systolic in mmHg, age in years (valid range: 30–79)
+~~ systolic in mmHg, age in years (a warning is printed outside 20-79)
 ~~ bp_treated: true if patient is on BP medication
 ~~ Non-diabetic patients only — excludes angina pectoris history
 ~~ Returns risk as a percentage (0.0–100.0)
@@ -346,8 +373,8 @@ function framingham_risk(
     bp_treated: bool,
     smoking: SmokingStatus
 ) -> float {
-    if (age < 30.0 || age > 79.0) {
-        c_print_err("MochaBioWarning (mocha-bio): Framingham Hard CHD equation validated for ages 30-79 only.");
+    if (age < 20.0 || age > 79.0) {
+        c_print_err("MochaBioWarning (mocha-bio): Framingham Hard CHD equation validated for ages 20-79 only.");
     };
     if (total_cholesterol <= 0.0 || hdl_cholesterol <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): cholesterol values must be positive.");
@@ -417,6 +444,8 @@ function framingham_risk(
     return risk;
 };
 
+// ======================== SECTION 2: Pulmonology ========================
+
 """  ========================
      PULMONARY CONSTANTS
      ========================  """
@@ -472,14 +501,16 @@ tag ArdsSeverity {
 ~~ Male:   IBW = 50.0 + 2.3 * ((height_cm / 2.54) - 60)
 ~~ Female: IBW = 45.5 + 2.3 * ((height_cm / 2.54) - 60)
 ~~ Result in kg
-~~ Valid for height > 152.4 cm (5 feet) — below this IBW = actual weight
+~~ Valid for height >= 152.4 cm (60 inches, 5 feet). Below this the formula is
+~~ not defined, so the function stops with an error
 function ideal_body_weight(height_cm: float, sex: Sex) -> float {
     if (height_cm < HEIGHT_MIN || height_cm > HEIGHT_MAX) {
         c_print_err("MochaBioWarning (mocha-bio): height out of physiological range (30-250 cm).");
     };
     if (height_cm < 152.4) {
-        c_print_err("MochaBioWarning (mocha-bio): IBW Devine formula not valid below 152.4 cm — returning height-based estimate.");
-        return height_cm * 0.4;
+        c_print_err("MochaBioError (mocha-bio): Devine IBW formula is not valid below 152.4 cm (60 in); it extrapolates linearly from 5 feet and cannot be applied to shorter heights.");
+        c_exit(2);
+        return 0.0;
     };
     var height_in: float = height_cm / 2.54;
     var inches_over: float = height_in - 60.0;
@@ -507,7 +538,7 @@ function tidal_volume(ibw_kg: float) -> float {
     return tv;
 };
 
-~~ Minute ventilation = tidal_volume * respiratory_rate
+~~ Minute ventilation = tidal_volume * respiratory_rate / 1000
 ~~ Result in L/min
 ~~ Normal range: 5-10 L/min
 function minute_ventilation(tidal_volume_ml: float, respiratory_rate: float) -> float {
@@ -545,7 +576,9 @@ function alveolar_po2(fio2: float, patm: float, paco2: float, rq: float) -> floa
 
 ~~ Alveolar-arterial oxygen gradient
 ~~ A-a gradient = PAO2 - PaO2
-~~ Normal range: increases with age — roughly (age / 4) mmHg
+~~ Normal range increases with age: roughly (age / 4) + 4 mmHg on room air
+~~ This function takes no age, so it warns at a fixed 15 mmHg, which suits adults
+~~ under about 44; in older adults a higher gradient can still be normal
 ~~ > 15 mmHg on room air suggests V/Q mismatch or shunt
 function aa_gradient(fio2: float, patm: float, paco2: float, pao2: float, rq: float) -> float {
     if (pao2 <= 0.0 || pao2 > 700.0) {
@@ -659,22 +692,22 @@ function pf_ratio(pao2: float, fio2: float) -> float {
 ~~ ARDS severity classifier — Berlin criteria
 ~~ Pass result of pf_ratio() directly
 ~~ > 300: no ARDS
-~~ 200-300: mild
-~~ 100-200: moderate
-~~ < 100: severe
+~~ > 200 up to 300: mild
+~~ > 100 up to 200: moderate
+~~ <= 100: severe
 function ards_severity(pf: float) -> ArdsSeverity {
     if (pf <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): P/F ratio must be positive.");
         c_exit(2);
         return ArdsSeverity.NONE;
     };
-    if (pf < 100.0) {
-        c_print_err("MochaBioWarning (mocha-bio): P/F ratio < 100 — severe ARDS.");
+    if (pf <= 100.0) {
+        c_print_err("MochaBioWarning (mocha-bio): P/F ratio <= 100 — severe ARDS.");
         return ArdsSeverity.SEVERE;
-    } else if (pf < 200.0) {
+    } else if (pf <= 200.0) {
         c_print_err("MochaBioWarning (mocha-bio): P/F ratio 100-200 — moderate ARDS.");
         return ArdsSeverity.MODERATE;
-    } else if (pf < 300.0) {
+    } else if (pf <= 300.0) {
         c_print_err("MochaBioWarning (mocha-bio): P/F ratio 200-300 — mild ARDS.");
         return ArdsSeverity.MILD;
     };
@@ -707,6 +740,8 @@ function oxygen_content(hgb: float, sao2: float, pao2: float) -> float {
     };
     return cao2;
 };
+
+// ======================== SECTION 3: Neurology ========================
 
 """  ========================
      NEUROLOGY CONSTANTS
@@ -874,7 +909,7 @@ function cerebral_perfusion_pressure(map: float, icp: float) -> float {
 ~~ Cerebral blood flow (Fick principle)
 ~~ CBF = CMRO2 / AVDO2
 ~~ CMRO2: cerebral metabolic rate of O2 in mL O2/100g/min
-~~ AVDO2: arteriovenous O2 difference in mL O2/100mL blood
+~~ AVDO2: arteriovenous O2 difference in mL O2/mL blood (normal 0.04-0.09)
 ~~ Result in mL/100g/min
 ~~ Normal CBF: 50–60 mL/100g/min
 ~~ < 20 mL/100g/min: ischaemic threshold
@@ -891,7 +926,7 @@ function cerebral_blood_flow(cmro2: float, avdo2: float) -> float {
         return 0.0;
     };
     if (avdo2 < AVDO2_MIN || avdo2 > AVDO2_MAX) {
-        c_print_err("MochaBioWarning (mocha-bio): AVDO2 outside normal range (4-9 mL O2/100mL).");
+        c_print_err("MochaBioWarning (mocha-bio): AVDO2 outside normal range (0.04-0.09 mL O2/mL).");
     };
     var cbf: float = cmro2 / avdo2;
     if (cbf < 10.0) {
@@ -963,6 +998,8 @@ function corrected_sodium(na: float, glucose: float) -> float {
     return corrected;
 };
 
+// ======================== SECTION 4: Nephrology ========================
+
 """  ========================
      RENAL CONSTANTS
      ========================  """
@@ -974,6 +1011,7 @@ const POTASSIUM_MAX: float = 9.0;
 const FENA_PRERENAL_THRESHOLD: float = 1.0;
 const FENA_INTRINSIC_THRESHOLD: float = 2.0;
 const FEUREA_PRERENAL_THRESHOLD: float = 35.0;
+const FEUREA_INTRINSIC_THRESHOLD: float = 50.0;
 const BUN_CR_PRERENAL_THRESHOLD: float = 20.0;
 const URINE_SG_MIN_NORMAL: float = 1.010;
 const URINE_SG_MAX_NORMAL: float = 1.025;
@@ -1233,7 +1271,8 @@ function fena_value(urine_na: float, serum_cr: float, serum_na: float, urine_cr:
 ~~ All urea in mg/dL, creatinine in mg/dL
 ~~ Result in %
 ~~ < 35%: prerenal AKI
-~~ >= 35%: intrinsic renal AKI
+~~ 35-50%: indeterminate
+~~ > 50%: intrinsic renal AKI
 ~~ Use when patient is on diuretics — FENa unreliable in that context
 function feurea(urine_urea: float, serum_cr: float, serum_urea: float, urine_cr: float) -> AkiLikelihood {
     validate_creatinine(serum_cr);
@@ -1251,8 +1290,11 @@ function feurea(urine_urea: float, serum_cr: float, serum_urea: float, urine_cr:
     if (fe < FEUREA_PRERENAL_THRESHOLD) {
         return AkiLikelihood.PRERENAL;
     };
-    c_print_err("MochaBioWarning (mocha-bio): FEUrea >= 35% — suggests intrinsic renal AKI.");
-    return AkiLikelihood.INTRINSIC;
+    if (fe > FEUREA_INTRINSIC_THRESHOLD) {
+        c_print_err("MochaBioWarning (mocha-bio): FEUrea > 50% — suggests intrinsic renal AKI.");
+        return AkiLikelihood.INTRINSIC;
+    };
+    return AkiLikelihood.INDETERMINATE;
 };
 
 ~~ FEUrea raw value — returns float if caller needs the number
@@ -1299,6 +1341,8 @@ function urine_sg_message(sg: float) -> str {
     };
     return "High urine specific gravity (>1.025): suggests dehydration, SIADH, or excessive solute load (glycosuria, proteinuria).";
 };
+
+// ======================== SECTION 5: Endocrinology ========================
 
 """  ========================
      ENDOCRINE CONSTANTS
@@ -1380,7 +1424,7 @@ tag WaistHeightRisk {
      ========================  """
 
 ~~ Body adiposity index (BAI)
-~~ BAI = (hip_cm / height_cm^1.5) - 18
+~~ BAI = (hip_cm / height_m^1.5) - 18, where height_m = height_cm / 100
 ~~ Estimates body fat % directly
 ~~ Normal: ~21-33% women, ~8-21% men
 ~~ More accurate than BMI for estimating adiposity
@@ -1428,7 +1472,7 @@ function ponderal_index(weight_kg: float, height_cm: float) -> float {
 ~~ Waist-to-height ratio
 ~~ WHtR = waist_cm / height_cm
 ~~ One of the strongest individual predictors of cardiometabolic risk
-~~ < 0.4: low
+~~ < 0.4: low (a warning is printed, since a very low ratio can indicate underweight)
 ~~ 0.4-0.5: moderate
 ~~ 0.5-0.6: high
 ~~ > 0.6: very high
@@ -1444,6 +1488,7 @@ function waist_height_ratio(waist_cm: float, height_cm: float) -> WaistHeightRis
     };
     var ratio: float = waist_cm / height_cm;
     if (ratio < 0.4) {
+        c_print_err("MochaBioWarning (mocha-bio): waist-to-height ratio < 0.4 — low cardiometabolic risk, but may indicate underweight.");
         return WaistHeightRisk.LOW;
     } else if (ratio < 0.5) {
         return WaistHeightRisk.MODERATE;
@@ -1628,11 +1673,13 @@ function free_water_deficit(weight_kg: float, sodium: float, sex: Sex) -> float 
     return fwd;
 };
 
+// ======================== SECTION 6: Pharamocology ========================
+
 """  ========================
      PHARMACOKINETICS CONSTANTS
      ========================  """
 
-const LN2: float = 0.693147;
+const LN2: float = 0.6931471805599453;
 const F_MIN: float = 0.0;
 const F_MAX: float = 1.0;
 const CONCENTRATION_MIN: float = 0.0;
@@ -1806,7 +1853,8 @@ function maintenance_dose(cl: float, target_concentration: float, tau: float) ->
 ~~ Bioavailability-adjusted dose
 ~~ Adjusted dose = intended_dose / F
 ~~ F: bioavailability fraction (0.0-1.0)
-~~ IV route: F = 1.0 by definition
+~~ IV route: F = 1.0 by definition, so the f you pass is ignored
+~~ (a warning is printed if it was not 1.0) and the dose is returned unchanged
 ~~ Oral/other routes: F < 1.0 due to first-pass and absorption losses
 function bioavailability_adjusted_dose(
     intended_dose: float,
@@ -1818,14 +1866,17 @@ function bioavailability_adjusted_dose(
         c_exit(2);
         return 0.0;
     };
+    if (route == RouteOfAdministration.IV) {
+        if (f != 1.0) {
+            c_print_err("MochaBioWarning (mocha-bio): IV route has bioavailability of 1.0 by definition, so the f you passed is ignored.");
+        };
+        return intended_dose;
+    };
     validate_bioavailability(f);
     if (f <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): bioavailability must be positive.");
         c_exit(2);
         return 0.0;
-    };
-    if (route == RouteOfAdministration.IV && f != 1.0) {
-        c_print_err("MochaBioWarning (mocha-bio): IV route has bioavailability of 1.0 by definition.");
     };
     return intended_dose / f;
 };
@@ -1992,8 +2043,10 @@ function hill_concentration(e: float, emax: float, ec50: float, n: float) -> flo
     return ec50 * c_pow(ratio, 1.0 / n);
 };
 
+// ======================== SECTION 7: Haematology ========================
+
 """  ========================
-     HEMATOLOGY CONSTANTS
+     HAEMATOLOGY CONSTANTS
      ========================  """
 
 const RBC_MIN: float = 1.0;
@@ -2293,6 +2346,8 @@ function transferrin_saturation(serum_iron: float, tibc: float) -> float {
     return tsat;
 };
 
+// ======================== SECTION 8: Burns ========================
+
 """  ========================
      BURNS / FLUID RESUSCITATION
      ========================  """
@@ -2385,6 +2440,8 @@ function burn_severity(tbsa: float) -> BurnSeverity {
     };
     return BurnSeverity.MAJOR;
 };
+
+// ======================== SECTION 9: Infusions ========================
 
 """  ========================
      IV THERAPY / INFUSION
@@ -2482,7 +2539,7 @@ function ml_hr_to_mcg_kg_min(rate_ml_hr: float, weight_kg: float, concentration_
 };
 
 ~~ Convert mg/hr dose to mL/hr pump rate (non-weight-based)
-~~ e.g. heparin units/hr, morphine mg/hr
+~~ e.g. morphine mg/hr, midazolam mg/hr. For heparin or insulin (units/hr) use units_hr_to_ml_hr
 function mg_hr_to_ml_hr(dose_mg_hr: float, concentration_mg_ml: float) -> float {
     if (dose_mg_hr <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Dose must be greater than 0.");
@@ -2533,6 +2590,8 @@ function ml_hr_to_units_hr(rate_ml_hr: float, concentration_units_ml: float) -> 
     return rate_ml_hr * concentration_units_ml;
 };
 
+// ======================== SECTION 10: OBGyn ========================
+
 """  ========================
      GYNECOLOGY
      ========================  """
@@ -2554,9 +2613,11 @@ const RI_HIGH_THRESHOLD:     float = 0.70;
 const SPERM_AZOOSPERMIA_THRESHOLD:  float = 0.0;
 const SPERM_OLIGOSPERMIA_THRESHOLD: float = 16.0;
 const SPERM_MOTILITY_THRESHOLD:     float = 42.0;
-const FREE_T_ALBUMIN_BINDING:       float = 3.4;
-const FREE_T_SHBG_KA:               float = 5.97E8;
-const FREE_T_ALB_KA:                float = 4.06E4;
+
+// Vermeulen 1999 association constants, expressed in L/nmol so that
+// concentrations can stay in nmol/L (1e9 L/mol = 1.0 L/nmol, 3.6e4 L/mol = 0.000036 L/nmol)
+const FREE_T_SHBG_KA:               float = 1.0;
+const FREE_T_ALB_KA:                float = 0.000036;
 
 // ---- Validation ----
 
@@ -2590,30 +2651,44 @@ local function validate_kupperman_score(score: int, symptom: str) -> null {
 
 // ---- Female Reproductive ----
 
+~~ Days in a given month, with leap years (internal helper)
+local function days_in_month_of(year: int, month: int) -> int {
+    if (month == 2) {
+        var leap: bool = false;
+        if (year % 4 == 0) {
+            leap = true;
+        };
+        if (year % 100 == 0) {
+            leap = false;
+        };
+        if (year % 400 == 0) {
+            leap = true;
+        };
+        if (leap) {
+            return 29;
+        };
+        return 28;
+    };
+    if (month == 4 || month == 6 || month == 9 || month == 11) {
+        return 30;
+    };
+    return 31;
+};
+
 ~~ Naegele's rule — estimated due date returned as (day, month, year)
-~~ Add 7 days and 9 months (or subtract 3 months and add 1 year) to LMP
+~~ Add 7 days to the LMP (using the real length of the LMP's own month,
+~~ leap years included), then add 9 months
+~~ If the due month is shorter than the resulting day, the day is clamped to
+~~ the last day of that month
 function naegele_edd(lmp_day: int, lmp_month: int, lmp_year: int) -> (int, 3) {
     var day:   int = lmp_day + 7;
-    var month: int = lmp_month + 9;
+    var month: int = lmp_month;
     var year:  int = lmp_year;
 
-    // Handle month overflow
-    if (month > 12) {
-        month = month - 12;
-        year  = year + 1;
-    };
-
-    // Handle day overflow (approximate — use 30-day month rule)
-    var days_in_month: int = 30;
-    if (month == 1 || month == 3 || month == 5 || month == 7 ||
-        month == 8 || month == 10 || month == 12) {
-        days_in_month = 31;
-    };
-    if (month == 2) {
-        days_in_month = 28;
-    };
-    if (day > days_in_month) {
-        day   = day - days_in_month;
+    // Step 1: add 7 days, rolling over using the LMP month's real length
+    var dim: int = days_in_month_of(year, month);
+    if (day > dim) {
+        day   = day - dim;
         month = month + 1;
         if (month > 12) {
             month = 1;
@@ -2621,15 +2696,45 @@ function naegele_edd(lmp_day: int, lmp_month: int, lmp_year: int) -> (int, 3) {
         };
     };
 
+    // Step 2: add 9 months
+    month = month + 9;
+    if (month > 12) {
+        month = month - 12;
+        year  = year + 1;
+    };
+
+    // Step 3: clamp the day if the due month is shorter
+    var last_day: int = days_in_month_of(year, month);
+    if (day > last_day) {
+        day = last_day;
+    };
+
     return (day, month, year);
 };
 
+~~ Days since a fixed origin for a calendar date (real month lengths, leap years)
+~~ Internal helper — only differences between two dates are meaningful
+local function days_from_civil(year: int, month: int, day: int) -> int {
+    var y: int = year;
+    var mp: int = month + 9;
+    if (month > 2) {
+        mp = month - 3;
+    } else {
+        y = y - 1;
+    };
+    var era: int = y / 400;
+    var yoe: int = y - (era * 400);
+    var doy: int = (((153 * mp) + 2) / 5) + day - 1;
+    var doe: int = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy;
+    return (era * 146097) + doe;
+};
+
 ~~ Gestational age in total days from LMP to current date
-~~ Approximate: uses 30-day months
+~~ Exact: uses real month lengths and leap years
 function gestational_age_days(lmp_day: int, lmp_month: int, lmp_year: int,
                                cur_day: int, cur_month: int, cur_year: int) -> int {
-    var lmp_total: int = lmp_year * 365 + lmp_month * 30 + lmp_day;
-    var cur_total: int = cur_year * 365 + cur_month * 30 + cur_day;
+    var lmp_total: int = days_from_civil(lmp_year, lmp_month, lmp_day);
+    var cur_total: int = days_from_civil(cur_year, cur_month, cur_day);
     var diff: int = cur_total - lmp_total;
     if (diff < 0) {
         diff = 0;
@@ -2673,12 +2778,15 @@ function amh_ovarian_reserve(amh_ng_ml: float) -> OvarianReserve {
     return OvarianReserve.HIGH;
 };
 
-~~ Kupperman Menopausal Index
+~~ Kupperman Menopausal Index (variant weighting)
 ~~ 11 symptoms scored 0-3 (none/mild/moderate/severe)
 ~~ Weighted sum: hot_flushes×4, sweating×2, insomnia×2, nervousness×2,
 ~~ depression×1, dizziness×1, fatigue×1, joint_pain×1,
 ~~ headache×1, palpitations×1, paraesthesia×1
-~~ Total ≤ 20 = mild, 21-35 = moderate, > 35 = severe
+~~ Weights differ between published versions of the index, so check this
+~~ against the source your clinic uses before relying on the score
+~~ Max score 51. Commonly used bands: <= 19 mild, 20-35 moderate, > 35 severe
+~~ (the function returns the raw score and does not apply the bands)
 function kupperman_index(hot_flushes: int, sweating: int, insomnia: int,
                           nervousness: int, depression: int, dizziness: int,
                           fatigue: int, joint_pain: int, headache: int,
@@ -2709,10 +2817,11 @@ function kupperman_index(hot_flushes: int, sweating: int, insomnia: int,
 };
 
 ~~ LH surge timing — estimated day of LH surge from cycle length
-~~ Occurs approximately 14 days before next period
+~~ The surge occurs about 24-36 hours BEFORE ovulation, so about 15 days
+~~ before the next period (ovulation itself is about 14 days before it)
 function lh_surge_day(cycle_length: float) -> float {
     validate_cycle_length(cycle_length);
-    return cycle_length - 14.0;
+    return cycle_length - 15.0;
 };
 
 ~~ Uterine resistance index (RI) from Doppler waveform
@@ -2771,22 +2880,29 @@ function fertility_window_peak(cycle_length: float) -> float {
 
 // ---- Male Reproductive ----
 
-~~ Free testosterone estimation — Vermeulen equation (simplified)
+~~ Free testosterone — Vermeulen equation (1999)
 ~~ total_t: nmol/L, shbg: nmol/L, albumin: g/dL
 ~~ Returns free testosterone in pmol/L
+~~ Albumin is in vast excess, so it is folded into one factor N; SHBG is
+~~ limited, so the free fraction comes from the quadratic
+~~   N*Ks*FT^2 + (N + Ks*(SHBG - TT))*FT - TT = 0
+~~ All concentrations stay in nmol/L (Ks and Ka are in L/nmol)
 function free_testosterone(total_t: float, shbg: float, albumin: float) -> float {
     if (total_t <= 0.0 || shbg <= 0.0 || albumin <= 0.0) {
         c_print_err("MochaBioError (mocha-bio): Testosterone, SHBG, and albumin must be positive.");
         c_exit(2);
         return 0.0;
     };
-    // Convert albumin g/dL → g/L
+    // Convert albumin g/dL → g/L → nmol/L (MW albumin ~66500 g/mol)
     var alb_gl: float = albumin * 10.0;
-    // Albumin concentration in nmol/L (MW albumin ~66500 g/mol)
     var alb_nmol: float = (alb_gl / 66500.0) * 1_000_000_000.0;
-    // Simplified Vermeulen: FT = TT / (1 + Ka_shbg*SHBG + Ka_alb*alb_nmol)
-    var denominator: float = 1.0 + (FREE_T_SHBG_KA * shbg) + (FREE_T_ALB_KA * alb_nmol);
-    return (total_t / denominator) * 1000.0;
+    var n_factor: float = 1.0 + (FREE_T_ALB_KA * alb_nmol);
+    var a: float = n_factor * FREE_T_SHBG_KA;
+    var b: float = n_factor + (FREE_T_SHBG_KA * (shbg - total_t));
+    var disc: float = (b * b) + (4.0 * a * total_t);
+    var root: float = disc.sqrt().real;
+    var free_t_nmol: float = (root - b) / (2.0 * a);
+    return free_t_nmol * 1000.0;
 };
 
 ~~ Sperm concentration interpretation (WHO 2021 reference: ≥16 million/mL normal)
@@ -2817,6 +2933,8 @@ function sperm_motility(motility_pct: float) -> SpermMotility {
     };
     return SpermMotility.NORMAL;
 };
+
+// ======================== SECTION 11: Ecology ========================
 
 """  ========================
      POPULATION ECOLOGY
@@ -2877,7 +2995,7 @@ function doubling_time(r: float) -> float {
         c_exit(2);
         return 0.0;
     };
-    return 0.6931471805599453 / r;
+    return LN2 / r;
 };
 
 ~~ Carrying capacity utilization — what fraction of K is currently used
@@ -2898,12 +3016,14 @@ function population_density(population: float, area: float) -> float {
     return population / area;
 };
 
-~~ Lotka-Volterra predator-prey — one time step
+~~ Lotka-Volterra predator-prey — one time step (Euler method)
 ~~ prey:     dN/dt = alpha*N - beta*N*P
 ~~ predator: dP/dt = delta*N*P - gamma*P
 ~~ alpha = prey birth rate, beta = predation rate,
 ~~ delta = predator reproduction per prey eaten, gamma = predator death rate
-~~ dt = time step size
+~~ dt = time step size — must be positive; keep it small (a warning is printed
+~~ when a population would change by more than 50% in one step)
+~~ Populations are clamped at 0 so they never go negative
 ~~ Returns (prey_next, predator_next) as (float, 2) tuple
 function lotka_volterra(prey: float, predator: float,
                          alpha: float, beta: float,
@@ -2911,8 +3031,24 @@ function lotka_volterra(prey: float, predator: float,
                          dt: float) -> (float, 2) {
     validate_population(prey);
     validate_population(predator);
+    if (dt <= 0.0) {
+        c_print_err("MochaBioError (mocha-bio): time step dt must be positive.");
+        c_exit(2);
+        return (prey, predator);
+    };
     var d_prey:     float = (alpha * prey) - (beta * prey * predator);
     var d_predator: float = (delta * prey * predator) - (gamma * predator);
+    var step_prey: float = d_prey * dt;
+    var step_pred: float = d_predator * dt;
+    if (step_prey < 0.0) {
+        step_prey = 0.0 - step_prey;
+    };
+    if (step_pred < 0.0) {
+        step_pred = 0.0 - step_pred;
+    };
+    if (step_prey > 0.5 * prey || step_pred > 0.5 * predator) {
+        c_print_err("MochaBioWarning (mocha-bio): dt is large — a population changes by more than 50% in one Euler step, results may be unstable. Use a smaller dt.");
+    };
     var prey_next:     float = prey     + d_prey     * dt;
     var predator_next: float = predator + d_predator * dt;
     if (prey_next < 0.0) {
@@ -2924,6 +3060,7 @@ function lotka_volterra(prey: float, predator: float,
     return (prey_next, predator_next);
 };
 
+// ======================== SECTION 12: Biochemistry ========================
 
 """  ========================
      MOLECULAR & BIOCHEMICAL
@@ -3070,6 +3207,7 @@ function rate_at_temperature(r1: float, q10_val: float, t1: float, t2: float) ->
     return r1 * c_exp(exponent * ln_q10);
 };
 
+// ======================== SECTION 13: Genetics ========================
 
 """  ========================
      GENETICS
@@ -3103,10 +3241,30 @@ function hardy_weinberg(p: float) -> (float, 3) {
     return (pp, tpq, qq);
 };
 
-~~ Hardy-Weinberg equilibrium check — returns true if p² + 2pq + q² ≈ 1
+~~ Hardy-Weinberg equilibrium check on observed genotype frequencies
+~~ Requires the three frequencies to sum to 1, then derives p = homo_dom + hetero / 2
+~~ and returns true if each observed frequency is within 0.001 of p², 2pq and q²
+~~ This compares frequencies only; testing real counts needs a chi-square test with sample size
 function hardy_weinberg_check(homo_dom: float, hetero: float, homo_rec: float) -> bool {
     var total: float = homo_dom + hetero + homo_rec;
-    return total > 0.999 && total < 1.001;
+    if (total <= 0.999 || total >= 1.001) {
+        return false;
+    };
+    var p: float = homo_dom + hetero / 2.0;
+    var q: float = 1.0 - p;
+    var d1: float = homo_dom - p * p;
+    if (d1 < 0.0) {
+        d1 = 0.0 - d1;
+    };
+    var d2: float = hetero - 2.0 * p * q;
+    if (d2 < 0.0) {
+        d2 = 0.0 - d2;
+    };
+    var d3: float = homo_rec - q * q;
+    if (d3 < 0.0) {
+        d3 = 0.0 - d3;
+    };
+    return d1 < 0.001 && d2 < 0.001 && d3 < 0.001;
 };
 
 ~~ Allele frequency after one generation of mutation pressure

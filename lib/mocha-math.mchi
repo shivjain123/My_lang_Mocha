@@ -61,6 +61,7 @@ extend float function coth() -> float;
 extend float function inv_cosech() -> float;
 extend float function inv_sech() -> Complex;
 extend float function inv_coth() -> float;
+function atan2(y: float, x: float) -> float;
 function integral(f: lambda, a: float, b: float) -> float native mocha_math_integral;
 function limit_inf(f: lambda) -> float native mocha_math_limit_inf;
 function rand_int(min: int, max: int) -> int native mocha_rand_int;

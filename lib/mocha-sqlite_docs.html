@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-sqlite.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-sqlite.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#sqlite3_open"><i class="ti ti-function"></i> sqlite3_open</a></li><li class="sb-fn"><a href="#sqlite3_exec"><i class="ti ti-function"></i> sqlite3_exec</a></li><li class="sb-fn"><a href="#sqlite3_query"><i class="ti ti-function"></i> sqlite3_query</a></li><li class="sb-fn"><a href="#sqlite3_close"><i class="ti ti-function"></i> sqlite3_close</a></li><li class="sb-fn"><a href="#sqlite3_query_run"><i class="ti ti-function"></i> sqlite3_query_run</a></li><li class="sb-fn"><a href="#sqlite3_query_rows"><i class="ti ti-function"></i> sqlite3_query_rows</a></li><li class="sb-fn"><a href="#sqlite3_query_cols"><i class="ti ti-function"></i> sqlite3_query_cols</a></li><li class="sb-fn"><a href="#sqlite3_query_cell"><i class="ti ti-function"></i> sqlite3_query_cell</a></li><li class="sb-fn"><a href="#sqlite3_query_colname"><i class="ti ti-function"></i> sqlite3_query_colname</a></li><li class="sb-fn"><a href="#sqlite3_errmsg"><i class="ti ti-function"></i> sqlite3_errmsg</a></li><li class="sb-fn"><a href="#sqlite3_last_rowid"><i class="ti ti-function"></i> sqlite3_last_rowid</a></li><li class="sb-fn"><a href="#sqlite3_changes"><i class="ti ti-function"></i> sqlite3_changes</a></li><li class="sb-fn"><a href="#sqlite3_table_exists"><i class="ti ti-function"></i> sqlite3_table_exists</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-sqlite.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="sqlite3_open">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_open</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mocha-SQLite3 Library. Provides SQLite3 database access for Mocha programs. Use sqlite3_open() to open a database and sqlite3_close() when done. Note: SQL strings are passed directly — sanitize user input to avoid injection. Opens a SQLite3 database file. Creates it if it does not exist.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">path</td><td class="tag-desc">file path to the .db file</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_exec">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_exec</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">sql</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Executes a SQL statement with no result set (INSERT, UPDATE, DELETE, CREATE). Returns 0 on success.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr><tr><td class="tag-name">sql</td><td class="tag-desc">SQL statement to execute</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_query">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_query</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">sql</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Executes a SQL query and stores the result for reading. Returns 0 on success.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr><tr><td class="tag-name">sql</td><td class="tag-desc">SQL SELECT statement</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_close">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_close</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Closes a database handle.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_query_run">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_query_run</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">sql</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Runs a SQL query and caches all results for row/cell access. Returns 0 on success. Use sqlite3_query_rows() and sqlite3_query_cell() after this.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr><tr><td class="tag-name">sql</td><td class="tag-desc">SQL SELECT statement</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_query_rows">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_query_rows</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the number of rows in the last sqlite3_query_run() result.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_query_cols">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_query_cols</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the number of columns in the last sqlite3_query_run() result.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_query_cell">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_query_cell</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">col</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the value of a cell from the last sqlite3_query_run() result.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr><tr><td class="tag-name">row</td><td class="tag-desc">zero-based row index</td></tr><tr><td class="tag-name">col</td><td class="tag-desc">zero-based column index</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_query_colname">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_query_colname</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">col</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the column name at the given index from the last sqlite3_query_run() result.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr><tr><td class="tag-name">col</td><td class="tag-desc">zero-based column index</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_errmsg">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_errmsg</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the error message from the last failed operation.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_last_rowid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_last_rowid</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the row ID of the last successful INSERT.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_changes">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_changes</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns the number of rows affected by the last INSERT, UPDATE, or DELETE.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="sqlite3_table_exists">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sqlite3_table_exists</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">table</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns 1 if a table with the given name exists, 0 otherwise.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">db</td><td class="tag-desc">the database handle</td></tr><tr><td class="tag-name">table</td><td class="tag-desc">table name to check</td></tr></tbody></table>
+  </div>
+</div>
+</main>
+</body>
+</html>

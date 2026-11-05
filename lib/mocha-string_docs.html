@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-string.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-string.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#mocha_str_toupper_ffi"><i class="ti ti-function"></i> mocha_str_toupper_ffi</a></li><li class="sb-fn"><a href="#mocha_str_tolower_ffi"><i class="ti ti-function"></i> mocha_str_tolower_ffi</a></li><li class="sb-fn"><a href="#c_isalpha"><i class="ti ti-function"></i> c_isalpha</a></li><li class="sb-fn"><a href="#c_isdigit"><i class="ti ti-function"></i> c_isdigit</a></li><li class="sb-fn"><a href="#mocha_str_char_equal"><i class="ti ti-function"></i> mocha_str_char_equal</a></li><li class="sb-fn"><a href="#regex_is_digit"><i class="ti ti-function"></i> regex_is_digit</a></li><li class="sb-fn"><a href="#regex_is_word"><i class="ti ti-function"></i> regex_is_word</a></li><li class="sb-fn"><a href="#regex_is_space"><i class="ti ti-function"></i> regex_is_space</a></li><li class="sb-fn"><a href="#regex_match_char"><i class="ti ti-function"></i> regex_match_char</a></li><li class="sb-fn"><a href="#regex_token_len"><i class="ti ti-function"></i> regex_token_len</a></li><li class="sb-fn"><a href="#regex_match_here"><i class="ti ti-function"></i> regex_match_here</a></li><li class="sb-fn"><a href="#regex_match_at"><i class="ti ti-function"></i> regex_match_at</a></li><li class="sb-fn"><a href="#regex_find_span"><i class="ti ti-function"></i> regex_find_span</a></li><li class="sb-class"><a href="#tokenizer"><i class="ti ti-box"></i> Tokenizer</a><ul class="sb-methods"><li><a href="#tokenizer-constructor">constructor</a></li><li><a href="#tokenizer-find">find</a></li><li><a href="#tokenizer-word">word</a></li><li><a href="#tokenizer-fit">fit</a></li><li><a href="#tokenizer-encode">encode</a></li><li><a href="#tokenizer-decode">decode</a></li><li><a href="#tokenizer-size">size</a></li></ul></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-string.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="mocha_str_toupper_ffi">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_str_toupper_ffi</span><span class="paren">(</span><span class="param-name">s</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_str_tolower_ffi">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_str_tolower_ffi</span><span class="paren">(</span><span class="param-name">s</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_isalpha">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_isalpha</span><span class="paren">(</span><span class="param-name">c</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_isdigit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_isdigit</span><span class="paren">(</span><span class="param-name">c</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_str_char_equal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_str_char_equal</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">j</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_is_digit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_is_digit</span><span class="paren">(</span><span class="param-name">c</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_is_word">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_is_word</span><span class="paren">(</span><span class="param-name">c</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_is_space">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_is_space</span><span class="paren">(</span><span class="param-name">c</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_match_char">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_match_char</span><span class="paren">(</span><span class="param-name">pat</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">pi</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">c</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_token_len">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_token_len</span><span class="paren">(</span><span class="param-name">pat</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">pi</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_match_here">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_match_here</span><span class="paren">(</span><span class="param-name">pat</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">pi</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">ti</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_match_at">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_match_at</span><span class="paren">(</span><span class="param-name">pat</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">ti</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="regex_find_span">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">regex_find_span</span><span class="paren">(</span><span class="param-name">pat</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="tokenizer">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Tokenizer</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="tokenizer-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tokenizer-find">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">find</span><span class="paren">(</span><span class="param-name">word</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Check if word exists in vocab, return its ID or -1.</p>
+  </div>
+</div>
+<div class="card" id="tokenizer-word">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">word</span><span class="paren">(</span><span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Get the word for a token ID.</p>
+  </div>
+</div>
+<div class="card" id="tokenizer-fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit</span><span class="paren">(</span><span class="param-name">texts</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Build vocabulary from array of sentences.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">texts:</td><td class="tag-desc">str[] of sentences</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="tokenizer-encode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">encode</span><span class="paren">(</span><span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Encode a sentence to token IDs.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">text:</td><td class="tag-desc">input sentence</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: int[] of token IDs with [CLS] at start and [SEP] at end</span></div>
+  </div>
+</div>
+<div class="card" id="tokenizer-decode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">decode</span><span class="paren">(</span><span class="param-name">ids</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Decode token IDs back to string.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">ids:</td><td class="tag-desc">int[] of token IDs</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: reconstructed sentence</span></div>
+  </div>
+</div>
+<div class="card" id="tokenizer-size">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">size</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Get vocab size.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

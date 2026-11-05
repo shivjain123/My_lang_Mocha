@@ -36,7 +36,9 @@ local function c_moist_parcel_temp(theta_e_k: float, pressure_mb: float) -> floa
 local function c_lcl_temp(t_c: float, dewpoint_c: float) -> float native metero_lcl_temp;
 local function c_lcl_pressure(t_c: float, dewpoint_c: float, pressure_mb: float) -> float native metero_lcl_pressure;
 
-~~ ── Unit conversion helpers ──
+// ── Unit conversion helpers ──
+
+// Temperature: Celsius, Fahrenheit and Kelvin
 function celsius_to_fahrenheit(t: float) -> float {
     return t * 1.8 + 32.0;
 };
@@ -53,6 +55,7 @@ function kelvin_to_celsius(t: float) -> float {
     return t - 273.15;
 };
 
+// Speed: km/h, m/s, knots, mph
 function kmh_to_ms(v: float) -> float { return v / 3.6; };
 function ms_to_kmh(v: float) -> float { return v * 3.6; };
 function kmh_to_knots(v: float) -> float { return v / 1.852; };
@@ -60,6 +63,7 @@ function knots_to_kmh(v: float) -> float { return v * 1.852; };
 function kmh_to_mph(v: float) -> float { return v * 0.621371; };
 function mph_to_kmh(v: float) -> float { return v / 0.621371; };
 
+// Pressure: millibars (same as hPa), inches of mercury, pascals, atmospheres
 function mb_to_inhg(p: float) -> float { return p * 0.02953; };
 function inhg_to_mb(p: float) -> float { return p / 0.02953; };
 function mb_to_pa(p: float) -> float { return p * 100.0; };
@@ -67,35 +71,36 @@ function pa_to_mb(p: float) -> float { return p / 100.0; };
 function mb_to_atm(p: float) -> float { return p / 1013.25; };
 function atm_to_mb(p: float) -> float { return p * 1013.25; };
 
+// Length: metres and feet
 function meters_to_feet(m: float) -> float { return m * 3.28084; };
 function feet_to_meters(f: float) -> float { return f / 3.28084; };
 
-~~ ── Validators ──
+// ── Validators ──
 
 local function validate_rh(rh: float) -> null {
     if (rh < 0.0 || rh > 100.0) {
-        c_print_err("MeteroError: Relative humidity must be between 0 and 100.");
+        c_print_err("MochaLibError (mocha-meteoro): Relative humidity must be between 0 and 100.");
         c_exit(2);
     };
 };
 
 local function validate_temp_c(t: float) -> null {
     if (t < -90.0 || t > 60.0) {
-        c_print_err("MeteroError: Temperature out of Earth range (-90 to 60 C).");
+        c_print_err("MochaLibError (mocha-meteoro): Temperature out of Earth range (-90 to 60 C).");
         c_exit(2);
     };
 };
 
 local function validate_pressure_mb(p: float) -> null {
     if (p < 870.0 || p > 1084.0) {
-        c_print_err("MeteroError: Pressure out of Earth range (870 to 1084 mb).");
+        c_print_err("MochaLibError (mocha-meteoro): Pressure out of Earth range (870 to 1084 mb).");
         c_exit(2);
     };
 };
 
 local function validate_wind_kmh(v: float) -> null {
     if (v < 0.0) {
-        c_print_err("MeteroError: Wind speed cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Wind speed cannot be negative.");
         c_exit(2);
     };
 };
@@ -122,6 +127,7 @@ function dewpoint(t_c: float, rh: float) -> float {
     return c_dewpoint(t_c, rh);
 };
 
+~~ Dew point in Fahrenheit: t_f in F, result in F. rh in [0, 100]
 function dewpoint_f(t_f: float, rh: float) -> float {
     return celsius_to_fahrenheit(dewpoint(fahrenheit_to_celsius(t_f), rh));
 };
@@ -140,6 +146,7 @@ function wetbulb(t_c: float, rh: float) -> float {
     return c_wetbulb(t_c, rh);
 };
 
+~~ Wet bulb temperature in Fahrenheit: t_f in F, result in F
 function wetbulb_f(t_f: float, rh: float) -> float {
     return celsius_to_fahrenheit(wetbulb(fahrenheit_to_celsius(t_f), rh));
 };
@@ -160,6 +167,7 @@ function heat_index(t_c: float, rh: float) -> float {
     return c_heat_index(t_c, rh);
 };
 
+~~ Heat index in Fahrenheit: t_f in F, result in F (validity limits are checked in Celsius: 27C = 80.6F)
 function heat_index_f(t_f: float, rh: float) -> float {
     return celsius_to_fahrenheit(heat_index(fahrenheit_to_celsius(t_f), rh));
 };
@@ -180,10 +188,12 @@ function wind_chill(t_c: float, speed_kmh: float) -> float {
     return c_wind_chill(t_c, speed_kmh);
 };
 
+~~ Wind chill in Fahrenheit: t_f in F, speed_kmh in km/h (not mph), result in F
 function wind_chill_f(t_f: float, speed_kmh: float) -> float {
     return celsius_to_fahrenheit(wind_chill(fahrenheit_to_celsius(t_f), speed_kmh));
 };
 
+~~ Wind chill with wind speed in knots: t_c in C, result in C
 function wind_chill_knots(t_c: float, speed_knots: float) -> float {
     return wind_chill(t_c, knots_to_kmh(speed_knots));
 };
@@ -197,14 +207,23 @@ function feels_like(t_c: float, rh: float, speed_kmh: float) -> float {
     return c_feels_like(t_c, rh, speed_kmh);
 };
 
+~~ Feels like in Fahrenheit: t_f in F, speed_kmh in km/h (not mph), result in F
 function feels_like_f(t_f: float, rh: float, speed_kmh: float) -> float {
     return celsius_to_fahrenheit(feels_like(fahrenheit_to_celsius(t_f), rh, speed_kmh));
 };
 
-~~ Potential temperature theta (C) — dry adiabatic reference.
+~~ Pressure check for any level of the atmosphere (upper-air soundings included)
+local function validate_pressure_any_level_mb(p: float) -> null {
+    if (p < 1.0 || p > 1084.0) {
+        c_print_err("MochaLibError (mocha-meteoro): Pressure out of range (1 to 1084 mb).");
+        c_exit(2);
+    };
+};
+
+~~ Potential temperature theta (C) — dry adiabatic reference. Works at any level (e.g. 850, 700, 500 mb).
 function potential_temp(t_c: float, pressure_mb: float) -> float {
     validate_temp_c(t_c);
-    validate_pressure_mb(pressure_mb);
+    validate_pressure_any_level_mb(pressure_mb);
     return c_potential_temp(t_c, pressure_mb);
 };
 
@@ -213,23 +232,25 @@ function potential_temp(t_c: float, pressure_mb: float) -> float {
 function virtual_temp(t_c: float, mixing_ratio_gkg: float) -> float {
     validate_temp_c(t_c);
     if (mixing_ratio_gkg < 0.0) {
-        c_print_err("MeteroError: Mixing ratio cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Mixing ratio cannot be negative.");
         c_exit(2);
     };
     if (mixing_ratio_gkg > 50.0) {
-        c_print_err("MeteroError: Mixing ratio exceeds 50 g/kg — unphysical for Earth atmosphere.");
+        c_print_err("MochaLibError (mocha-meteoro): Mixing ratio exceeds 50 g/kg — unphysical for Earth atmosphere.");
         c_exit(2);
     };
     return c_virtual_temp(t_c, mixing_ratio_gkg);
 };
 
-~~ Equivalent potential temperature (C) — Bolton 1980.
+~~ Equivalent potential temperature theta-e in KELVIN (not Celsius) — Bolton 1980.
+~~ Kelvin is the convention for theta, and c_moist_parcel_temp() expects it
+~~ Works at any level (e.g. 850, 700, 500 mb)
 function equiv_potential_temp(t_c: float, dewpoint_c: float, pressure_mb: float) -> float {
     validate_temp_c(t_c);
     validate_temp_c(dewpoint_c);
-    validate_pressure_mb(pressure_mb);
+    validate_pressure_any_level_mb(pressure_mb);
     if (dewpoint_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_equiv_potential_temp(t_c, dewpoint_c, pressure_mb);
@@ -240,7 +261,7 @@ function lcl_temp(t_c: float, dewpoint_c: float) -> float {
     validate_temp_c(t_c);
     validate_temp_c(dewpoint_c);
     if (dewpoint_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_lcl_temp(t_c, dewpoint_c);
@@ -252,7 +273,7 @@ function lcl_pressure(t_c: float, dewpoint_c: float, pressure_mb: float) -> floa
     validate_temp_c(dewpoint_c);
     validate_pressure_mb(pressure_mb);
     if (dewpoint_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_lcl_pressure(t_c, dewpoint_c, pressure_mb);
@@ -264,7 +285,7 @@ function lapse_rate(t_upper_c: float, t_lower_c: float, height_diff_m: float) ->
     validate_temp_c(t_upper_c);
     validate_temp_c(t_lower_c);
     if (height_diff_m <= 0.0) {
-        c_print_err("MeteroError: Height difference must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Height difference must be positive.");
         c_exit(2);
     };
     return (t_lower_c - t_upper_c) / height_diff_m * 100.0;
@@ -307,11 +328,10 @@ local function c_wbgt_outdoor(t_c: float, rh: float, solar_wm2: float) -> float 
 ~~ SECTION 2 — HUMIDITY
 ~~ ════════════════════════════════════════════════════
 
-~~ Saturation vapour pressure (mb) — already in section 1
-~~ reexposed here for direct humidity calculations
+~~ Saturation vapour pressure (mb) — alias of sat_vapour_pressure() from section 1,
+~~ kept here so humidity code can find it. Same inputs, same result
 function vapour_pressure_sat(t_c: float) -> float {
-    validate_temp_c(t_c);
-    return c_sat_vp(t_c);
+    return sat_vapour_pressure(t_c);
 };
 
 ~~ Actual vapour pressure (mb) from temp and RH
@@ -333,7 +353,7 @@ function rh_from_dewpoint(t_c: float, dewpoint_c: float) -> float {
     validate_temp_c(t_c);
     validate_temp_c(dewpoint_c);
     if (dewpoint_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_rh_from_dewpoint(t_c, dewpoint_c);
@@ -346,6 +366,7 @@ function absolute_humidity(t_c: float, rh: float) -> float {
     return c_absolute_humidity(t_c, rh);
 };
 
+~~ Absolute humidity (g/m³) from a Fahrenheit temperature
 function absolute_humidity_f(t_f: float, rh: float) -> float {
     return absolute_humidity(fahrenheit_to_celsius(t_f), rh);
 };
@@ -371,7 +392,7 @@ function mixing_ratio(t_c: float, rh: float, pressure_mb: float) -> float {
 ~~ Mixing ratio directly from vapour pressure
 function mixing_ratio_from_vp(vp_mb: float, pressure_mb: float) -> float {
     if (vp_mb < 0.0) {
-        c_print_err("MeteroError: Vapour pressure cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Vapour pressure cannot be negative.");
         c_exit(2);
     };
     validate_pressure_mb(pressure_mb);
@@ -397,7 +418,7 @@ function humidex(t_c: float, dewpoint_c: float) -> float {
         return t_c;
     };
     if (dewpoint_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_humidex(t_c, dewpoint_c);
@@ -420,7 +441,7 @@ function wbgt_outdoor(t_c: float, rh: float, solar_wm2: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
     if (solar_wm2 < 0.0) {
-        c_print_err("MeteroError: Solar radiation cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Solar radiation cannot be negative.");
         c_exit(2);
     };
     return c_wbgt_outdoor(t_c, rh, solar_wm2);
@@ -446,16 +467,17 @@ function wbgt_risk(t_c: float, rh: float, solar_wm2: float) -> int {
 };
 
 ~~ Precipitable water (mm) from sounding arrays
-~~ pressure_levels and specific_humidity must be same length
-~~ pressure in mb descending (surface first), q in g/kg
+~~ PW = (1/g) * integral of q dp, summed with the trapezoid rule
+~~ specific_humidity_arr and pressure_mb_arr must be the same length
+~~ pressure_mb_arr in mb descending (surface first), specific_humidity_arr in g/kg
 function precipitable_water(specific_humidity_arr: float[], pressure_mb_arr: float[]) -> float {
     var n: int = specific_humidity_arr.length;
     if (n != pressure_mb_arr.length) {
-        c_print_err("MeteroError: Array length mismatch in precipitable_water.");
+        c_print_err("MochaLibError (mocha-meteoro): Array length mismatch in precipitable_water.");
         c_exit(2);
     };
     if (n < 2) {
-        c_print_err("MeteroError: precipitable_water requires at least 2 levels.");
+        c_print_err("MochaLibError (mocha-meteoro): precipitable_water requires at least 2 levels.");
         c_exit(2);
     };
     var sum: float = 0.0;
@@ -463,7 +485,8 @@ function precipitable_water(specific_humidity_arr: float[], pressure_mb_arr: flo
     while (i < n - 1) {
         var q_avg: float = (specific_humidity_arr[i] + specific_humidity_arr[i + 1]) / 2.0;
         var dp: float = pressure_mb_arr[i] - pressure_mb_arr[i + 1];
-        sum = sum + q_avg * dp * 0.1;
+        // q in g/kg, dp in mb: (q / 1000) * (dp * 100) / 9.80665 = q * dp / 98.0665 mm
+        sum = sum + q_avg * dp / 98.0665;
         i++;
     };
     return sum;
@@ -509,7 +532,7 @@ local function c_thickness(p_upper: float, p_lower: float, mean_t_c: float) -> f
 
 local function validate_altitude(alt_m: float) -> null {
     if (alt_m < -500.0 || alt_m > 80000.0) {
-        c_print_err("MeteroError: Altitude out of range (-500 to 80000 m).");
+        c_print_err("MochaLibError (mocha-meteoro): Altitude out of range (-500 to 80000 m).");
         c_exit(2);
     };
 };
@@ -522,6 +545,7 @@ function pressure_at_altitude(pressure_sl_mb: float, altitude_m: float, temp_c: 
     return c_pressure_at_altitude(pressure_sl_mb, altitude_m, temp_c);
 };
 
+~~ Pressure at altitude (mb) with the altitude given in feet
 function pressure_at_altitude_ft(pressure_sl_mb: float, altitude_ft: float, temp_c: float) -> float {
     return pressure_at_altitude(pressure_sl_mb, feet_to_meters(altitude_ft), temp_c);
 };
@@ -534,6 +558,7 @@ function altitude_from_pressure(pressure_mb: float, pressure_sl_mb: float, temp_
     return c_altitude_from_pressure(pressure_mb, pressure_sl_mb, temp_c);
 };
 
+~~ Altitude from pressure, result in feet
 function altitude_from_pressure_ft(pressure_mb: float, pressure_sl_mb: float, temp_c: float) -> float {
     return meters_to_feet(altitude_from_pressure(pressure_mb, pressure_sl_mb, temp_c));
 };
@@ -544,6 +569,7 @@ function pressure_altitude(pressure_mb: float) -> float {
     return c_pressure_altitude(pressure_mb);
 };
 
+~~ Pressure altitude, result in feet
 function pressure_altitude_ft(pressure_mb: float) -> float {
     return meters_to_feet(pressure_altitude(pressure_mb));
 };
@@ -555,6 +581,7 @@ function density_altitude(pressure_mb: float, temp_c: float) -> float {
     return c_density_altitude(pressure_mb, temp_c);
 };
 
+~~ Density altitude, result in feet
 function density_altitude_ft(pressure_mb: float, temp_c: float) -> float {
     return meters_to_feet(density_altitude(pressure_mb, temp_c));
 };
@@ -579,6 +606,7 @@ function isa_temp(altitude_m: float) -> float {
     return c_isa_temp(altitude_m);
 };
 
+~~ ISA temperature (C) with the altitude given in feet
 function isa_temp_ft(altitude_ft: float) -> float {
     return isa_temp(feet_to_meters(altitude_ft));
 };
@@ -589,6 +617,7 @@ function isa_pressure(altitude_m: float) -> float {
     return c_isa_pressure(altitude_m);
 };
 
+~~ ISA pressure (mb) with the altitude given in feet
 function isa_pressure_ft(altitude_ft: float) -> float {
     return isa_pressure(feet_to_meters(altitude_ft));
 };
@@ -612,6 +641,7 @@ function altimeter_setting(station_pressure_mb: float, elevation_m: float) -> fl
     return c_altimeter_setting(station_pressure_mb, elevation_m);
 };
 
+~~ Altimeter setting in inches of mercury (the US aviation unit)
 function altimeter_setting_inhg(station_pressure_mb: float, elevation_m: float) -> float {
     return mb_to_inhg(altimeter_setting(station_pressure_mb, elevation_m));
 };
@@ -620,7 +650,7 @@ function altimeter_setting_inhg(station_pressure_mb: float, elevation_m: float) 
 ~~ used for rain/snow discrimination (below 5400m = snow likely)
 function thickness(p_upper_mb: float, p_lower_mb: float, mean_temp_c: float) -> float {
     if (p_upper_mb >= p_lower_mb) {
-        c_print_err("MeteroError: Upper pressure must be less than lower pressure.");
+        c_print_err("MochaLibError (mocha-meteoro): Upper pressure must be less than lower pressure.");
         c_exit(2);
     };
     validate_temp_c(mean_temp_c);
@@ -647,7 +677,9 @@ function mslp(station_pressure_mb: float, elevation_m: float, temp_c: float) -> 
 };
 
 ~~ Pressure tendency — 3hr change, used in synoptic analysis
-~~ Returns category: -3=falling rapidly, 0=steady, +3=rising rapidly
+~~ Returns an int from -3 to +3 (seven levels), from the change p_now - p_3hr_ago in mb:
+~~ -3 below -3.0, -2 to -1.5, -1 to -0.5, 0 steady (within 0.5), +1 to 1.5, +2 to 3.0, +3 above 3.0.
+~~ Negative = falling, positive = rising
 function pressure_tendency(p_now_mb: float, p_3hr_ago_mb: float) -> int {
     var change: float = p_now_mb - p_3hr_ago_mb;
     if (change < -3.0) { return -3; };
@@ -687,31 +719,33 @@ tag BeaufortScale {
 ~~ ── Validators ──
 local function validate_direction(dir: float) -> null {
     if (dir < 0.0 || dir > 360.0) {
-        c_print_err("MeteroError: Wind direction must be 0-360 degrees.");
+        c_print_err("MochaLibError (mocha-meteoro): Wind direction must be 0-360 degrees.");
         c_exit(2);
     };
 };
 
-~~ U component (east-west, positive = eastward)
+~~ U component (east-west, positive = eastward), in km/h
 function wind_u(speed_kmh: float, direction_deg: float) -> float {
     validate_wind_kmh(speed_kmh);
     validate_direction(direction_deg);
     return c_wind_u(speed_kmh, direction_deg);
 };
 
+~~ U component with speed given in m/s, result in m/s
 function wind_u_ms(speed_ms: float, direction_deg: float) -> float {
-    return wind_u(ms_to_kmh(speed_ms), direction_deg);
+    return kmh_to_ms(wind_u(ms_to_kmh(speed_ms), direction_deg));
 };
 
-~~ V component (north-south, positive = northward)
+~~ V component (north-south, positive = northward), in km/h
 function wind_v(speed_kmh: float, direction_deg: float) -> float {
     validate_wind_kmh(speed_kmh);
     validate_direction(direction_deg);
     return c_wind_v(speed_kmh, direction_deg);
 };
 
+~~ V component with speed given in m/s, result in m/s
 function wind_v_ms(speed_ms: float, direction_deg: float) -> float {
-    return wind_v(ms_to_kmh(speed_ms), direction_deg);
+    return kmh_to_ms(wind_v(ms_to_kmh(speed_ms), direction_deg));
 };
 
 ~~ Wind speed from u/v components
@@ -732,6 +766,7 @@ function crosswind(speed_kmh: float, wind_dir_deg: float, runway_dir_deg: float)
     return c_crosswind(speed_kmh, wind_dir_deg, runway_dir_deg);
 };
 
+~~ Crosswind component with speed in knots, result in knots
 function crosswind_knots(speed_knots: float, wind_dir_deg: float, runway_dir_deg: float) -> float {
     return kmh_to_knots(crosswind(knots_to_kmh(speed_knots), wind_dir_deg, runway_dir_deg));
 };
@@ -744,6 +779,7 @@ function headwind(speed_kmh: float, wind_dir_deg: float, runway_dir_deg: float) 
     return c_headwind(speed_kmh, wind_dir_deg, runway_dir_deg);
 };
 
+~~ Headwind component with speed in knots, result in knots (negative = tailwind)
 function headwind_knots(speed_knots: float, wind_dir_deg: float, runway_dir_deg: float) -> float {
     return kmh_to_knots(headwind(knots_to_kmh(speed_knots), wind_dir_deg, runway_dir_deg));
 };
@@ -754,10 +790,12 @@ function beaufort_number(speed_kmh: float) -> int {
     return c_beaufort(speed_kmh);
 };
 
+~~ Beaufort number (0-12) from a wind speed in m/s
 function beaufort_number_ms(speed_ms: float) -> int {
     return beaufort_number(ms_to_kmh(speed_ms));
 };
 
+~~ Beaufort number (0-12) from a wind speed in knots
 function beaufort_number_knots(speed_knots: float) -> int {
     return beaufort_number(knots_to_kmh(speed_knots));
 };
@@ -818,6 +856,7 @@ function wind_power_density(speed_kmh: float, altitude_m: float) -> float {
     return c_wind_power_density(speed_ms, density);
 };
 
+~~ Wind power density (W/m²) with speed in m/s
 function wind_power_density_ms(speed_ms: float, altitude_m: float) -> float {
     return wind_power_density(ms_to_kmh(speed_ms), altitude_m);
 };
@@ -834,7 +873,9 @@ function is_gusty(gust_kmh: float, mean_kmh: float) -> bool {
     return gust_factor(gust_kmh, mean_kmh) > 1.5;
 };
 
-~~ Wind shear magnitude between two levels (km/h per meter)
+~~ Wind shear magnitude between two levels in km/h per metre
+~~ Vector difference of the two winds divided by dz, so direction change counts
+~~ The values are small (0.1 is already strong); for the aviation unit use wind_shear_kt_100ft()
 function wind_shear(speed1_kmh: float, dir1_deg: float,
                     speed2_kmh: float, dir2_deg: float,
                     dz_m: float) -> float {
@@ -843,19 +884,36 @@ function wind_shear(speed1_kmh: float, dir1_deg: float,
     validate_direction(dir1_deg);
     validate_direction(dir2_deg);
     if (dz_m <= 0.0) {
-        c_print_err("MeteroError: Height difference must be positive for wind shear.");
+        c_print_err("MochaLibError (mocha-meteoro): Height difference must be positive for wind shear.");
         c_exit(2);
     };
     return c_wind_shear(speed1_kmh, dir1_deg, speed2_kmh, dir2_deg, dz_m);
 };
 
-~~ Low level wind shear alert — dangerous below 500m
+~~ Wind shear in knots per 100 ft — the unit used in aviation
+~~ Same inputs as wind_shear() (speeds in km/h, dz in metres)
+function wind_shear_kt_100ft(speed1_kmh: float, dir1_deg: float,
+                             speed2_kmh: float, dir2_deg: float,
+                             dz_m: float) -> float {
+    var shear_kmh_m: float = wind_shear(speed1_kmh, dir1_deg, speed2_kmh, dir2_deg, dz_m);
+    return shear_kmh_m * 30.48 / 1.852;
+};
+
+~~ Low level wind shear alert (LLWS)
+~~ True when the vector wind change across the layer is >= 15 knots (27.8 km/h),
+~~ the usual aviation alert threshold. The layer is assumed to start near the surface
+~~ and should be no deeper than 500 m (1600 ft); a deeper layer prints a warning
+~~ but is still checked
 function llws_alert(speed1_kmh: float, dir1_deg: float,
                     speed2_kmh: float, dir2_deg: float,
                     dz_m: float) -> bool {
     var shear: float = wind_shear(speed1_kmh, dir1_deg,
                                    speed2_kmh, dir2_deg, dz_m);
-    return shear > 0.1;
+    if (dz_m > 500.0) {
+        c_print_err("MeteroWarning: LLWS applies to layers within 500 m of the surface; this layer is deeper.");
+    };
+    var wind_change_kmh: float = shear * dz_m;
+    return wind_change_kmh >= knots_to_kmh(15.0);
 };
 
 ~~ Relative wind direction — is wind from given sector?
@@ -910,7 +968,7 @@ tag PrecipType {
 ~~ ── Rainfall intensity classification ──
 function rainfall_intensity(rate_mmhr: float) -> RainfallIntensity {
     if (rate_mmhr < 0.0) {
-        c_print_err("MeteroError: Rainfall rate cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Rainfall rate cannot be negative.");
         c_exit(2);
     };
     if (rate_mmhr < 0.2)  { return RainfallIntensity.TRACE; };
@@ -934,7 +992,7 @@ function precip_type(t_c: float, wetbulb_c: float, dewpoint_c: float) -> PrecipT
 ~~ ── Radar: dBZ to rain rate (mm/hr) ──
 function dbz_to_rainrate(dbz: float) -> float {
     if (dbz < -30.0 || dbz > 75.0) {
-        c_print_err("MeteroError: dBZ value out of realistic range (-30 to 75).");
+        c_print_err("MochaLibError (mocha-meteoro): dBZ value out of realistic range (-30 to 75).");
         c_exit(2);
     };
     if (dbz < 0.0) { return 0.0; };
@@ -944,7 +1002,7 @@ function dbz_to_rainrate(dbz: float) -> float {
 ~~ Rain rate to dBZ
 function rainrate_to_dbz(rate_mmhr: float) -> float {
     if (rate_mmhr < 0.0) {
-        c_print_err("MeteroError: Rain rate cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Rain rate cannot be negative.");
         c_exit(2);
     };
     if (rate_mmhr == 0.0) { return -32.0; };
@@ -965,11 +1023,11 @@ function dbz_category(dbz: float) -> str {
 ~~ Snow water equivalent (mm) from depth and density
 function snow_water_equivalent(snow_depth_cm: float, snow_density_kgm3: float) -> float {
     if (snow_depth_cm < 0.0) {
-        c_print_err("MeteroError: Snow depth cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Snow depth cannot be negative.");
         c_exit(2);
     };
     if (snow_density_kgm3 <= 0.0) {
-        c_print_err("MeteroError: Snow density must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Snow density must be positive.");
         c_exit(2);
     };
     return c_snow_water_equiv(snow_depth_cm, snow_density_kgm3);
@@ -984,7 +1042,7 @@ function snow_density(temp_c: float) -> float {
 ~~ Snowfall depth from liquid equivalent
 function rain_to_snowfall_depth(rain_mm: float, temp_c: float) -> float {
     if (rain_mm < 0.0) {
-        c_print_err("MeteroError: Rainfall equivalent cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Rainfall equivalent cannot be negative.");
         c_exit(2);
     };
     validate_temp_c(temp_c);
@@ -1002,15 +1060,15 @@ function snow_load(snow_depth_cm: float, snow_density_kgm3: float) -> float {
 ~~ Hail size estimate from dBZ
 function hail_size_mm(dbz: float) -> float {
     if (dbz < 0.0) {
-        c_print_err("MeteroError: dBZ cannot be negative for hail estimate.");
+        c_print_err("MochaLibError (mocha-meteoro): dBZ cannot be negative for hail estimate.");
         c_exit(2);
     };
     return c_hail_size_dbz(dbz);
 };
 
-~~ Hail significant? (>= 19mm = quarter-size = severe threshold)
+~~ Hail significant? (>= 25.4 mm = 1 inch = NWS severe hail threshold since 2010)
 function is_significant_hail(dbz: float) -> bool {
-    return c_hail_size_dbz(dbz) >= 19.0;
+    return c_hail_size_dbz(dbz) >= 25.4;
 };
 
 ~~ ── Accumulation ──
@@ -1018,11 +1076,11 @@ function is_significant_hail(dbz: float) -> bool {
 ~~ Accumulated precipitation from rate and duration
 function precip_accumulated(rate_mmhr: float, duration_hr: float) -> float {
     if (rate_mmhr < 0.0) {
-        c_print_err("MeteroError: Rate cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Rate cannot be negative.");
         c_exit(2);
     };
     if (duration_hr < 0.0) {
-        c_print_err("MeteroError: Duration cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Duration cannot be negative.");
         c_exit(2);
     };
     return rate_mmhr * duration_hr;
@@ -1033,7 +1091,7 @@ function precip_accumulated(rate_mmhr: float, duration_hr: float) -> float {
 ~~ decay: typically 0.85-0.98
 function antecedent_precip_index(daily_rain_mm: float[], decay: float) -> float {
     if (decay <= 0.0 || decay >= 1.0) {
-        c_print_err("MeteroError: API decay factor must be between 0 and 1.");
+        c_print_err("MochaLibError (mocha-meteoro): API decay factor must be between 0 and 1.");
         c_exit(2);
     };
     var api: float = 0.0;
@@ -1052,11 +1110,11 @@ function antecedent_precip_index(daily_rain_mm: float[], decay: float) -> float 
 ~~ SCS curve number runoff estimation
 function runoff_curve_number(rainfall_mm: float, curve_number: float) -> float {
     if (rainfall_mm < 0.0) {
-        c_print_err("MeteroError: Rainfall cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Rainfall cannot be negative.");
         c_exit(2);
     };
     if (curve_number <= 0.0 || curve_number > 100.0) {
-        c_print_err("MeteroError: Curve number must be between 0 and 100.");
+        c_print_err("MochaLibError (mocha-meteoro): Curve number must be between 0 and 100.");
         c_exit(2);
     };
     return c_runoff_cn(rainfall_mm, curve_number);
@@ -1078,23 +1136,32 @@ function et_hargreaves(t_max_c: float, t_min_c: float,
     validate_temp_c(t_min_c);
     validate_temp_c(t_mean_c);
     if (t_max_c < t_min_c) {
-        c_print_err("MeteroError: Max temperature must exceed min temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Max temperature must exceed min temperature.");
         c_exit(2);
     };
     if (ra_mj_m2_day < 0.0) {
-        c_print_err("MeteroError: Extraterrestrial radiation cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Extraterrestrial radiation cannot be negative.");
         c_exit(2);
     };
     return c_et_hargreaves(t_max_c, t_min_c, t_mean_c, ra_mj_m2_day);
 };
 
-~~ Drought index — simple ratio of ET to precipitation
+~~ Drought index — aridity ratio P/ET (precipitation divided by evapotranspiration)
+~~ Lower values mean drier conditions
+~~ Requires precip_mm >= 0 and et_mm > 0
 function drought_index(precip_mm: float, et_mm: float) -> float {
-    if (et_mm <= 0.0) { return 0.0; };
+    if (precip_mm < 0.0) {
+        c_print_err("MochaLibError (mocha-meteoro): Precipitation cannot be negative.");
+        c_exit(2);
+    };
+    if (et_mm <= 0.0) {
+        c_print_err("MochaLibError (mocha-meteoro): Evapotranspiration must be positive.");
+        c_exit(2);
+    };
     return precip_mm / et_mm;
 };
 
-~~ Is drought? (P/ET < 0.65 = arid threshold)
+~~ Is drought? (P/ET < 0.65 = UNEP dry sub-humid or drier)
 function is_drought(precip_mm: float, et_mm: float) -> bool {
     return drought_index(precip_mm, et_mm) < 0.65;
 };
@@ -1102,7 +1169,7 @@ function is_drought(precip_mm: float, et_mm: float) -> bool {
 ~~ Return period (years) from annual exceedance probability
 function return_period(annual_exceedance_prob: float) -> float {
     if (annual_exceedance_prob <= 0.0 || annual_exceedance_prob >= 1.0) {
-        c_print_err("MeteroError: Exceedance probability must be between 0 and 1.");
+        c_print_err("MochaLibError (mocha-meteoro): Exceedance probability must be between 0 and 1.");
         c_exit(2);
     };
     return 1.0 / annual_exceedance_prob;
@@ -1111,7 +1178,7 @@ function return_period(annual_exceedance_prob: float) -> float {
 ~~ Exceedance probability from return period
 function exceedance_probability(return_period_yr: float) -> float {
     if (return_period_yr <= 0.0) {
-        c_print_err("MeteroError: Return period must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Return period must be positive.");
         c_exit(2);
     };
     return 1.0 / return_period_yr;
@@ -1143,11 +1210,11 @@ tag SevereWeatherRisk {
 function cape_cin(pressure_mb: float[], temp_c: float[], dewpoint_c: float[]) -> float[] {
     var n: int = pressure_mb.length;
     if (n != temp_c.length || n != dewpoint_c.length) {
-        c_print_err("MeteroError: cape_cin arrays must be same length.");
+        c_print_err("MochaLibError (mocha-meteoro): cape_cin arrays must be same length.");
         c_exit(2);
     };
     if (n < 2) {
-        c_print_err("MeteroError: cape_cin requires at least 2 levels.");
+        c_print_err("MochaLibError (mocha-meteoro): cape_cin requires at least 2 levels.");
         c_exit(2);
     };
 
@@ -1309,6 +1376,7 @@ function showalter_index(t850_c: float, td850_c: float, t500_c: float) -> float 
     return c_showalter(t850_c, td850_c, t500_c);
 };
 
+~~ Showalter Index to risk level. Lower (more negative) values mean more instability
 function showalter_severity(si: float) -> SevereWeatherRisk {
     if (si > 3.0)  { return SevereWeatherRisk.NONE; };
     if (si > 1.0)  { return SevereWeatherRisk.MARGINAL; };
@@ -1329,6 +1397,7 @@ function lifted_index(t_sfc_c: float, td_sfc_c: float,
     return li_raw * -1.0;  // FLIP SIGN — should be negative for instability
 };
 
+~~ Lifted Index to risk level. Lower (more negative) values mean more instability
 function lifted_index_severity(li: float) -> SevereWeatherRisk {
     if (li > 2.0)  { return SevereWeatherRisk.NONE; };
     if (li > 0.0)  { return SevereWeatherRisk.MARGINAL; };
@@ -1343,6 +1412,7 @@ function total_totals(t850_c: float, td850_c: float, t500_c: float) -> float {
     return c_total_totals(t850_c, td850_c, t500_c);
 };
 
+~~ Total-Totals to risk level. Higher values mean more risk
 function total_totals_severity(tt: float) -> SevereWeatherRisk {
     if (tt < 44.0) { return SevereWeatherRisk.NONE; };
     if (tt < 50.0) { return SevereWeatherRisk.MARGINAL; };
@@ -1360,6 +1430,7 @@ function sweat_index(td850_c: float, tt: float,
     return c_sweat(td850_c, tt, spd850_kmh, spd500_kmh, dir850_deg, dir500_deg);
 };
 
+~~ SWEAT index to risk level. Higher values mean more risk
 function sweat_severity(sw: float) -> SevereWeatherRisk {
     if (sw < 150.0) { return SevereWeatherRisk.NONE; };
     if (sw < 250.0) { return SevereWeatherRisk.SLIGHT; };
@@ -1375,7 +1446,7 @@ function srh(u_ms: float[], v_ms: float[],
              storm_u_ms: float, storm_v_ms: float) -> float {
     var n: int = u_ms.length;
     if (n != v_ms.length) {
-        c_print_err("MeteroError: SRH u/v arrays must be same length.");
+        c_print_err("MochaLibError (mocha-meteoro): SRH u/v arrays must be same length.");
         c_exit(2);
     };
     var srh_val: float = 0.0;
@@ -1391,6 +1462,7 @@ function srh(u_ms: float[], v_ms: float[],
     return srh_val;
 };
 
+~~ Storm relative helicity (m²/s²) to risk level. Higher values mean more risk
 function srh_severity(srh_val: float) -> SevereWeatherRisk {
     if (srh_val < 0.0)   { return SevereWeatherRisk.NONE; };
     if (srh_val < 150.0) { return SevereWeatherRisk.MARGINAL; };
@@ -1404,6 +1476,7 @@ function energy_helicity_index(cape_val: float, srh_val: float) -> float {
     return c_ehi(cape_val, srh_val);
 };
 
+~~ Energy Helicity Index to risk level. Higher values mean more risk
 function ehi_severity(ehi_val: float) -> SevereWeatherRisk {
     if (ehi_val < 0.5) { return SevereWeatherRisk.NONE; };
     if (ehi_val < 1.0) { return SevereWeatherRisk.MARGINAL; };
@@ -1416,12 +1489,13 @@ function ehi_severity(ehi_val: float) -> SevereWeatherRisk {
 function supercell_composite(cape_val: float, srh_val: float,
                               bulk_shear_ms: float) -> float {
     if (bulk_shear_ms < 0.0) {
-        c_print_err("MeteroError: Bulk shear cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Bulk shear cannot be negative.");
         c_exit(2);
     };
     return c_scp(cape_val, srh_val, bulk_shear_ms);
 };
 
+~~ Supercell Composite Parameter to risk level. Higher values mean more risk
 function scp_severity(scp_val: float) -> SevereWeatherRisk {
     if (scp_val < 1.0) { return SevereWeatherRisk.NONE; };
     if (scp_val < 4.0) { return SevereWeatherRisk.SLIGHT; };
@@ -1433,7 +1507,7 @@ function scp_severity(scp_val: float) -> SevereWeatherRisk {
 ~~ ── Bulk Richardson Number ──
 function bulk_richardson_number(cape_val: float, bulk_shear_ms: float) -> float {
     if (bulk_shear_ms <= 0.0) {
-        c_print_err("MeteroError: Bulk shear must be positive for BRN.");
+        c_print_err("MochaLibError (mocha-meteoro): Bulk shear must be positive for BRN.");
         c_exit(2);
     };
     return c_brn(cape_val, bulk_shear_ms);
@@ -1507,7 +1581,7 @@ tag AQICategory {
 ~~ Visibility from extinction coefficient (km)
 function visibility_from_extinction(extinction_per_km: float) -> float {
     if (extinction_per_km < 0.0) {
-        c_print_err("MeteroError: Extinction coefficient cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Extinction coefficient cannot be negative.");
         c_exit(2);
     };
     return c_vis_from_ext(extinction_per_km);
@@ -1516,7 +1590,7 @@ function visibility_from_extinction(extinction_per_km: float) -> float {
 ~~ Extinction coefficient from visibility (km)
 function extinction_from_visibility(visibility_km: float) -> float {
     if (visibility_km <= 0.0) {
-        c_print_err("MeteroError: Visibility must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Visibility must be positive.");
         c_exit(2);
     };
     return c_ext_from_vis(visibility_km);
@@ -1525,7 +1599,7 @@ function extinction_from_visibility(visibility_km: float) -> float {
 ~~ Visibility category — ICAO definitions
 function visibility_category(visibility_km: float) -> str {
     if (visibility_km < 0.0) {
-        c_print_err("MeteroError: Visibility cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Visibility cannot be negative.");
         c_exit(2);
     };
     if (visibility_km < 0.2)  { return "fog"; };
@@ -1536,27 +1610,50 @@ function visibility_category(visibility_km: float) -> str {
     return "clear";
 };
 
-~~ Prevailing visibility — minimum of directional readings
+~~ Prevailing visibility (km): the greatest visibility reached or exceeded over at least
+~~ half of the horizon circle. Assumes the readings come from equal sectors, e.g. 8 compass directions
 function prevailing_visibility(vis_readings_km: float[]) -> float {
     if (vis_readings_km.length == 0) {
-        c_print_err("MeteroError: No visibility readings provided.");
+        c_print_err("MochaLibError (mocha-meteoro): No visibility readings provided.");
         c_exit(2);
     };
-    var min_vis: float = vis_readings_km[0];
-    var i: int = 1;
-    while (i < vis_readings_km.length) {
-        if (vis_readings_km[i] < min_vis) {
-            min_vis = vis_readings_km[i];
+    var n: int = vis_readings_km.length;
+    var need: int = (n + 1) / 2;
+    var best: float = 0.0 - 1.0;
+    var i: int = 0;
+    while (i < n) {
+        var count: int = 0;
+        var j: int = 0;
+        while (j < n) {
+            if (vis_readings_km[j] >= vis_readings_km[i]) {
+                count = count + 1;
+            };
+            j = j + 1;
         };
-        i++;
+        if (count >= need && vis_readings_km[i] > best) {
+            best = vis_readings_km[i];
+        };
+        i = i + 1;
     };
-    return min_vis;
+    return best;
 };
+
+"""~~ Prevailing visibility (km): the greatest visibility reached or exceeded over at least
+~~ half of the horizon circle. Assumes the readings come from equal sectors, e.g. 8 compass directions
+function prevailing_visibility(vis_readings_km: float[]) -> float {
+    if (vis_readings_km.length == 0) {
+        c_print_err("MochaLibError (mocha-meteoro): No visibility readings provided.");
+        c_exit(2);
+    };
+    vis_readings_km.sort();
+    var n: int = vis_readings_km.length;
+    return vis_readings_km[n - (n + 1) / 2];
+};"""
 
 ~~ Runway Visual Range (m)
 function runway_visual_range(visibility_m: float, has_runway_lights: bool) -> float {
     if (visibility_m < 0.0) {
-        c_print_err("MeteroError: Visibility cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Visibility cannot be negative.");
         c_exit(2);
     };
     var lights: int = 0;
@@ -1564,14 +1661,15 @@ function runway_visual_range(visibility_m: float, has_runway_lights: bool) -> fl
     return c_rvr(visibility_m, lights);
 };
 
-~~ Is below IFR minimums? (visibility < 1.6km or ceiling < 500m)
+~~ Instrument flight conditions (FAA IFR or worse): visibility < 3 statute miles (4.83 km)
+~~ or ceiling < 1000 ft (304.8 m). Includes LIFR, so is_lifr implies is_ifr
 function is_ifr(visibility_km: float, ceiling_m: float) -> bool {
-    return visibility_km < 1.6 || ceiling_m < 500.0;
+    return visibility_km < 4.828 || ceiling_m < 304.8;
 };
 
-~~ Is below LIFR minimums? (visibility < 0.8km or ceiling < 200m)
+~~ Low IFR (FAA LIFR): visibility < 1 statute mile (1.61 km) or ceiling < 500 ft (152.4 m)
 function is_lifr(visibility_km: float, ceiling_m: float) -> bool {
-    return visibility_km < 0.8 || ceiling_m < 200.0;
+    return visibility_km < 1.609 || ceiling_m < 152.4;
 };
 
 ~~ ── Fog ──
@@ -1593,7 +1691,7 @@ function fog_probability(t_c: float, td_c: float, wind_kmh: float) -> float {
     validate_temp_c(t_c);
     validate_wind_kmh(wind_kmh);
     if (td_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_fog_probability(t_c, td_c, wind_kmh);
@@ -1603,7 +1701,7 @@ function fog_probability(t_c: float, td_c: float, wind_kmh: float) -> float {
 function fog_ceiling(t_c: float, td_c: float) -> float {
     validate_temp_c(t_c);
     if (td_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_fog_ceiling(t_c, td_c);
@@ -1616,7 +1714,7 @@ function radiation_fog_risk(t_c: float, td_c: float,
     validate_temp_c(t_c);
     validate_wind_kmh(wind_kmh);
     if (cloud_cover_oktas < 0 || cloud_cover_oktas > 8) {
-        c_print_err("MeteroError: Cloud cover must be 0-8 oktas.");
+        c_print_err("MochaLibError (mocha-meteoro): Cloud cover must be 0-8 oktas.");
         c_exit(2);
     };
     // Clear sky required for radiative cooling
@@ -1632,7 +1730,7 @@ function radiation_fog_risk(t_c: float, td_c: float,
 function cloud_base_height(t_c: float, td_c: float) -> float {
     validate_temp_c(t_c);
     if (td_c > t_c) {
-        c_print_err("MeteroError: Dew point cannot exceed air temperature.");
+        c_print_err("MochaLibError (mocha-meteoro): Dew point cannot exceed air temperature.");
         c_exit(2);
     };
     return c_cloud_base(t_c, td_c);
@@ -1645,7 +1743,7 @@ function cloud_base_height_ft(t_c: float, td_c: float) -> float {
 ~~ Cloud base category — METAR ceiling terms
 function ceiling_category(height_m: float) -> str {
     if (height_m < 0.0) {
-        c_print_err("MeteroError: Ceiling height cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Ceiling height cannot be negative.");
         c_exit(2);
     };
     if (height_m < 100.0)  { return "obscured"; };
@@ -1675,7 +1773,7 @@ function icing_risk(t_c: float, rh: float, liquid_water_content: float) -> Icing
 function freezing_level(temp_c_arr: float[], altitude_m_arr: float[]) -> float {
     var n: int = temp_c_arr.length;
     if (n != altitude_m_arr.length) {
-        c_print_err("MeteroError: freezing_level arrays must be same length.");
+        c_print_err("MochaLibError (mocha-meteoro): freezing_level arrays must be same length.");
         c_exit(2);
     };
     var i: int = 0;
@@ -1744,7 +1842,7 @@ function is_poor_dispersion(mixing_depth_m: float, mean_wind_kmh: float) -> bool
 ~~ PM2.5 sub-index (µg/m³)
 function aqi_pm25_subindex(pm25_ugm3: float) -> float {
     if (pm25_ugm3 < 0.0) {
-        c_print_err("MeteroError: PM2.5 cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): PM2.5 cannot be negative.");
         c_exit(2);
     };
     return c_aqi_pm25(pm25_ugm3);
@@ -1753,7 +1851,7 @@ function aqi_pm25_subindex(pm25_ugm3: float) -> float {
 ~~ PM10 sub-index (µg/m³)
 function aqi_pm10_subindex(pm10_ugm3: float) -> float {
     if (pm10_ugm3 < 0.0) {
-        c_print_err("MeteroError: PM10 cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): PM10 cannot be negative.");
         c_exit(2);
     };
     return c_aqi_pm10(pm10_ugm3);
@@ -1762,7 +1860,7 @@ function aqi_pm10_subindex(pm10_ugm3: float) -> float {
 ~~ NO2 sub-index (µg/m³)
 function aqi_no2_subindex(no2_ugm3: float) -> float {
     if (no2_ugm3 < 0.0) {
-        c_print_err("MeteroError: NO2 cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): NO2 cannot be negative.");
         c_exit(2);
     };
     return c_aqi_no2(no2_ugm3);
@@ -1771,7 +1869,7 @@ function aqi_no2_subindex(no2_ugm3: float) -> float {
 ~~ SO2 sub-index (µg/m³)
 function aqi_so2_subindex(so2_ugm3: float) -> float {
     if (so2_ugm3 < 0.0) {
-        c_print_err("MeteroError: SO2 cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): SO2 cannot be negative.");
         c_exit(2);
     };
     return c_aqi_so2(so2_ugm3);
@@ -1780,7 +1878,7 @@ function aqi_so2_subindex(so2_ugm3: float) -> float {
 ~~ O3 sub-index (µg/m³)
 function aqi_o3_subindex(o3_ugm3: float) -> float {
     if (o3_ugm3 < 0.0) {
-        c_print_err("MeteroError: O3 cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): O3 cannot be negative.");
         c_exit(2);
     };
     return c_aqi_o3(o3_ugm3);
@@ -1789,23 +1887,25 @@ function aqi_o3_subindex(o3_ugm3: float) -> float {
 ~~ CO sub-index (mg/m³)
 function aqi_co_subindex(co_mgm3: float) -> float {
     if (co_mgm3 < 0.0) {
-        c_print_err("MeteroError: CO cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): CO cannot be negative.");
         c_exit(2);
     };
     return c_aqi_co(co_mgm3);
 };
 
-~~ Combined Indian AQI (0-800+) from all pollutants
-~~ Combined Indian AQI (0-800+) from all pollutants
+~~ Combined Indian AQI from all pollutants: the highest of the six sub-indices
+~~ Uses the CPCB breakpoints. CPCB's official scale ends at 500; this library continues
+~~ the top segment's slope above that, so extreme episodes give values up to about 800
+~~ and beyond, instead of being capped at 500
 function aqi_indian(pm25_ugm3: float, pm10_ugm3: float,
                     no2_ugm3: float, so2_ugm3: float,
                     o3_ugm3: float, co_mgm3: float) -> float {
-    var s1: float = c_aqi_pm25(pm25_ugm3);
-    var s2: float = c_aqi_pm10(pm10_ugm3);
-    var s3: float = c_aqi_no2(no2_ugm3);
-    var s4: float = c_aqi_so2(so2_ugm3);
-    var s5: float = c_aqi_o3(o3_ugm3);
-    var s6: float = c_aqi_co(co_mgm3);
+    var s1: float = aqi_pm25_subindex(pm25_ugm3);
+    var s2: float = aqi_pm10_subindex(pm10_ugm3);
+    var s3: float = aqi_no2_subindex(no2_ugm3);
+    var s4: float = aqi_so2_subindex(so2_ugm3);
+    var s5: float = aqi_o3_subindex(o3_ugm3);
+    var s6: float = aqi_co_subindex(co_mgm3);
     
     // Return max of all sub-indices
     var max_val: float = s1;
@@ -1857,7 +1957,7 @@ function aqi_advisory(aqi_value: float) -> str {
     return "emergency_isolation_medical_supervision";
 };
 
-~~ AQI emoji/severity
+~~ AQI severity level as an int: 1 (good) up to 6 (the top category)
 function aqi_severity(aqi_value: float) -> int {
     if (aqi_value <= 50.0)   { return 1; };
     if (aqi_value <= 100.0)  { return 2; };
@@ -1867,28 +1967,28 @@ function aqi_severity(aqi_value: float) -> int {
     return 6;
 };
 
-~~ Visibility impairment from PM2.5 (stronger relationship)
+const PM25_MEE_M2_PER_G: float = 4.4;
+~~ Light extinction added by PM2.5, in km^-1 (Koschmieder framework)
+~~ b_ext = MEE * PM2.5, using a mass extinction efficiency of 4.4 m²/g, a typical urban average.
+~~ The real value varies with humidity and composition, roughly 3 to 8 m²/g
 function visibility_impairment_pm25(pm25_ugm3: float) -> float {
     if (pm25_ugm3 < 0.0) {
-        c_print_err("MeteroError: PM2.5 cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): PM2.5 cannot be negative.");
         c_exit(2);
     };
-    // Empirical: reduction_km = sqrt(PM2.5 / 10)
-    // 15µg→0.39km, 250µg→1.58km
-    var sqrt_term: float = (pm25_ugm3 / 10.0).sqrt().real;
-    return sqrt_term;
+    return PM25_MEE_M2_PER_G * pm25_ugm3 / 1000.0;
 };
 
 ~~ Estimated visibility from PM2.5 and baseline clear visibility
 function estimated_visibility_pm25(pm25_ugm3: float, clear_sky_visibility_km: float) -> float {
     if (clear_sky_visibility_km <= 0.0) {
-        c_print_err("MeteroError: Clear sky visibility must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Clear sky visibility must be positive.");
         c_exit(2);
     };
-    var reduction_km: float = visibility_impairment_pm25(pm25_ugm3);
-    var vis: float = clear_sky_visibility_km - reduction_km;
-    if (vis < 0.0) { vis = 0.0; };
-    return vis;
+    // extinctions add: b_total = b_clear + b_pm, and visibility = 3.912 / b_total
+    var b_clear: float = 3.912 / clear_sky_visibility_km;
+    var b_total: float = b_clear + visibility_impairment_pm25(pm25_ugm3);
+    return 3.912 / b_total;
 };
 
 ~~ Is air quality hazardous to outdoor activity?
@@ -1928,21 +2028,21 @@ tag UVCategory {
 ~~ ── Validators ──
 local function validate_latitude(lat: float) -> null {
     if (lat < -90.0 || lat > 90.0) {
-        c_print_err("MeteroError: Latitude must be between -90 and 90.");
+        c_print_err("MochaLibError (mocha-meteoro): Latitude must be between -90 and 90.");
         c_exit(2);
     };
 };
 
 local function validate_longitude(lon: float) -> null {
     if (lon < -180.0 || lon > 180.0) {
-        c_print_err("MeteroError: Longitude must be between -180 and 180.");
+        c_print_err("MochaLibError (mocha-meteoro): Longitude must be between -180 and 180.");
         c_exit(2);
     };
 };
 
 local function validate_doy(doy: int) -> null {
     if (doy < 1 || doy > 366) {
-        c_print_err("MeteroError: Day of year must be 1-366.");
+        c_print_err("MochaLibError (mocha-meteoro): Day of year must be 1-366.");
         c_exit(2);
     };
 };
@@ -1964,7 +2064,7 @@ function equation_of_time(day_of_year: int) -> float {
 ~~ Hour angle (degrees) from solar time
 function hour_angle(solar_time_hr: float) -> float {
     if (solar_time_hr < 0.0 || solar_time_hr > 24.0) {
-        c_print_err("MeteroError: Solar time must be 0-24 hours.");
+        c_print_err("MochaLibError (mocha-meteoro): Solar time must be 0-24 hours.");
         c_exit(2);
     };
     return c_hour_angle(solar_time_hr);
@@ -2108,7 +2208,7 @@ function net_radiation(rs_mj_m2_day: float, t_max_c: float, t_min_c: float,
     validate_rh(rh_mean);
     validate_altitude(elevation_m);
     if (t_max_c < t_min_c) {
-        c_print_err("MeteroError: Max temp must exceed min temp.");
+        c_print_err("MochaLibError (mocha-meteoro): Max temp must exceed min temp.");
         c_exit(2);
     };
     return c_net_radiation(rs_mj_m2_day, t_max_c, t_min_c,
@@ -2118,7 +2218,7 @@ function net_radiation(rs_mj_m2_day: float, t_max_c: float, t_min_c: float,
 ~~ PAR — Photosynthetically Active Radiation (W/m²)
 function par(global_radiation_wm2: float) -> float {
     if (global_radiation_wm2 < 0.0) {
-        c_print_err("MeteroError: Global radiation cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): Global radiation cannot be negative.");
         c_exit(2);
     };
     return c_par(global_radiation_wm2);
@@ -2132,7 +2232,7 @@ function uv_index(latitude_deg: float, day_of_year: int,
     validate_latitude(latitude_deg);
     validate_doy(day_of_year);
     if (ozone_du <= 0.0) {
-        c_print_err("MeteroError: Ozone column must be positive (Dobson units).");
+        c_print_err("MochaLibError (mocha-meteoro): Ozone column must be positive (Dobson units).");
         c_exit(2);
     };
     var elev: float = solar_elevation(latitude_deg, day_of_year, solar_time_hr);
@@ -2143,7 +2243,7 @@ function uv_index(latitude_deg: float, day_of_year: int,
 ~~ UV category tag
 function uv_category(uvi: float) -> UVCategory {
     if (uvi < 0.0) {
-        c_print_err("MeteroError: UV index cannot be negative.");
+        c_print_err("MochaLibError (mocha-meteoro): UV index cannot be negative.");
         c_exit(2);
     };
     if (uvi < 3.0)  { return UVCategory.LOW; };
@@ -2168,11 +2268,11 @@ function solar_panel_output(panel_area_m2: float, efficiency: float,
     validate_latitude(latitude_deg);
     validate_doy(day_of_year);
     if (panel_area_m2 <= 0.0) {
-        c_print_err("MeteroError: Panel area must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Panel area must be positive.");
         c_exit(2);
     };
     if (efficiency <= 0.0 || efficiency > 1.0) {
-        c_print_err("MeteroError: Efficiency must be between 0 and 1.");
+        c_print_err("MochaLibError (mocha-meteoro): Efficiency must be between 0 and 1.");
         c_exit(2);
     };
     var ra: float = c_clear_sky_rad(latitude_deg, day_of_year, elevation_m);
@@ -2184,7 +2284,7 @@ function solar_panel_output(panel_area_m2: float, efficiency: float,
 ~~ Day of year from month and day (non-leap year)
 function day_of_year(month: int, day: int) -> int {
     if (month < 1 || month > 12) {
-        c_print_err("MeteroError: Month must be 1-12.");
+        c_print_err("MochaLibError (mocha-meteoro): Month must be 1-12.");
         c_exit(2);
     };
     var days_in_month: int[] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -2218,11 +2318,13 @@ function heating_degree_days(t_mean_c: float, base_c: float) -> float {
     return c_hdd(t_mean_c, base_c);
 };
 
+~~ Heating degree days with the base fixed at 18C
 function hdd(t_mean_c: float) -> float {
     validate_temp_c(t_mean_c);
     return c_hdd(t_mean_c, 18.0);
 };
 
+~~ Heating degree days (base 18C) from a daily mean in Fahrenheit. The result is in degree-days on the Celsius scale
 function hdd_f(t_mean_f: float) -> float {
     return hdd(fahrenheit_to_celsius(t_mean_f));
 };
@@ -2233,6 +2335,7 @@ function cooling_degree_days(t_mean_c: float, base_c: float) -> float {
     return c_cdd(t_mean_c, base_c);
 };
 
+~~ Cooling degree days with the base fixed at 18C
 function cdd(t_mean_c: float) -> float {
     validate_temp_c(t_mean_c);
     return c_cdd(t_mean_c, 18.0);
@@ -2267,12 +2370,13 @@ function growing_degree_days(t_max_c: float, t_min_c: float,
     validate_temp_c(t_max_c);
     validate_temp_c(t_min_c);
     if (t_max_c < t_min_c) {
-        c_print_err("MeteroError: Max temp must exceed min temp.");
+        c_print_err("MochaLibError (mocha-meteoro): Max temp must exceed min temp.");
         c_exit(2);
     };
     return c_gdd(t_max_c, t_min_c, base_c, cap_c);
 };
 
+~~ Growing degree days with the default base 10C and cap 30C
 function gdd(t_max_c: float, t_min_c: float) -> float {
     return growing_degree_days(t_max_c, t_min_c, 10.0, 30.0);
 };
@@ -2282,7 +2386,7 @@ function accumulated_gdd(t_max_arr: float[], t_min_arr: float[],
                           base_c: float, cap_c: float) -> float {
     var n: int = t_max_arr.length;
     if (n != t_min_arr.length) {
-        c_print_err("MeteroError: Max and min temp arrays must be same length.");
+        c_print_err("MochaLibError (mocha-meteoro): Max and min temp arrays must be same length.");
         c_exit(2);
     };
     var total: float = 0.0;
@@ -2304,7 +2408,7 @@ function temp_anomaly(observed_c: float, climatology_c: float) -> float {
 ~~ Precipitation anomaly (%)
 function precip_anomaly_pct(observed_mm: float, climatology_mm: float) -> float {
     if (climatology_mm <= 0.0) {
-        c_print_err("MeteroError: Climatological mean must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Climatological mean must be positive.");
         c_exit(2);
     };
     return (observed_mm - climatology_mm) / climatology_mm * 100.0;
@@ -2313,13 +2417,14 @@ function precip_anomaly_pct(observed_mm: float, climatology_mm: float) -> float 
 ~~ Standardised anomaly (z-score)
 function standardised_anomaly(observed: float, mean: float, std_dev: float) -> float {
     if (std_dev <= 0.0) {
-        c_print_err("MeteroError: Standard deviation must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Standard deviation must be positive.");
         c_exit(2);
     };
     return c_std_anomaly(observed, mean, std_dev);
 };
 
-~~ Percentile rank of value in climatology array
+~~ Percentile rank (0-100) of a value in a climatology array
+~~ = percentage of climatology values strictly below the value
 function percentile_rank(value: float, climatology: float[]) -> float {
     var n: int = climatology.length;
     if (n == 0) {
@@ -2332,7 +2437,7 @@ function percentile_rank(value: float, climatology: float[]) -> float {
         if (climatology[i] < value) { below = below + 1; };
         i++;
     };
-    return below / n * 100.0;
+    return (below * 100.0) / n;
 };
 
 ~~ Is value extreme? (outside 10th-90th percentile)
@@ -2343,15 +2448,19 @@ function is_extreme(value: float, climatology: float[]) -> bool {
 
 ~~ ── Indices ──
 
-~~ SPI — Standardised Precipitation Index
-~~ < -2.0 = extreme drought, > 2.0 = extreme wet
+~~ SPI approximation — plain z-score: (precip - mean) / std
+~~ This does NOT fit a gamma distribution like the official SPI (McKee 1993),
+~~ so it is only a rough guide, best for long accumulation periods (12+ months)
+~~ where rainfall is close to normally distributed
+~~ For a plain anomaly use standardised_anomaly(), which gives the same number
+~~ <= -2.0 = extreme drought, >= 2.0 = extreme wet
 function spi(precip_mm: float, mean_mm: float, std_mm: float) -> float {
     if (mean_mm <= 0.0) {
-        c_print_err("MeteroError: Mean precipitation must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Mean precipitation must be positive.");
         c_exit(2);
     };
     if (std_mm <= 0.0) {
-        c_print_err("MeteroError: Std deviation must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Std deviation must be positive.");
         c_exit(2);
     };
     return c_spi(precip_mm, mean_mm, std_mm);
@@ -2473,7 +2582,7 @@ function very_heavy_precip_days(precip_arr: float[]) -> int {
 function mean_diurnal_range(t_max_arr: float[], t_min_arr: float[]) -> float {
     var n: int = t_max_arr.length;
     if (n != t_min_arr.length) {
-        c_print_err("MeteroError: Max and min temp arrays must be same length.");
+        c_print_err("MochaLibError (mocha-meteoro): Max and min temp arrays must be same length.");
         c_exit(2);
     };
     if (n == 0) { return 0.0; };
@@ -2515,11 +2624,11 @@ function pet_thornthwaite(t_mean_c: float, annual_heat_index: float,
                            daylight_hr: float, days_in_month: int) -> float {
     validate_temp_c(t_mean_c);
     if (annual_heat_index <= 0.0) {
-        c_print_err("MeteroError: Annual heat index must be positive.");
+        c_print_err("MochaLibError (mocha-meteoro): Annual heat index must be positive.");
         c_exit(2);
     };
     if (days_in_month < 28 || days_in_month > 31) {
-        c_print_err("MeteroError: Days in month must be 28-31.");
+        c_print_err("MochaLibError (mocha-meteoro): Days in month must be 28-31.");
         c_exit(2);
     };
     return c_pet_thornthwaite(t_mean_c, annual_heat_index,
@@ -2529,7 +2638,7 @@ function pet_thornthwaite(t_mean_c: float, annual_heat_index: float,
 ~~ Thornthwaite annual heat index from 12 monthly means
 function thornthwaite_heat_index(monthly_means_c: float[]) -> float {
     if (monthly_means_c.length != 12) {
-        c_print_err("MeteroError: Thornthwaite heat index requires 12 monthly means.");
+        c_print_err("MochaLibError (mocha-meteoro): Thornthwaite heat index requires 12 monthly means.");
         c_exit(2);
     };
     var hi: float = 0.0;
@@ -2766,6 +2875,7 @@ function saffir_simpson_category(wind_kmh: float) -> CycloneScale {
     return CycloneScale.CATEGORY_5;
 };
 
+~~ Saffir-Simpson category from a wind speed in knots
 function saffir_simpson_category_knots(wind_knots: float) -> CycloneScale {
     return saffir_simpson_category(knots_to_kmh(wind_knots));
 };

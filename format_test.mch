@@ -1,3 +1,6 @@
+
+// Both sections work. first is positional second is named. pos is commented out just to fit in 1 file
+// it does not mean it has an issue.
 """function test(didLoad) -> null {
 
     // Basic positional
@@ -58,5 +61,4 @@ function test(didLoad) -> null {
     var s6: str = "$who said $who again".format(who="Shiv");
     print(s6, newLine=true);
     // Expected: Shiv said Shiv again
-
 };

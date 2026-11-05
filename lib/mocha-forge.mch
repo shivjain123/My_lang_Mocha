@@ -1,5 +1,9 @@
 // mocha-lib-deps: mocha-stats, mocha-string, mocha-sqlite
 
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
+local function c_exp(x: float) -> float native mocha_wrap_exp;
+
 //Const
 const RAND: int = -999999;
 

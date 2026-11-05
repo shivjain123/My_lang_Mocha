@@ -70,6 +70,8 @@ def collect_items(ast):
     for node in ast.statements:
 
         if isinstance(node, FunctionDecl):
+            if getattr(node, 'is_local', False):
+                continue  # local = file-private, keep it out of the docs
             desc, dparams, dreturn = parse_doc_lines(node.doc or [])
             items.append({
                 "kind":        "function",
@@ -171,7 +173,17 @@ def render_doc_body(item):
     parts = []
 
     if item["doc_desc"]:
-        desc_html = ". ".join(e(l).rstrip(".") for l in item["doc_desc"] if l) + "."
+        raw = [l.strip().rstrip(".") for l in item["doc_desc"] if l]
+        desc_html = ""
+        prev = ""
+        for l in raw:
+            if prev:
+                # a line ending in , : ; continues into the next line, no period
+                desc_html += " " if prev[-1] in ",:;" else ". "
+            desc_html += e(l)
+            prev = l
+        if prev and prev[-1] not in ",:;!?":
+            desc_html += "."
         if desc_html:
             parts.append(f'<p class="doc-desc">{desc_html}</p>')
 

@@ -1,7 +1,7 @@
 /*
  * ============================================================
  * Mocha Language Runtime
- * mocha_runtime.c                      (Mocha v1.2 — 5th October 2026)
+ * mocha_runtime.c                      (Mocha v1.5 — 1st November 2026)
  * ============================================================
  *
  * PLATFORM SUPPORT
@@ -25,7 +25,7 @@
  *   CUDA runtime (used by mocha-neuron) lives elsewhere.
  *
  * ── MEMORY MANAGEMENT ──────────────────────────────────────
- *   Reference counting (partial — masks GC where it is wired in)
+ *   Reference counting (the old GC stubs are gone)
  *   - rc_alloc / rc_retain / rc_release / rc_count
  *   - Every RC block carries a MochaRCNode header (ref count,
  *     size, live-list links, magic) plus an 8-byte back canary
@@ -35,18 +35,35 @@
  *   - mocha_rc_stats() prints live object count and bytes;
  *     mocha_rc_shutdown() frees every remaining node
  *   RC-managed:     strings, complex, 1D arrays, 2D arrays,
- *                   tuples, dicts, sets, StringBuilder output
+ *                   tuples, dicts, sets, StringBuilder output,
+ *                   classes (including extend and tag), CUDA
+ *                   tensors
  *   Caller-managed BY DESIGN (manual free/dispose, never RC):
- *                   HashTable, File, StringBuilder buffer
- *   Still to come:  Classes, block scoping, CUDA objects,
- *                   mocha-ink charts
+ *                   HashTable, File (.free()), StringBuilder
+ *                   buffer, mocha-ink charts (.free()), 
+ *                   the final model of a mocha-neuron
+ *                   program (dispose())
+ *   In progress:    block scoping
+ *   Still to come:  cycle prevention, inheritance RC
  *
  * ── CRASH DIAGNOSTICS ──────────────────────────────────────
  *   - mocha_signal_handlers_init(): SIGSEGV / SIGILL handler
  *     prints a readable "Mocha Runtime Error" box with likely
- *     causes instead of a bare crash
- *   - Windows only: vectored SEH handler prints the faulting
+ *     causes instead of a bare crash (Windows, macOS, Linux)
+ *   - Windows: vectored SEH handler prints the faulting
  *     address as exe+offset plus a 16-frame backtrace
+ *   - macOS / Linux: backtrace via execinfo
+ *
+ * ── WEBASSEMBLY BUILD (MOCHA_WASM) ─────────────────────────
+ *   - MOCHA_WASM is set automatically from __wasm__ when the
+ *     runtime is built for wasm32-wasi (`mocha wasm`)
+ *   - It skips setjmp, signals, execinfo, the crash handler and
+ *     the backtrace; getrandom is replaced by getentropy
+ *   - try/rescue is a stub in the browser build
+ *   - 64-bit adapters (mocha_malloc64, mocha_rc_alloc64,
+ *     mocha_rc_count64) sit at the bottom of this file, because
+ *     the compiled IR uses i64 sizes and wasm32 pointers are
+ *     32-bit
  *
  * ── CORE TYPES ─────────────────────────────────────────────
  *   - String operations (alloc via RC, concat, compare, case,
@@ -56,11 +73,18 @@
  *   - Complex number arithmetic (MochaComplex — RC'd; add, sub,
  *     mul, div, abs, conjugate, toString; returned by
  *     domain-unsafe math ops instead of crashing)
- *   - Print functions (int, float, str, bool, vast;
- *     newline variants; Inf/NaN-aware float printing)
+ *   - Print functions (int, float, str, bool, vast, complex;
+ *     arrays, 2D arrays, tuples and dicts; newline variants;
+ *     Inf/NaN-aware float printing). The newline flag prints
+ *     a newline BEFORE the value, not after it;
+ *     mocha_output_finalize() adds one closing newline at
+ *     program end if anything was printed
  *   - Type conversions (int↔float↔str↔vast↔bool)
  *   - Fixed-point arithmetic (scaled by 10^12, __int128
- *     overflow guard — add, sub, mul, div, mod)
+ *     overflow guard — add, sub, mul, div, mod). Used by
+ *     a + b and by +=, -=, *=, /= on floats
+ *   - mocha_unsafe_add/sub/mul/div/mod: raw double operations
+ *     with a range check, behind the unsafe_* functions
  *
  * ── COLLECTIONS ────────────────────────────────────────────
  *   - 1D Array runtime (MochaArray — RC'd; dynamic and fixed/
@@ -117,16 +141,24 @@
  *     macOS/Linux: getrandom() / getentropy())
  *
  * ── I/O ────────────────────────────────────────────────────
- *   - File I/O (MochaFile — read/write/append, readline,
- *     exists; "read"/"write"/"append" mode strings)
+ *   - File I/O (MochaFile — open, read, readline, eof, write,
+ *     close, free, exists; "read"/"write"/"append" mode
+ *     strings). Caller-managed BY DESIGN: call .free() when
+ *     done
  *   - tell() — blocking stdin input with optional prompt
  *
  * ── EXCEPTION HANDLING ─────────────────────────────────────
  *   - try/rescue/fail via setjmp/longjmp (Linux/macOS) and
  *     RtlCaptureContext/RtlRestoreContext (Windows)
- *   - Nested exception frames (MochaExFrame stack)
- *   - mocha_ex_throw, mocha_ex_rethrow, mocha_ex_push/pop
+ *   - Nested exception frames (MochaExFrame stack); a fail
+ *     inside a rescue block is caught by the outer try
+ *   - An unhandled fail prints a runtime error and exits
+ *   - mocha_ex_throw, mocha_ex_push/pop; mocha_ex_rethrow is
+ *     an internal re-raise helper called by generated code
+ *     (the language has no rethrow statement)
  *   - Windows only: mocha_ex_reset_landed, mocha_ex_did_land
+ *   - MOCHA_WASM build: all of the above are stubs (see the
+ *     WEBASSEMBLY BUILD section)
  *
  * ── RUNTIME STACK TRACKING ─────────────────────────────────
  *   - Call stack of 256 frames (func name, file, line)
@@ -134,25 +166,30 @@
  *   - exit() macro overridden to print traceback before _Exit
  *
  * ── FFI WRAPPERS ───────────────────────────────────────────
- *   - SQLite3 (open/exec/query/close; result cache API —
- *     query_run, query_rows/cols/cell/colname; table_exists,
- *     last_rowid, changes, errmsg)
- *   - Lua 5.5 [MOCHA_WITH_LUA] (new/close, dostring/dofile,
+ *   - SQLite3 (open/exec/query/close; query prints rows to
+ *     stdout; result cache API — query_run, query_rows/cols/
+ *     cell/colname; table_exists, last_rowid, changes, errmsg;
+ *     the result cache is a single global)
+ *   - Lua 5.5.0 [MOCHA_WITH_LUA] (new/close, dostring/dofile,
  *     safe_dostring; get/set for number/string/bool/int; call
  *     variants: call_number/string/int, call1n, call1s, call2n,
- *     call2s)
- *   - Wren [MOCHA_WITH_WREN] (new/free, dostring/dofile,
+ *     call2s, call1n_string; stack_size, clear_stack)
+ *   - Wren 0.4.0 [MOCHA_WITH_WREN] (new/free, dostring/dofile,
  *     safe_dostring; eval_number/string/bool/int; call variants
  *     with 0/1/2 args; legacy global getters)
  *   - ctype (isalpha, isdigit, toupper, tolower)
  *   - math (hypot, fmod, erf, tgamma, lgamma, exp)
  *   - system (system call wrapper)
+ *   - mocha_print_stderr and mocha_exit (Mocha-side c_print_err
+ *     and c_exit, used by the libraries)
  *   - time/stopwatch (clock, time_ms, unix_time, wall_ms,
  *     wait; datetime_now, date_now, time_now, ampm_now,
  *     day_now, month_now, year_now)
  *   - Rust, C++, and Zig are interfaced with Mocha but do not
  *     need wrappers because they are directly linked via
- *     -fuse-ld=lld
+ *     -fuse-ld=lld. Zig is downloaded automatically on first
+ *     use. C++ functions that return a str must wrap it in
+ *     mocha_ffi_str_copy() (defined in this file)
  *
  * ── MISC / LIB SUPPORT ─────────────────────────────────────
  *   - mocha_missing_arg — CLI default-param error (main()
@@ -160,15 +197,14 @@
  *     try/rescue exception handling)
  *   - ht_djb2 — DJB2 hash for mocha-ds Bloom Filters (mocha-ds
  *     is otherwise pure Mocha; this is its one native helper)
+ *   - mocha_malloc_safe / mocha_strdup_safe / mocha_calloc_safe:
+ *     allocation helpers with an out-of-memory check
+ *   - mocha_rc_stats_if_enabled(): prints the RC stats at exit
+ *     when the MOCHA_RC_STATS environment variable is set
  *
  * ── STRAGGLER LIB WRAPPERS ─────────────────────────────────
  *   - mocha-processing: mocha_map_float (float array lambda map)
- *   - mocha-matvec:     mocha_wrap_sqrt_f
- *   - mocha-SymCha:     mocha_wrap_{sin,cos,tan,log,
- *                         asin,acos,atan,
- *                         sinh,cosh,tanh,asinh,atanh}
- *     (plain C math passthroughs — map directly to x86 fsin/
- *     fcos/fsqrt; remainder of each lib is dogfooded in Mocha)
+ *     (the rest of each library is written in Mocha itself)
  *
  * ── MOCHA-INK SVG VISUALISATION ─────────────────────────────
  *   - Shared infrastructure: palette (Tableau-8), named color
@@ -202,7 +238,7 @@
  *                   adiabats, mixing-ratio lines, wind barbs)
  *   All charts: ink_*_save(path) and ink_*_show() (opens in
  *   default browser; cross-platform: start/open/xdg-open)
- *   RC planned (see MEMORY MANAGEMENT)
+ *   Caller-managed: call .free() on each chart when done
  *
  * ── MOCHA-METEORO v0.1 ─────────────────────────────────────
  *   Professional meteorology library (C helpers are prefixed
@@ -351,8 +387,7 @@ static void mocha_print_backtrace(int skip) {
 }
 
 /* ===============================================================
-   Mocha Reference Counting (This is also partially working since \
-   full has not yet been done)
+   Mocha Reference Counting
    =============================================================== */
 void mocha_stack_print(void); //Forward Declare
 
@@ -470,7 +505,6 @@ void mocha_rc_shutdown() {
 static char* rc_alloc_string(size_t len) {
     return (char*)rc_alloc(len + 1);
 }
-
 
 void mocha_rc_stats() {
     size_t count = 0;
@@ -1242,6 +1276,126 @@ void mocha_print_vast(int64_t n, int8_t newline) {
     mocha_has_printed = 1;   // ← ADD THIS ONE LINE
 }
 
+void mocha_print_complex(MochaComplex *c, int8_t newline) {
+    if (newline) printf("\n");
+    if (!c) {
+        printf("null");
+    } else {
+        double real = fabs(c->real) < MOCHA_EPSILON ? 0.0 : c->real;
+        double imag = fabs(c->imag) < MOCHA_EPSILON ? 0.0 : c->imag;
+        if (imag >= 0)
+            printf("%.6g+%.6gim", real, imag);
+        else
+            printf("%.6g%.6gim", real, imag);
+    }
+    fflush(stdout);
+    mocha_has_printed = 1;
+}
+
+// Print a 1D array like [1, 2, 3]. kind: 0=int 1=str 2=float 3=bool 4=vast
+void mocha_array_print(MochaArray *a, int32_t kind, int8_t newline) {
+    if (newline) printf("\n");
+    if (!a) {
+        printf("[]");
+        fflush(stdout);
+        mocha_has_printed = 1;
+        return;
+    }
+    printf("[");
+    for (int32_t i = 0; i < a->length; i++) {
+        if (i > 0) printf(", ");
+        if (kind == 1) {
+            char *s = ((char **)a->data)[i];
+            printf("\"%s\"", s ? s : "");
+        } else if (kind == 2) {
+            mocha_print_float(((double *)a->data)[i], 0);
+        } else if (kind == 3) {
+            int8_t b = (a->elem_size == 1) ? ((int8_t *)a->data)[i]
+                                           : (int8_t)(((int32_t *)a->data)[i] != 0);
+            mocha_print_bool(b, 0);
+        } else if (kind == 4) {
+            printf("%lld", (long long)((int64_t *)a->data)[i]);
+        } else {
+            printf("%d", ((int32_t *)a->data)[i]);
+        }
+    }
+    printf("]");
+    fflush(stdout);
+    mocha_has_printed = 1;
+}
+
+// Print a 2D array in matrix layout, one row per line. kind: 0=int 1=str 2=float 3=bool 4=vast
+// Prints a 2D array without newline/flush. indent = columns the opening '[' already sits at.
+void mocha_array2d_print_at(MochaArray2D *a, int32_t kind, int32_t indent) {
+    if (!a || a->rows == 0) {
+        printf("[]");
+        return;
+    }
+    printf("[");
+    for (int32_t r = 0; r < a->rows; r++) {
+        if (r > 0) {
+            printf(",\n");
+            for (int32_t k = 0; k < indent + 1; k++) printf(" ");
+        }
+        mocha_array_print(a->data[r], kind, 0);
+    }
+    printf("]");
+}
+
+// Print a 2D array in matrix layout, one row per line. kind: 0=int 1=str 2=float 3=bool 4=vast
+void mocha_array2d_print(MochaArray2D *a, int32_t kind, int8_t newline) {
+    if (newline) printf("\n");
+    mocha_array2d_print_at(a, kind, 0);
+    fflush(stdout);
+    mocha_has_printed = 1;
+}
+
+// Print a tuple like (1, 2.5, true). kinds: 4 bits per slot, 0=int 1=str 2=float 3=bool 4=vast 15=unknown
+void mocha_tuple_print(MochaTuple *t, int64_t kinds, int8_t newline) {
+    if (newline) printf("\n");
+    if (!t) {
+        printf("()");
+        fflush(stdout);
+        mocha_has_printed = 1;
+        return;
+    }
+    int has2d = 0;
+    for (int32_t i = 0; i < t->count && i < 16; i++) {
+        int k = (int)((kinds >> (4 * i)) & 15);
+        if (k >= 10 && k <= 14) has2d = 1;
+    }
+    printf("(");
+    for (int32_t i = 0; i < t->count; i++) {
+        if (i > 0) printf(has2d ? ",\n " : ", ");
+        int shift = (i < 16) ? 4 * i : 60;
+        int kind = (int)((kinds >> shift) & 15);
+        void *slot = t->slots[i];
+        if (kind == 1) {
+            char *s = (char *)slot;
+            printf("\"%s\"", s ? s : "");
+        } else if (!slot) {
+            printf("?");
+        } else if (kind == 2) {
+            mocha_print_float(*(double *)slot, 0);
+        } else if (kind == 3) {
+            mocha_print_bool(*(int8_t *)slot, 0);
+        } else if (kind == 4) {
+            printf("%lld", (long long)*(int64_t *)slot);
+        } else if (kind == 0) {
+            printf("%d", *(int32_t *)slot);
+        } else if (kind >= 5 && kind <= 9) {
+            mocha_array_print(*(MochaArray **)slot, kind - 5, 0);
+        } else if (kind >= 10 && kind <= 14) {
+            mocha_array2d_print_at(*(MochaArray2D **)slot, kind - 10, 1);
+        } else {
+            printf("?");
+        }
+    }
+    printf(")");
+    fflush(stdout);
+    mocha_has_printed = 1;
+}
+
 /* ============================================================
  * FIXED-POINT FLOAT ARITHMETIC
  *
@@ -1270,6 +1424,11 @@ double mocha_float_add(double a, double b) {
     if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
         return a + b;  // raw IEEE 754 fallback for large numbers
     }
+    // raw IEEE 754 fallback for tiny non-zero operands: below ~1e-9 the 1e-12
+    // fixed-point grid keeps too few digits (anything below 1e-12 truncates to 0)
+    if ((a != 0.0 && fabs(a) < 1e-9) || (b != 0.0 && fabs(b) < 1e-9)) {
+        return a + b;
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to(a_s + b_s);
@@ -1278,6 +1437,11 @@ double mocha_float_add(double a, double b) {
 double mocha_float_sub(double a, double b) { 
     if (a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25) {
         return a - b;  // raw IEEE 754 fallback for large numbers
+    }
+    // raw IEEE 754 fallback for tiny non-zero operands: below ~1e-9 the 1e-12
+    // fixed-point grid keeps too few digits (anything below 1e-12 truncates to 0)
+    if ((a != 0.0 && fabs(a) < 1e-9) || (b != 0.0 && fabs(b) < 1e-9)) {
+        return a - b;
     }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
@@ -1289,6 +1453,13 @@ double mocha_float_mul(double a, double b) {
     if (!isfinite(p) || fabs(p) > 1e14 || fabs(a) > 1e25 || fabs(b) > 1e25) {
         return p;  // raw IEEE 754 fallback: inf/nan, product too large for safe __int128 scaling, or an operand too large to scale
     }
+    // raw IEEE 754 fallback for tiny non-zero values: below ~1e-6 the 1e-12 fixed-point
+    // grid keeps fewer than 6 digits (and anything below 1e-12 truncates to 0)
+    if ((p != 0.0 && fabs(p) < 1e-9) ||
+        (a != 0.0 && fabs(a) < 1e-9) ||
+        (b != 0.0 && fabs(b) < 1e-9)) {
+        return p;
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to((a_s * b_s) / (mocha_decimal)MOCHA_DECIMAL_SCALE);
@@ -1299,6 +1470,12 @@ double mocha_float_div(double a, double b) {
     if (!isfinite(a) || !isfinite(b) || fabs(a) > 1e14 || fabs(b) < 1e-12) {
         return a / b;  // raw IEEE 754 fallback — inf/nan, huge numerator, or divisor below fixed-point resolution
     }
+    // raw IEEE 754 fallback for tiny non-zero numerator or result: below ~1e-9 the
+    // 1e-12 fixed-point grid keeps too few digits (anything below 1e-12 truncates to 0)
+    double q = a / b;
+    if ((a != 0.0 && fabs(a) < 1e-9) || (q != 0.0 && fabs(q) < 1e-9)) {
+        return q;
+    }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
     return decimal_to((a_s * (mocha_decimal)MOCHA_DECIMAL_SCALE) / b_s);
@@ -1308,6 +1485,11 @@ double mocha_float_mod(double a, double b) {
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
     if (!isfinite(a) || !isfinite(b) || a > 1e25 || a < -1e25 || b > 1e25 || b < -1e25 || fabs(b) < 1e-12) {
         return fmod(a, b);  // raw IEEE 754 fallback — large/non-finite values, or divisor below fixed-point resolution
+    }
+    // raw IEEE 754 fallback for tiny non-zero operands: below ~1e-9 the 1e-12
+    // fixed-point grid keeps too few digits (anything below 1e-12 truncates to 0)
+    if ((a != 0.0 && fabs(a) < 1e-9) || fabs(b) < 1e-9) {
+        return fmod(a, b);
     }
     mocha_decimal a_s = decimal_from(a);
     mocha_decimal b_s = decimal_from(b);
@@ -1475,6 +1657,16 @@ MochaArray* mocha_array_copy(MochaArray *arr) {
     return copy;
 }
 
+// Copy gives the new array its own reference to every pointer element
+// (str, class and Complex arrays store 8-byte RC pointers). Only call this
+// for arrays whose elements are RC pointers.
+void mocha_array_retain_elems(MochaArray *arr) {
+    for (int32_t i = 0; i < arr->length; i++) {
+        void *p = *(void **)((char *)arr->data + (size_t)i * arr->elem_size);
+        if (p) rc_retain(p);
+    }
+}
+
 int32_t mocha_array_occs(MochaArray *arr, void *value) {
     int32_t count = 0;
     for (int32_t i = 0; i < arr->length; i++)
@@ -1618,6 +1810,31 @@ MochaArray2D* mocha_array2d_new(int32_t rows, int32_t cols,
     MOCHA_OOM_CHECK(arr->data);
     for (int32_t r = 0; r < rows; r++)
         arr->data[r] = alloc_row(cols, elem_size, fixed_c);
+    return arr;
+}
+
+/* Build a real 2D array from a 1D array of row pointers (the result of a nested
+   list comprehension). The 2D array adopts the row references; the temporary 1D
+   wrapper is freed without touching the rows. */
+MochaArray2D* mocha_array2d_from_rows(MochaArray *rows, int32_t elem_size, int32_t elem_is_str) {
+    int32_t n = rows->length;
+    MochaArray2D *arr = (MochaArray2D *)rc_alloc(sizeof(MochaArray2D));
+    MOCHA_OOM_CHECK(arr);
+    arr->rows        = n;
+    arr->cols        = n > 0 ? ((MochaArray **)rows->data)[0]->length : 0;
+    arr->elem_size   = elem_size;
+    arr->fixed_r     = 0;
+    arr->fixed_c     = 0;
+    arr->elem_is_str = elem_is_str;
+    arr->data = (MochaArray **)malloc((n > 0 ? n : 1) * sizeof(MochaArray *));
+    MOCHA_OOM_CHECK(arr->data);
+    for (int32_t r = 0; r < n; r++)
+        arr->data[r] = ((MochaArray **)rows->data)[r];
+    free(rows->data);
+    rows->data     = NULL;
+    rows->length   = 0;
+    rows->capacity = 0;
+    rc_release(rows);
     return arr;
 }
 
@@ -1784,6 +2001,32 @@ void mocha_array2d_drop_row(MochaArray2D *arr, int32_t row) {
     for (int32_t r = row; r < arr->rows - 1; r++)
         arr->data[r] = arr->data[r + 1];
     arr->rows--;
+}
+
+/* Class / Complex element arrays: drop a row or column releasing every dropped
+   element through the class release function (rel). */
+void mocha_array2d_drop_row_objs(MochaArray2D *arr, int32_t row, void (*rel)(void *)) {
+    MOCHA_BOUNDS_CHECK_ROW(arr, row);
+    mocha_array_release_objs(arr->data[row], rel);
+    for (int32_t r = row; r < arr->rows - 1; r++)
+        arr->data[r] = arr->data[r + 1];
+    arr->rows--;
+}
+
+void mocha_array2d_drop_col_objs(MochaArray2D *arr, int32_t col, void (*rel)(void *)) {
+    MOCHA_BOUNDS_CHECK_COL(arr, col);
+    for (int32_t r = 0; r < arr->rows; r++) {
+        char *data = (char *)arr->data[r]->data;
+        void *old;
+        memcpy(&old, data + (size_t)col * arr->elem_size, sizeof(void *));
+        if (old) rel(old);
+        for (int32_t c = col; c < arr->cols - 1; c++)
+            memcpy(data + (size_t)c * arr->elem_size,
+                   data + (size_t)(c + 1) * arr->elem_size,
+                   arr->elem_size);
+        arr->data[r]->length--;
+    }
+    arr->cols--;
 }
 
 void mocha_array2d_drop_col(MochaArray2D *arr, int32_t col) {
@@ -2509,6 +2752,7 @@ double mocha_math_limit_inf(MochaClosureBundle *bundle) {
     return r;
 }
 
+//Fake entropy but deterministic and needed for ML save/load
 int32_t mocha_rand_int(int32_t min, int32_t max) {
     return min + (rand() % (max - min + 1));
 }
@@ -2635,15 +2879,6 @@ int mocha_bcrypt_rand_seed() {
     crypto_random_bytes(&raw, sizeof(raw));
     return (int)(raw & 0x7FFFFFFF);
 }
-
-/* ============================================================
- * MOCHA-SYMCHA / MOCHA-MATVEC STRAGGLER WRAPPERS
- *
- * Plain C math passthrough — remainder of these libs is
- * implemented in Mocha itself via dogfooding.
- * ============================================================ */
-
-double mocha_wrap_sqrt_f(double x) { return sqrt(x); }
 
 /* ============================================================
  * DICT RUNTIME
@@ -3946,6 +4181,13 @@ int mocha_sqlite3_table_exists(void *db, const char *table) {
 #include "lualib.h"
 #include "lauxlib.h"
 
+/* Guard used by the Lua functions: a null state prints an error and returns a safe default */
+#define MOCHA_LUA_NULL_CHECK(L, fname, retval) \
+    if (!(L)) { \
+        fprintf(stderr, "MochaLuaError: %s called with a null Lua state\n", fname); \
+        return retval; \
+    }
+
 /* Create a new Lua state with all standard libs loaded */
 void* mocha_lua_new() {
     lua_State *L = luaL_newstate();
@@ -3954,32 +4196,50 @@ void* mocha_lua_new() {
     return (void*)L;
 }
 
-/* Execute a Lua string — returns 0 on success, error code otherwise */
+/* Execute a Lua string — returns 0 on success, error code otherwise (1 for a null state)
+ * The stack is put back exactly as it was, so return values and error messages don't pile up */
 int mocha_lua_dostring(void *L, const char *code) {
-    return luaL_dostring((lua_State*)L, code);
+    MOCHA_LUA_NULL_CHECK(L, "lua_run", 1);
+    lua_State *S = (lua_State*)L;
+    int top = lua_gettop(S);
+    int r = luaL_dostring(S, code);
+    lua_settop(S, top);
+    return r;
 }
 
-/* Execute a Lua file — returns 0 on success, error code otherwise */
+/* Execute a Lua file — returns 0 on success, error code otherwise (1 for a null state)
+ * The stack is put back exactly as it was, so return values and error messages don't pile up */
 int mocha_lua_dofile(void *L, const char *filename) {
-    return luaL_dofile((lua_State*)L, filename);
+    MOCHA_LUA_NULL_CHECK(L, "lua_run_file", 1);
+    lua_State *S = (lua_State*)L;
+    int top = lua_gettop(S);
+    int r = luaL_dofile(S, filename);
+    lua_settop(S, top);
+    return r;
 }
 
-/* Close and free the Lua state */
+/* Close and free the Lua state. Close each state only once:
+ * a second close of the same handle is undefined behaviour */
 void* mocha_lua_close(void *L) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_close", NULL);
     lua_close((lua_State*)L);
     return NULL;
 }
 
-/* Read a global number variable from Lua state */
+/* Read a global number variable from Lua state
+ * A missing or non-numeric global gives 0.0 */
 double mocha_lua_getnumber(void *L, const char *varname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_get_number", 0.0);
     lua_getglobal((lua_State*)L, varname);
     double r = lua_tonumber((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
 }
 
-/* Read a global string variable from Lua state */
+/* Read a global string variable from Lua state
+ * A missing or non-string global gives an empty string (mocha_rc_copy turns NULL into "") */
 const char* mocha_lua_getstring(void *L, const char *varname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_get_string", mocha_rc_copy(""));
     lua_getglobal((lua_State*)L, varname);
     char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
@@ -3989,15 +4249,27 @@ const char* mocha_lua_getstring(void *L, const char *varname) {
 /* ── Get values from Lua ── */
 
 int mocha_lua_getbool(void *L, const char *varname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_get_bool", 0);
     lua_getglobal((lua_State*)L, varname);
     int r = lua_toboolean((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
 }
 
+/* Reads the number at a stack index as an int, cutting off any decimals (3.7 -> 3).
+ * Non-numbers give 0. Values outside the int range are clamped, NaN gives 0 */
+static int mocha_lua_toint(lua_State *S, int idx) {
+    double d = lua_tonumber(S, idx);
+    if (d != d) return 0;
+    if (d >= 2147483647.0) return 2147483647;
+    if (d <= -2147483648.0) return (-2147483647 - 1);
+    return (int)d;
+}
+
 int mocha_lua_getint(void *L, const char *varname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_get_int", 0);
     lua_getglobal((lua_State*)L, varname);
-    int r = (int)lua_tointeger((lua_State*)L, -1);
+    int r = mocha_lua_toint((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
 }
@@ -4005,24 +4277,28 @@ int mocha_lua_getint(void *L, const char *varname) {
 /* ── Set values into Lua from Mocha ── */
 
 void* mocha_lua_setnumber(void *L, const char *varname, double val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_set_number", NULL);
     lua_pushnumber((lua_State*)L, val);
     lua_setglobal((lua_State*)L, varname);
     return NULL;
 }
 
 void* mocha_lua_setstring(void *L, const char *varname, const char *val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_set_string", NULL);
     lua_pushstring((lua_State*)L, val);
     lua_setglobal((lua_State*)L, varname);
     return NULL;
 }
 
 void* mocha_lua_setbool(void *L, const char *varname, int val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_set_bool", NULL);
     lua_pushboolean((lua_State*)L, val);
     lua_setglobal((lua_State*)L, varname);
     return NULL;
 }
 
 void* mocha_lua_setint(void *L, const char *varname, int val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_set_int", NULL);
     lua_pushinteger((lua_State*)L, val);
     lua_setglobal((lua_State*)L, varname);
     return NULL;
@@ -4030,24 +4306,32 @@ void* mocha_lua_setint(void *L, const char *varname, int val) {
 
 /* ── Protected execution ── */
 
+/* Returns the error message, or an empty string on success.
+ * The stack is put back exactly as it was, so return values don't pile up */
 const char* mocha_lua_safe_dostring(void *L, const char *code) {
-    int r = luaL_dostring((lua_State*)L, code);
+    MOCHA_LUA_NULL_CHECK(L, "lua_try", mocha_rc_copy("MochaLuaError: null Lua state"));
+    lua_State *S = (lua_State*)L;
+    int top = lua_gettop(S);
+    int r = luaL_dostring(S, code);
+    char *out;
     if (r != 0) {
-        char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
-        lua_pop((lua_State*)L, 1);
-        return out;
+        out = mocha_rc_copy(lua_tostring(S, -1));
+    } else {
+        out = mocha_rc_copy("");  /* empty string = success; NULL would crash Mocha */
     }
-    return mocha_rc_copy("");  // empty string = success;
-    //NULL WOULD CRASH MOCHA
+    lua_settop(S, top);
+    return out;
 }
 
 /* ── Stack utilities ── */
 
 int mocha_lua_stack_size(void *L) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_stack_size", 0);
     return lua_gettop((lua_State*)L);
 }
 
 void* mocha_lua_clear_stack(void *L) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_clear_stack", NULL);
     lua_settop((lua_State*)L, 0);
     return NULL;
 }
@@ -4056,6 +4340,7 @@ void* mocha_lua_clear_stack(void *L) {
 
 // call func() → number
 double mocha_lua_call_number(void *L, const char *funcname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_number", 0.0);
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
@@ -4071,6 +4356,7 @@ double mocha_lua_call_number(void *L, const char *funcname) {
 
 // call func() → string
 const char* mocha_lua_call_string(void *L, const char *funcname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_string", mocha_rc_copy(""));
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
@@ -4086,6 +4372,7 @@ const char* mocha_lua_call_string(void *L, const char *funcname) {
 
 // call func() → int
 int mocha_lua_call_int(void *L, const char *funcname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_int", 0);
     lua_getglobal((lua_State*)L, funcname);
     if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
         const char *err = lua_tostring((lua_State*)L, -1);
@@ -4094,13 +4381,14 @@ int mocha_lua_call_int(void *L, const char *funcname) {
         lua_pop((lua_State*)L, 1);
         return 0;
     }
-    int r = (int)lua_tointeger((lua_State*)L, -1);
+    int r = mocha_lua_toint((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
 }
 
 // call func(number) → number
 double mocha_lua_call1n_number(void *L, const char *funcname, double arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_number_1n", 0.0);
     lua_getglobal((lua_State*)L, funcname);
     lua_pushnumber((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
@@ -4117,6 +4405,7 @@ double mocha_lua_call1n_number(void *L, const char *funcname, double arg) {
 
 // call func(string) → string
 const char* mocha_lua_call1s_string(void *L, const char *funcname, const char *arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_string_1s", mocha_rc_copy(""));
     lua_getglobal((lua_State*)L, funcname);
     lua_pushstring((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
@@ -4133,6 +4422,7 @@ const char* mocha_lua_call1s_string(void *L, const char *funcname, const char *a
 
 // call func(number, number) → number
 double mocha_lua_call2n_number(void *L, const char *funcname, double a, double b) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_number_2n", 0.0);
     lua_getglobal((lua_State*)L, funcname);
     lua_pushnumber((lua_State*)L, a);
     lua_pushnumber((lua_State*)L, b);
@@ -4150,6 +4440,7 @@ double mocha_lua_call2n_number(void *L, const char *funcname, double a, double b
 
 // call func(string, string) → string
 const char* mocha_lua_call2s_string(void *L, const char *funcname, const char *a, const char *b) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_string_2s", mocha_rc_copy(""));
     lua_getglobal((lua_State*)L, funcname);
     lua_pushstring((lua_State*)L, a);
     lua_pushstring((lua_State*)L, b);
@@ -4167,6 +4458,7 @@ const char* mocha_lua_call2s_string(void *L, const char *funcname, const char *a
 
 // call func(number) → string
 const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_string_1n", mocha_rc_copy(""));
     lua_getglobal((lua_State*)L, funcname);
     lua_pushnumber((lua_State*)L, arg);
     if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
@@ -4179,6 +4471,244 @@ const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
     char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
     return out;
+}
+
+// call func() → bool
+int mocha_lua_call_bool(void *L, const char *funcname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_bool", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call_bool('%s') failed: %s\n",
+                funcname, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = lua_toboolean((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(number) → bool
+int mocha_lua_call1n_bool(void *L, const char *funcname, double arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_1n", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushnumber((lua_State*)L, arg);
+    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1n_bool('%s', %f) failed: %s\n",
+                funcname, arg, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = lua_toboolean((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(string) → bool
+int mocha_lua_call1s_bool(void *L, const char *funcname, const char *arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_1s", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushstring((lua_State*)L, arg);
+    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1s_bool('%s', '%s') failed: %s\n",
+                funcname, arg, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = lua_toboolean((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(number, number) → bool
+int mocha_lua_call2n_bool(void *L, const char *funcname, double a, double b) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_2n", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushnumber((lua_State*)L, a);
+    lua_pushnumber((lua_State*)L, b);
+    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call2n_bool('%s', %f, %f) failed: %s\n",
+                funcname, a, b, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = lua_toboolean((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(string, string) → bool
+int mocha_lua_call2s_bool(void *L, const char *funcname, const char *a, const char *b) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_2s", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushstring((lua_State*)L, a);
+    lua_pushstring((lua_State*)L, b);
+    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call2s_bool('%s', '%s', '%s') failed: %s\n",
+                funcname, a, b, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = lua_toboolean((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(number) → int
+int mocha_lua_call1n_int(void *L, const char *funcname, double arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_int_1n", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushnumber((lua_State*)L, arg);
+    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1n_int('%s', %f) failed: %s\n",
+                funcname, arg, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = mocha_lua_toint((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(string) → int
+int mocha_lua_call1s_int(void *L, const char *funcname, const char *arg) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_int_1s", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushstring((lua_State*)L, arg);
+    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call1s_int('%s', '%s') failed: %s\n",
+                funcname, arg, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = mocha_lua_toint((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(number, number) → int
+int mocha_lua_call2n_int(void *L, const char *funcname, double a, double b) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_int_2n", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushnumber((lua_State*)L, a);
+    lua_pushnumber((lua_State*)L, b);
+    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call2n_int('%s', %f, %f) failed: %s\n",
+                funcname, a, b, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = mocha_lua_toint((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+// call func(string, string) → int
+int mocha_lua_call2s_int(void *L, const char *funcname, const char *a, const char *b) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_int_2s", 0);
+    lua_getglobal((lua_State*)L, funcname);
+    lua_pushstring((lua_State*)L, a);
+    lua_pushstring((lua_State*)L, b);
+    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring((lua_State*)L, -1);
+        fprintf(stderr, "MochaLuaError: call2s_int('%s', '%s', '%s') failed: %s\n",
+                funcname, a, b, err ? err : "unknown error");
+        lua_pop((lua_State*)L, 1);
+        return 0;
+    }
+    int r = mocha_lua_toint((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+/* ── Generic calls: any number of args, any mix of types ──
+ * Usage: begin_call(func), push each arg in order, then end_call_<return>(nargs) */
+
+void* mocha_lua_begin_call(void *L, const char *funcname) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_begin_call", NULL);
+    lua_getglobal((lua_State*)L, funcname);
+    return NULL;
+}
+
+void* mocha_lua_push_number(void *L, double val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_push_number", NULL);
+    lua_pushnumber((lua_State*)L, val);
+    return NULL;
+}
+
+void* mocha_lua_push_string(void *L, const char *val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_push_string", NULL);
+    lua_pushstring((lua_State*)L, val);
+    return NULL;
+}
+
+void* mocha_lua_push_int(void *L, int val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_push_int", NULL);
+    lua_pushinteger((lua_State*)L, val);
+    return NULL;
+}
+
+void* mocha_lua_push_bool(void *L, int val) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_push_bool", NULL);
+    lua_pushboolean((lua_State*)L, val);
+    return NULL;
+}
+
+/* Runs the pending call. Returns 1 if a result is on the stack, 0 on error */
+static int mocha_lua_finish_call(void *L, int nargs, const char *what) {
+    lua_State *S = (lua_State*)L;
+    if (nargs < 0 || lua_gettop(S) < nargs + 1) {
+        fprintf(stderr, "MochaLuaError: %s: expected %d pushed args plus the function, but the stack is too small (did you call lua_begin_call first?)\n",
+                what, nargs);
+        return 0;
+    }
+    if (lua_pcall(S, nargs, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring(S, -1);
+        fprintf(stderr, "MochaLuaError: %s failed: %s\n", what, err ? err : "unknown error");
+        lua_pop(S, 1);
+        return 0;
+    }
+    return 1;
+}
+
+double mocha_lua_end_call_number(void *L, int nargs) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_end_call_number", 0.0);
+    if (!mocha_lua_finish_call(L, nargs, "end_call_number")) return 0.0;
+    double r = lua_tonumber((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+const char* mocha_lua_end_call_string(void *L, int nargs) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_end_call_string", mocha_rc_copy(""));
+    if (!mocha_lua_finish_call(L, nargs, "end_call_string")) return mocha_rc_copy("");
+    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
+    lua_pop((lua_State*)L, 1);
+    return out;
+}
+
+int mocha_lua_end_call_int(void *L, int nargs) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_end_call_int", 0);
+    if (!mocha_lua_finish_call(L, nargs, "end_call_int")) return 0;
+    int r = mocha_lua_toint((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
+}
+
+int mocha_lua_end_call_bool(void *L, int nargs) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_end_call_bool", 0);
+    if (!mocha_lua_finish_call(L, nargs, "end_call_bool")) return 0;
+    int r = lua_toboolean((lua_State*)L, -1);
+    lua_pop((lua_State*)L, 1);
+    return r;
 }
 
 #endif /* MOCHA_WITH_LUA */
@@ -5143,6 +5673,7 @@ const char* mocha_ex_pop(void) {
     MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
     const char*   msg   = frame->message;
     mocha_ex_top        = frame->prev;
+    free(frame);
     return msg;
 }
 
@@ -5238,6 +5769,7 @@ const char* mocha_ex_pop(void) {
     MochaExFrame* frame = (MochaExFrame*)mocha_ex_top;
     const char*   msg   = frame->message;
     mocha_ex_top        = frame->prev;
+    free(frame);
     return msg;
 }
 
@@ -11775,7 +12307,7 @@ double metero_potential_temp(double t_c, double pressure_mb) {
 double metero_virtual_temp(double t_c, double mixing_ratio_gkg) {
     double t_k = ADD(t_c, 273.15);
     double w   = DIV(mixing_ratio_gkg, 1000.0);
-    double tv_k = MUL(t_k, ADD(1.0, MUL(1.6078, w)));
+    double tv_k = DIV(MUL(t_k, ADD(1.0, MUL(1.6078, w))), ADD(1.0, w));
     return SUB(tv_k, 273.15);
 }
 

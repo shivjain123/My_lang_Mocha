@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-society.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-society.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#c_exp"><i class="ti ti-function"></i> c_exp</a></li><li class="sb-fn"><a href="#population_growth_rate"><i class="ti ti-function"></i> population_growth_rate</a></li><li class="sb-fn"><a href="#population_doubling_time"><i class="ti ti-function"></i> population_doubling_time</a></li><li class="sb-fn"><a href="#crude_birth_rate"><i class="ti ti-function"></i> crude_birth_rate</a></li><li class="sb-fn"><a href="#crude_death_rate"><i class="ti ti-function"></i> crude_death_rate</a></li><li class="sb-fn"><a href="#natural_increase_rate"><i class="ti ti-function"></i> natural_increase_rate</a></li><li class="sb-fn"><a href="#net_migration_rate"><i class="ti ti-function"></i> net_migration_rate</a></li><li class="sb-fn"><a href="#dependency_ratio"><i class="ti ti-function"></i> dependency_ratio</a></li><li class="sb-fn"><a href="#child_dependency_ratio"><i class="ti ti-function"></i> child_dependency_ratio</a></li><li class="sb-fn"><a href="#old_age_dependency_ratio"><i class="ti ti-function"></i> old_age_dependency_ratio</a></li><li class="sb-fn"><a href="#population_projection"><i class="ti ti-function"></i> population_projection</a></li><li class="sb-fn"><a href="#mean_income"><i class="ti ti-function"></i> mean_income</a></li><li class="sb-fn"><a href="#gini_coefficient"><i class="ti ti-function"></i> gini_coefficient</a></li><li class="sb-fn"><a href="#theil_index"><i class="ti ti-function"></i> theil_index</a></li><li class="sb-fn"><a href="#atkinson_index"><i class="ti ti-function"></i> atkinson_index</a></li><li class="sb-fn"><a href="#poverty_headcount_ratio"><i class="ti ti-function"></i> poverty_headcount_ratio</a></li><li class="sb-fn"><a href="#poverty_gap_index"><i class="ti ti-function"></i> poverty_gap_index</a></li><li class="sb-fn"><a href="#palma_ratio"><i class="ti ti-function"></i> palma_ratio</a></li><li class="sb-fn"><a href="#income_share_ratio"><i class="ti ti-function"></i> income_share_ratio</a></li><li class="sb-fn"><a href="#relative_poverty_line"><i class="ti ti-function"></i> relative_poverty_line</a></li><li class="sb-fn"><a href="#voter_turnout_rate"><i class="ti ti-function"></i> voter_turnout_rate</a></li><li class="sb-fn"><a href="#dhondt_apportionment"><i class="ti ti-function"></i> dhondt_apportionment</a></li><li class="sb-fn"><a href="#sainte_lague_apportionment"><i class="ti ti-function"></i> sainte_lague_apportionment</a></li><li class="sb-fn"><a href="#effective_number_of_parties"><i class="ti ti-function"></i> effective_number_of_parties</a></li><li class="sb-fn"><a href="#gallagher_index"><i class="ti ti-function"></i> gallagher_index</a></li><li class="sb-fn"><a href="#seat_vote_deviation"><i class="ti ti-function"></i> seat_vote_deviation</a></li><li class="sb-fn"><a href="#banzhaf_power_index_3player"><i class="ti ti-function"></i> banzhaf_power_index_3player</a></li><li class="sb-fn"><a href="#shapley_shubik_power_index_3player"><i class="ti ti-function"></i> shapley_shubik_power_index_3player</a></li><li class="sb-fn"><a href="#validate_adjacency"><i class="ti ti-function"></i> validate_adjacency</a></li><li class="sb-fn"><a href="#validate_node_index"><i class="ti ti-function"></i> validate_node_index</a></li><li class="sb-fn"><a href="#node_degree"><i class="ti ti-function"></i> node_degree</a></li><li class="sb-fn"><a href="#degree_centrality"><i class="ti ti-function"></i> degree_centrality</a></li><li class="sb-fn"><a href="#network_density"><i class="ti ti-function"></i> network_density</a></li><li class="sb-fn"><a href="#average_degree"><i class="ti ti-function"></i> average_degree</a></li><li class="sb-fn"><a href="#clustering_coefficient"><i class="ti ti-function"></i> clustering_coefficient</a></li><li class="sb-fn"><a href="#shortest_path_length"><i class="ti ti-function"></i> shortest_path_length</a></li><li class="sb-fn"><a href="#closeness_centrality"><i class="ti ti-function"></i> closeness_centrality</a></li><li class="sb-fn"><a href="#betweenness_centrality"><i class="ti ti-function"></i> betweenness_centrality</a></li><li class="sb-fn"><a href="#homophily_index"><i class="ti ti-function"></i> homophily_index</a></li><li class="sb-fn"><a href="#coefficient_of_relationship"><i class="ti ti-function"></i> coefficient_of_relationship</a></li><li class="sb-fn"><a href="#inbreeding_coefficient"><i class="ti ti-function"></i> inbreeding_coefficient</a></li><li class="sb-fn"><a href="#simpsons_diversity_index"><i class="ti ti-function"></i> simpsons_diversity_index</a></li><li class="sb-fn"><a href="#simpsons_reciprocal_index"><i class="ti ti-function"></i> simpsons_reciprocal_index</a></li><li class="sb-fn"><a href="#shannon_diversity_index"><i class="ti ti-function"></i> shannon_diversity_index</a></li><li class="sb-fn"><a href="#shannon_evenness_index"><i class="ti ti-function"></i> shannon_evenness_index</a></li><li class="sb-fn"><a href="#cultural_distance_index"><i class="ti ti-function"></i> cultural_distance_index</a></li><li class="sb-fn"><a href="#cultural_similarity_index"><i class="ti ti-function"></i> cultural_similarity_index</a></li><li class="sb-fn"><a href="#validate_proportion"><i class="ti ti-function"></i> validate_proportion</a></li><li class="sb-fn"><a href="#validate_positive"><i class="ti ti-function"></i> validate_positive</a></li><li class="sb-fn"><a href="#validate_non_negative"><i class="ti ti-function"></i> validate_non_negative</a></li><li class="sb-fn"><a href="#cronbachs_alpha"><i class="ti ti-function"></i> cronbachs_alpha</a></li><li class="sb-fn"><a href="#cohens_kappa"><i class="ti ti-function"></i> cohens_kappa</a></li><li class="sb-fn"><a href="#standard_error_of_proportion"><i class="ti ti-function"></i> standard_error_of_proportion</a></li><li class="sb-fn"><a href="#margin_of_error_proportion"><i class="ti ti-function"></i> margin_of_error_proportion</a></li><li class="sb-fn"><a href="#sample_size_for_proportion"><i class="ti ti-function"></i> sample_size_for_proportion</a></li><li class="sb-fn"><a href="#confidence_interval_proportion"><i class="ti ti-function"></i> confidence_interval_proportion</a></li><li class="sb-fn"><a href="#standard_error_of_mean"><i class="ti ti-function"></i> standard_error_of_mean</a></li><li class="sb-fn"><a href="#pooled_standard_deviation"><i class="ti ti-function"></i> pooled_standard_deviation</a></li><li class="sb-fn"><a href="#cohens_d"><i class="ti ti-function"></i> cohens_d</a></li><li class="sb-fn"><a href="#pearson_correlation_coefficient"><i class="ti ti-function"></i> pearson_correlation_coefficient</a></li><li class="sb-fn"><a href="#life_expectancy_index"><i class="ti ti-function"></i> life_expectancy_index</a></li><li class="sb-fn"><a href="#schooling_index"><i class="ti ti-function"></i> schooling_index</a></li><li class="sb-fn"><a href="#education_index"><i class="ti ti-function"></i> education_index</a></li><li class="sb-fn"><a href="#income_index"><i class="ti ti-function"></i> income_index</a></li><li class="sb-fn"><a href="#human_development_index"><i class="ti ti-function"></i> human_development_index</a></li><li class="sb-fn"><a href="#gdp_per_capita_growth_rate"><i class="ti ti-function"></i> gdp_per_capita_growth_rate</a></li><li class="sb-fn"><a href="#income_elasticity_of_demand"><i class="ti ti-function"></i> income_elasticity_of_demand</a></li><li class="sb-fn"><a href="#engels_coefficient"><i class="ti ti-function"></i> engels_coefficient</a></li><li class="sb-fn"><a href="#unemployment_rate"><i class="ti ti-function"></i> unemployment_rate</a></li><li class="sb-fn"><a href="#labor_force_participation_rate"><i class="ti ti-function"></i> labor_force_participation_rate</a></li><li class="sb-fn"><a href="#purchasing_power_parity_adjustment"><i class="ti ti-function"></i> purchasing_power_parity_adjustment</a></li><li class="sb-fn"><a href="#misery_index"><i class="ti ti-function"></i> misery_index</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-society.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mocha-society — Sociology, Political Science, Anthropology &amp; Socio-Economics Library for Mocha. Section 1: Demography. Part of the Mocha Scientific Library Ecosystem. License: Polyform Non-Commercial.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exp</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="population_growth_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">population_growth_rate</span><span class="paren">(</span><span class="param-name">p0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">years</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Continuous (exponential) annual population growth rate from initial and final population. p0, p1 = population counts (both &gt; 0), years = elapsed time (must be &gt; 0). r = ln(P1/P0) / years.</p>
+  </div>
+</div>
+
+<div class="card" id="population_doubling_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">population_doubling_time</span><span class="paren">(</span><span class="param-name">growth_rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Population doubling time in years from a continuous growth rate. growth_rate as a decimal in (0, 1] (e.g. 0.02 = 2% per year). t = ln(2) / r. For negative growth (population decline), use halving-time reasoning explicitly — not this function.</p>
+  </div>
+</div>
+
+<div class="card" id="crude_birth_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">crude_birth_rate</span><span class="paren">(</span><span class="param-name">births</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">population</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Crude birth rate per 1000 population. births = number of live births (&gt;= 0), population = total population (&gt; 0).</p>
+  </div>
+</div>
+
+<div class="card" id="crude_death_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">crude_death_rate</span><span class="paren">(</span><span class="param-name">deaths</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">population</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Crude death rate per 1000 population. deaths = number of deaths (&gt;= 0), population = total population (&gt; 0).</p>
+  </div>
+</div>
+
+<div class="card" id="natural_increase_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">natural_increase_rate</span><span class="paren">(</span><span class="param-name">cbr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cdr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Rate of natural increase as a percentage, from crude birth and death rates. cbr, cdr = crude birth/death rate (per 1000, both &gt;= 0). NIR(%) = (CBR - CDR) / 10.</p>
+  </div>
+</div>
+
+<div class="card" id="net_migration_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">net_migration_rate</span><span class="paren">(</span><span class="param-name">immigrants</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">emigrants</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">population</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Net migration rate per 1000 population. immigrants, emigrants = counts over the period (both &gt;= 0), population = total population (&gt; 0).</p>
+  </div>
+</div>
+
+<div class="card" id="dependency_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dependency_ratio</span><span class="paren">(</span><span class="param-name">pop_under15</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pop_65plus</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pop_working</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total age dependency ratio (per 100 working-age population). pop_under15, pop_65plus = dependent age groups (both &gt;= 0), pop_working = population aged 15-64 (&gt; 0).</p>
+  </div>
+</div>
+
+<div class="card" id="child_dependency_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">child_dependency_ratio</span><span class="paren">(</span><span class="param-name">pop_under15</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pop_working</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Child dependency ratio (per 100 working-age population). pop_under15 &gt;= 0, pop_working &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="old_age_dependency_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">old_age_dependency_ratio</span><span class="paren">(</span><span class="param-name">pop_65plus</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pop_working</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Old-age dependency ratio (per 100 working-age population). pop_65plus &gt;= 0, pop_working &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="population_projection">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">population_projection</span><span class="paren">(</span><span class="param-name">p0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">growth_rate</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">years</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Projects future population using continuous exponential growth. p0 = initial population (&gt; 0), growth_rate as decimal, years = projection horizon. P(t) = P0 * e^(r*t). Errors if |r*years| &gt; 700 (e^700 overflows double precision).</p>
+  </div>
+</div>
+
+<div class="card" id="mean_income">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_income</span><span class="paren">(</span><span class="param-name">incomes</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Arithmetic mean of an income/wealth distribution. incomes = array of values (any consistent unit). Requires non-empty array.</p>
+  </div>
+</div>
+
+<div class="card" id="gini_coefficient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gini_coefficient</span><span class="paren">(</span><span class="param-name">incomes</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Gini coefficient of income inequality (0 = perfect equality, 1 = perfect inequality). incomes MUST be sorted ascending and must all be &gt;= 0. Requires non-empty array and positive total. Uses rank-sum formula: G = (2*Σ(rank_i * x_i) - (n+1)*Σx_i) / (n*Σx_i).</p>
+  </div>
+</div>
+
+<div class="card" id="theil_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">theil_index</span><span class="paren">(</span><span class="param-name">incomes</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Theil index of inequality (0 = perfect equality, higher = more unequal, unbounded above). incomes = array of values in any order, all must be &gt; 0. T = (1/n) * Σ( (x_i/mean) * ln(x_i/mean) ).</p>
+  </div>
+</div>
+
+<div class="card" id="atkinson_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">atkinson_index</span><span class="paren">(</span><span class="param-name">incomes</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">epsilon</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Atkinson index of inequality, sensitive to a chosen inequality-aversion parameter. incomes = array of values (non-empty), epsilon = inequality aversion (&gt; 0 and != 1). Higher epsilon weights the bottom of the distribution more. A = 1 - (1/mean) * [(1/n)*Σx_i^(1-ε)]^(1/(1-ε)).</p>
+  </div>
+</div>
+
+<div class="card" id="poverty_headcount_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">poverty_headcount_ratio</span><span class="paren">(</span><span class="param-name">poor_count</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">total_population</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Poverty headcount ratio as a percentage of total population. poor_count in [0, total_population], total_population &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="poverty_gap_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">poverty_gap_index</span><span class="paren">(</span><span class="param-name">incomes</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">poverty_line</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Poverty gap index — average normalized income shortfall below the poverty line across whole population. incomes = array of values (including those above the line), poverty_line &gt; 0. Requires non-empty array. PGI = (1/n) * Σ max(0, (z - x_i)/z).</p>
+  </div>
+</div>
+
+<div class="card" id="palma_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">palma_ratio</span><span class="paren">(</span><span class="param-name">top10_share</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bottom40_share</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Palma ratio: income share of the top 10% divided by the income share of the bottom 40%. top10_share and bottom40_share as percentages, both &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="income_share_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">income_share_ratio</span><span class="paren">(</span><span class="param-name">top_share</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bottom_share</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">General income share ratio between any two population deciles/quintiles. top_share and bottom_share as percentages, both &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="relative_poverty_line">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">relative_poverty_line</span><span class="paren">(</span><span class="param-name">median_income</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">threshold_fraction</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Relative poverty line as a fraction of median income (commonly 0.5 or 0.6, OECD/EU convention). median_income &gt; 0, threshold_fraction in (0, 1].</p>
+  </div>
+</div>
+
+<div class="card" id="voter_turnout_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">voter_turnout_rate</span><span class="paren">(</span><span class="param-name">votes_cast</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">eligible_voters</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Voter turnout rate as a percentage. votes_cast in [0, eligible_voters], eligible_voters &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="dhondt_apportionment">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dhondt_apportionment</span><span class="paren">(</span><span class="param-name">votes</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">total_seats</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Seat allocation via D&#x27;Hondt highest-averages method. votes = non-empty array of non-negative party vote totals, total_seats &gt;= 0. Returns array of seats per party (same order as input). Divisor sequence: 1,2,3,.</p>
+  </div>
+</div>
+
+<div class="card" id="sainte_lague_apportionment">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sainte_lague_apportionment</span><span class="paren">(</span><span class="param-name">votes</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">total_seats</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Seat allocation via Sainte-Laguë highest-averages method. votes = non-empty array of non-negative party vote totals, total_seats &gt;= 0. Returns array of seats per party (same order). Divisor sequence: 1,3,5,7,.</p>
+  </div>
+</div>
+
+<div class="card" id="effective_number_of_parties">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">effective_number_of_parties</span><span class="paren">(</span><span class="param-name">vote_shares</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Effective number of parties (Laakso-Taagepera index). vote_shares = non-empty array of fractional shares in [0, 1] summing to ~1.0. ENP = 1 / Σ(share_i²).</p>
+  </div>
+</div>
+
+<div class="card" id="gallagher_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gallagher_index</span><span class="paren">(</span><span class="param-name">vote_shares</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">seat_shares</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Gallagher least-squares disproportionality index. vote_shares and seat_shares as percentages (same length, both non-empty). G = sqrt(0.5 * Σ(v_i - s_i)²).</p>
+  </div>
+</div>
+
+<div class="card" id="seat_vote_deviation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">seat_vote_deviation</span><span class="paren">(</span><span class="param-name">vote_share</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">seat_share</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Per-party deviation between vote share and seat share (a single Gallagher term). vote_share and seat_share as percentages. Returns vote_share - seat_share.</p>
+  </div>
+</div>
+
+<div class="card" id="banzhaf_power_index_3player">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">banzhaf_power_index_3player</span><span class="paren">(</span><span class="param-name">w1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">w2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">w3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">quota</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 3)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Banzhaf power index for 3-player weighted voting game. w1, w2, w3 = non-negative voting weights, quota = votes needed to win (&gt; 0 and &lt;= w1+w2+w3). Returns (power1, power2, power3) — fraction of winning coalitions where each player is critical.</p>
+  </div>
+</div>
+
+<div class="card" id="shapley_shubik_power_index_3player">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shapley_shubik_power_index_3player</span><span class="paren">(</span><span class="param-name">w1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">w2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">w3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">quota</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 3)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shapley-Shubik power index for 3-player weighted voting game. w1, w2, w3 = non-negative voting weights, quota = votes needed to win (&gt; 0 and &lt;= w1+w2+w3). Returns (power1, power2, power3) — fraction of 6 orderings where each player is pivotal.</p>
+  </div>
+</div>
+
+<div class="card" id="validate_adjacency">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">validate_adjacency</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Validates an adjacency matrix: non-empty, square, symmetric, 0/1 entries only. Returns node count (n). Called by all functions in this section.</p>
+  </div>
+</div>
+
+<div class="card" id="validate_node_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">validate_node_index</span><span class="paren">(</span><span class="param-name">node_index</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Validates node_index is within bounds.</p>
+  </div>
+</div>
+
+<div class="card" id="node_degree">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">node_degree</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">node_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Degree of a node — number of edges connected to it. adjacency = n×n symmetric adjacency matrix, node_index in [0, n-1].</p>
+  </div>
+</div>
+
+<div class="card" id="degree_centrality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degree_centrality</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">node_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Degree centrality — node&#x27;s degree normalized by maximum possible degree (n-1). Requires n &gt;= 2 (undefined for single-node graph).</p>
+  </div>
+</div>
+
+<div class="card" id="network_density">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">network_density</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Network density — fraction of possible edges that exist. D = 2E / (n(n-1)). Requires n &gt;= 2.</p>
+  </div>
+</div>
+
+<div class="card" id="average_degree">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">average_degree</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Average node degree across the whole network. Requires n &gt;= 1.</p>
+  </div>
+</div>
+
+<div class="card" id="clustering_coefficient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clustering_coefficient</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">node_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Local clustering coefficient — how interconnected a node&#x27;s neighbors are with each other. C(v) = 2*E_v / (k_v*(k_v-1)). Returns 0.0 for nodes with degree &lt; 2.</p>
+  </div>
+</div>
+
+<div class="card" id="shortest_path_length">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shortest_path_length</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">source</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">target</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shortest path length (in edges) via BFS. Returns -1 if source and target are not connected. source, target in [0, n-1].</p>
+  </div>
+</div>
+
+<div class="card" id="closeness_centrality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">closeness_centrality</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">node_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Closeness centrality — how close a node is to all others. Requires connected graph (n &gt;= 2). C(v) = (n-1) / Σ(shortest_path_length(v, i)). Errors if any node is unreachable.</p>
+  </div>
+</div>
+
+<div class="card" id="betweenness_centrality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">betweenness_centrality</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">node_index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Betweenness centrality (raw/unnormalized) — how often a node lies on shortest paths. Requires connected graph (for correctness of intermediate path check).</p>
+  </div>
+</div>
+
+<div class="card" id="homophily_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">homophily_index</span><span class="paren">(</span><span class="param-name">adjacency</span><span class="colon">:</span> <span class="param-type">int[][]</span>, <span class="param-name">attributes</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Homophily index — fraction of edges connecting nodes with same attribute. attributes array must match adjacency length.</p>
+  </div>
+</div>
+
+<div class="card" id="coefficient_of_relationship">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">coefficient_of_relationship</span><span class="paren">(</span><span class="param-name">num_paths</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">links_per_path</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Wright&#x27;s coefficient of relationship (r), via path-counting through shared ancestors. num_paths &gt;= 1, links_per_path &gt;= 1 (at least one generation link). Result in [0, 1]. r = num_paths * (0.5)^links_per_path.</p>
+  </div>
+</div>
+
+<div class="card" id="inbreeding_coefficient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inbreeding_coefficient</span><span class="paren">(</span><span class="param-name">parental_relationship</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Inbreeding coefficient of offspring from parents with a given coefficient of relationship. parental_relationship in [0, 1] (assumes parents themselves non-inbred). F = r / 2.</p>
+  </div>
+</div>
+
+<div class="card" id="simpsons_diversity_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">simpsons_diversity_index</span><span class="paren">(</span><span class="param-name">counts</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Simpson&#x27;s Diversity Index — probability that two randomly sampled individuals belong to different groups. counts = non-empty array of non-negative group population sizes with positive total. D = 1 - Σ(p_i²).</p>
+  </div>
+</div>
+
+<div class="card" id="simpsons_reciprocal_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">simpsons_reciprocal_index</span><span class="paren">(</span><span class="param-name">counts</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Simpson&#x27;s Reciprocal Index — effective number of equally-common groups. counts = non-empty array of non-negative group sizes with positive total. 1/D = 1 / Σ(p_i²).</p>
+  </div>
+</div>
+
+<div class="card" id="shannon_diversity_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shannon_diversity_index</span><span class="paren">(</span><span class="param-name">counts</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shannon Diversity Index (entropy-based). H = -Σ(p_i * ln(p_i)). Zero-count groups contribute 0 (limit convention). counts = non-empty array of non-negative group sizes with positive total.</p>
+  </div>
+</div>
+
+<div class="card" id="shannon_evenness_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shannon_evenness_index</span><span class="paren">(</span><span class="param-name">counts</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shannon Evenness Index — E = H / ln(S). Returns 1.0 if only one group (perfectly even by convention). Requires non-empty counts with positive total.</p>
+  </div>
+</div>
+
+<div class="card" id="cultural_distance_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cultural_distance_index</span><span class="paren">(</span><span class="param-name">differing_traits</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">total_traits</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cultural distance index — proportion of cultural traits that differ between two groups. differing_traits in [0, total_traits], total_traits &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="cultural_similarity_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cultural_similarity_index</span><span class="paren">(</span><span class="param-name">differing_traits</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">total_traits</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cultural similarity index — complement of cultural distance. differing_traits in [0, total_traits], total_traits &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="validate_proportion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">validate_proportion</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Validates a proportion is in [0, 1].</p>
+  </div>
+</div>
+
+<div class="card" id="validate_positive">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">validate_positive</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Validates a value is positive.</p>
+  </div>
+</div>
+
+<div class="card" id="validate_non_negative">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">validate_non_negative</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Validates a value is non-negative.</p>
+  </div>
+</div>
+
+<div class="card" id="cronbachs_alpha">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cronbachs_alpha</span><span class="paren">(</span><span class="param-name">item_variances</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">total_variance</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cronbach&#x27;s alpha — internal consistency reliability. Requires k &gt;= 2 items and positive total variance. α = (k/(k-1)) * (1 - Σ(item_variances)/total_variance).</p>
+  </div>
+</div>
+
+<div class="card" id="cohens_kappa">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cohens_kappa</span><span class="paren">(</span><span class="param-name">observed_agreement</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">expected_agreement</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cohen&#x27;s kappa — inter-rater reliability. Requires both proportions in [0, 1] and expected &lt; 1.0. κ = (p_o - p_e) / (1 - p_e).</p>
+  </div>
+</div>
+
+<div class="card" id="standard_error_of_proportion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">standard_error_of_proportion</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Standard error of a sample proportion. p in [0, 1], n &gt; 0. SE = sqrt(p*(1-p)/n).</p>
+  </div>
+</div>
+
+<div class="card" id="margin_of_error_proportion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">margin_of_error_proportion</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z_score</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Margin of error for a sample proportion. z_score &gt; 0. MOE = z * SE(p).</p>
+  </div>
+</div>
+
+<div class="card" id="sample_size_for_proportion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sample_size_for_proportion</span><span class="paren">(</span><span class="param-name">z_score</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">margin_of_error</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Required sample size to estimate a proportion within a target margin of error. z_score &gt; 0, p in [0, 1], margin_of_error &gt; 0. n = (z² * p*(1-p)) / E².</p>
+  </div>
+</div>
+
+<div class="card" id="confidence_interval_proportion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">confidence_interval_proportion</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z_score</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Confidence interval for a sample proportion. Returns (lower, upper), clamped to [0, 1]. Note: this is the Wald interval, which can be inaccurate for extreme proportions near 0 or 1. For proportions near 0/1 or small n, use the Wilson score interval instead.</p>
+  </div>
+</div>
+
+<div class="card" id="standard_error_of_mean">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">standard_error_of_mean</span><span class="paren">(</span><span class="param-name">std_dev</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Standard error of the mean. std_dev &gt;= 0, n &gt; 0. SEM = std_dev / sqrt(n).</p>
+  </div>
+</div>
+
+<div class="card" id="pooled_standard_deviation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pooled_standard_deviation</span><span class="paren">(</span><span class="param-name">std1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">std2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Pooled standard deviation across two independent samples. n1 &gt;= 2, n2 &gt;= 2.</p>
+  </div>
+</div>
+
+<div class="card" id="cohens_d">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cohens_d</span><span class="paren">(</span><span class="param-name">mean1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mean2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pooled_std</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cohen&#x27;s d — standardized effect size. pooled_std &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="pearson_correlation_coefficient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pearson_correlation_coefficient</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Pearson correlation coefficient. x and y must be same length, both non-empty with positive variance. r = Σ((x-x̄)(y-ȳ)) / sqrt(Σ(x-x̄)² * Σ(y-ȳ)²).</p>
+  </div>
+</div>
+
+<div class="card" id="life_expectancy_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">life_expectancy_index</span><span class="paren">(</span><span class="param-name">life_expectancy</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">min_val</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">max_val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Life expectancy sub-index for HDI (UNDP min-max normalization). Result in [0, 1]. Requires max_val &gt; min_val, life_expectancy &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="schooling_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">schooling_index</span><span class="paren">(</span><span class="param-name">years</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">min_years</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">max_years</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Schooling sub-index for HDI (general purpose). Result in [0, 1]. Requires max_years &gt; min_years, years &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="education_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">education_index</span><span class="paren">(</span><span class="param-name">mean_years_index</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">expected_years_index</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Education sub-index for HDI, averaging mean-years and expected-years indices. Both inputs must be in [0, 1].</p>
+  </div>
+</div>
+
+<div class="card" id="income_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">income_index</span><span class="paren">(</span><span class="param-name">gni_per_capita</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">min_gni</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">max_gni</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Income sub-index for HDI (UNDP log-scale normalization). Result in [0, 1]. Requires gni_per_capita &gt; 0, min_gni &gt; 0, max_gni &gt; min_gni.</p>
+  </div>
+</div>
+
+<div class="card" id="human_development_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">human_development_index</span><span class="paren">(</span><span class="param-name">life_exp_idx</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">edu_idx</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">inc_idx</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Human Development Index — geometric mean of three sub-indices. Result in [0, 1]. All inputs must be in [0, 1].</p>
+  </div>
+</div>
+
+<div class="card" id="gdp_per_capita_growth_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gdp_per_capita_growth_rate</span><span class="paren">(</span><span class="param-name">gdp0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">gdp1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">years</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Continuous annual GDP per capita growth rate. gdp0 &gt; 0, gdp1 &gt; 0, years &gt; 0. r = ln(GDP1/GDP0) / years.</p>
+  </div>
+</div>
+
+<div class="card" id="income_elasticity_of_demand">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">income_elasticity_of_demand</span><span class="paren">(</span><span class="param-name">percent_change_quantity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">percent_change_income</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Income elasticity of demand. percent_change_income != 0. Elasticity &gt; 1 = luxury, &lt; 1 = necessity, &lt; 0 = inferior good.</p>
+  </div>
+</div>
+
+<div class="card" id="engels_coefficient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">engels_coefficient</span><span class="paren">(</span><span class="param-name">food_expenditure</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">total_expenditure</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Engel&#x27;s coefficient — share of household expenditure on food. Result in [0, 100]. food_expenditure in [0, total_expenditure], total_expenditure &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="unemployment_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unemployment_rate</span><span class="paren">(</span><span class="param-name">unemployed</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">labor_force</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Unemployment rate as percentage of labor force. unemployed in [0, labor_force], labor_force &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="labor_force_participation_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">labor_force_participation_rate</span><span class="paren">(</span><span class="param-name">labor_force</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">working_age_population</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Labor force participation rate as percentage of working-age population. labor_force &gt;= 0, working_age_population &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="purchasing_power_parity_adjustment">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">purchasing_power_parity_adjustment</span><span class="paren">(</span><span class="param-name">nominal_value</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ppp_conversion_factor</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Converts nominal monetary value to PPP-adjusted real value. nominal_value &gt;= 0, ppp_conversion_factor &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="misery_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">misery_index</span><span class="paren">(</span><span class="param-name">inflation_rate</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">unemployment_rate_val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Misery index — sum of inflation and unemployment rates. Either input may be negative (deflation is meaningful). No range constraint.</p>
+  </div>
+</div>
+</main>
+</body>
+</html>

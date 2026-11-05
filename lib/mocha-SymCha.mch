@@ -1,5 +1,5 @@
 """
-mocha-SymCha v0.5 — Symbolic Mathematics Library
+mocha-SymCha v0.6 — Symbolic Mathematics Library
 UPDATE % WAS BREAKING CHANGE WHEN TAN, INV_TRIG, and HYPERBOLIC_TRIG NODES WERE ADDED
 Pure Mocha 🐶 (almost)
 """
@@ -299,12 +299,6 @@ function to_superscript(s: str) -> str {
 };
 
 // =============================================
-// SYMBOLIC PRINT
-// sym_print(expr) → human readable Unicode string
-// e.g. x^2 + 3x + 1, cos(x), 2^x·ln(2)
-// =============================================
-
-// =============================================
 // PRECEDENCE HELPER
 // Higher number = tighter binding
 // =============================================
@@ -340,7 +334,9 @@ function sym_print_parens(e: Expr, parent_prec: int) -> str {
 };
 
 // =============================================
-// SYMBOLIC PRINT — precedence aware
+// SYMBOLIC PRINT (precedence aware)
+// sym_print(expr) → human readable Unicode string
+// e.g. x^2 + 3x + 1, cos(x), 2^x·ln(2)
 // =============================================
 function sym_print(e: Expr) -> str {
     match(e.kind) {

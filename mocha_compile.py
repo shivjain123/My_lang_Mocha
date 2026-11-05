@@ -295,6 +295,17 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
             except MochaTypeError:
                 pass
 
+        elif line.startswith("local function "):
+            after_func = line[len("local function "):]
+            func_name  = after_func[:after_func.index("(")].strip()
+            ret_type   = after_func.split("->")[1].strip().rstrip(";").strip()
+            key = f"{alias}.{func_name}" if alias else func_name
+            try:
+                type_checker.symbols.declare(key, ret_type, is_function=True,
+                                             visibility="local", file=f"mchi:{lib_name}")
+            except MochaTypeError:
+                pass
+            
         elif line.startswith("const "):
             after_const = line[len("const "):]
             const_name  = after_const[:after_const.index(":")].strip()
@@ -1189,6 +1200,10 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
                 f"{p.name}: {p.type}" for p in node.params
                 if not getattr(p, 'has_didLoad', False)
             )
+            if getattr(node, 'is_local', False):
+                # signature only, so the type checker can say "local to its file"; no native name, never called
+                lines.append(f"local function {node.name}({params}) -> {node.return_type};")
+                continue
             if node.is_native:
                 lines.append(f"function {node.name}({params}) -> {node.return_type} native {node.native_name};")
             elif is_dummy_body(node):
@@ -1273,7 +1288,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.5")
+    print(f"🔥 Mocha Compiler v1.6")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):

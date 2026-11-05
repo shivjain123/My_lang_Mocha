@@ -1,0 +1,3080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-neuron.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-neuron.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#mocha_cuda_init"><i class="ti ti-function"></i> mocha_cuda_init</a></li><li class="sb-fn"><a href="#mocha_tensor_new"><i class="ti ti-function"></i> mocha_tensor_new</a></li><li class="sb-fn"><a href="#mocha_tensor_free"><i class="ti ti-function"></i> mocha_tensor_free</a></li><li class="sb-fn"><a href="#mocha_tensor_set"><i class="ti ti-function"></i> mocha_tensor_set</a></li><li class="sb-fn"><a href="#mocha_tensor_get"><i class="ti ti-function"></i> mocha_tensor_get</a></li><li class="sb-fn"><a href="#mocha_tensor_rows"><i class="ti ti-function"></i> mocha_tensor_rows</a></li><li class="sb-fn"><a href="#mocha_tensor_cols"><i class="ti ti-function"></i> mocha_tensor_cols</a></li><li class="sb-fn"><a href="#mocha_tensor_print"><i class="ti ti-function"></i> mocha_tensor_print</a></li><li class="sb-fn"><a href="#mocha_tensor_matmul"><i class="ti ti-function"></i> mocha_tensor_matmul</a></li><li class="sb-fn"><a href="#mocha_tensor_add"><i class="ti ti-function"></i> mocha_tensor_add</a></li><li class="sb-fn"><a href="#mocha_tensor_scale"><i class="ti ti-function"></i> mocha_tensor_scale</a></li><li class="sb-fn"><a href="#mocha_tensor_fill"><i class="ti ti-function"></i> mocha_tensor_fill</a></li><li class="sb-fn"><a href="#mocha_tensor_zeros"><i class="ti ti-function"></i> mocha_tensor_zeros</a></li><li class="sb-fn"><a href="#mocha_tensor_ones"><i class="ti ti-function"></i> mocha_tensor_ones</a></li><li class="sb-fn"><a href="#mocha_tensor_relu"><i class="ti ti-function"></i> mocha_tensor_relu</a></li><li class="sb-fn"><a href="#mocha_tensor_sigmoid"><i class="ti ti-function"></i> mocha_tensor_sigmoid</a></li><li class="sb-fn"><a href="#mocha_tensor_tanh"><i class="ti ti-function"></i> mocha_tensor_tanh</a></li><li class="sb-fn"><a href="#mocha_tensor_softmax"><i class="ti ti-function"></i> mocha_tensor_softmax</a></li><li class="sb-fn"><a href="#mocha_tensor_relu_bias"><i class="ti ti-function"></i> mocha_tensor_relu_bias</a></li><li class="sb-fn"><a href="#mocha_tensor_add_bias"><i class="ti ti-function"></i> mocha_tensor_add_bias</a></li><li class="sb-fn"><a href="#mocha_tensor_transpose"><i class="ti ti-function"></i> mocha_tensor_transpose</a></li><li class="sb-fn"><a href="#mocha_tensor_relu_grad"><i class="ti ti-function"></i> mocha_tensor_relu_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_sigmoid_grad"><i class="ti ti-function"></i> mocha_tensor_sigmoid_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_tanh_grad"><i class="ti ti-function"></i> mocha_tensor_tanh_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_softmax_ce_grad"><i class="ti ti-function"></i> mocha_tensor_softmax_ce_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_bias_grad"><i class="ti ti-function"></i> mocha_tensor_bias_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_mse_loss"><i class="ti ti-function"></i> mocha_tensor_mse_loss</a></li><li class="sb-fn"><a href="#mocha_tensor_mse_grad"><i class="ti ti-function"></i> mocha_tensor_mse_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_ce_loss"><i class="ti ti-function"></i> mocha_tensor_ce_loss</a></li><li class="sb-fn"><a href="#mocha_adam_update"><i class="ti ti-function"></i> mocha_adam_update</a></li><li class="sb-fn"><a href="#mocha_tensor_concat"><i class="ti ti-function"></i> mocha_tensor_concat</a></li><li class="sb-fn"><a href="#mocha_tensor_one_minus_mul"><i class="ti ti-function"></i> mocha_tensor_one_minus_mul</a></li><li class="sb-fn"><a href="#mocha_tensor_split_a"><i class="ti ti-function"></i> mocha_tensor_split_a</a></li><li class="sb-fn"><a href="#mocha_tensor_split_b"><i class="ti ti-function"></i> mocha_tensor_split_b</a></li><li class="sb-fn"><a href="#mocha_tensor_mul"><i class="ti ti-function"></i> mocha_tensor_mul</a></li><li class="sb-fn"><a href="#mocha_tensor_clone"><i class="ti ti-function"></i> mocha_tensor_clone</a></li><li class="sb-fn"><a href="#mocha_tensor_sign"><i class="ti ti-function"></i> mocha_tensor_sign</a></li><li class="sb-fn"><a href="#mocha_tensor_outer"><i class="ti ti-function"></i> mocha_tensor_outer</a></li><li class="sb-fn"><a href="#mocha_tensor_zero_diagonal"><i class="ti ti-function"></i> mocha_tensor_zero_diagonal</a></li><li class="sb-fn"><a href="#mocha_tensor_add_inplace"><i class="ti ti-function"></i> mocha_tensor_add_inplace</a></li><li class="sb-fn"><a href="#mocha_tensor_equal"><i class="ti ti-function"></i> mocha_tensor_equal</a></li><li class="sb-fn"><a href="#mocha_layer_norm"><i class="ti ti-function"></i> mocha_layer_norm</a></li><li class="sb-fn"><a href="#mocha_layer_norm_grad"><i class="ti ti-function"></i> mocha_layer_norm_grad</a></li><li class="sb-fn"><a href="#mocha_tensor_upload"><i class="ti ti-function"></i> mocha_tensor_upload</a></li><li class="sb-fn"><a href="#mocha_tensor_download"><i class="ti ti-function"></i> mocha_tensor_download</a></li><li class="sb-fn"><a href="#mocha_lsm_scale_reservoir"><i class="ti ti-function"></i> mocha_lsm_scale_reservoir</a></li><li class="sb-fn"><a href="#mocha_ridge_regression"><i class="ti ti-function"></i> mocha_ridge_regression</a></li><li class="sb-fn"><a href="#mocha_tensor_get_row"><i class="ti ti-function"></i> mocha_tensor_get_row</a></li><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-class"><a href="#tensor"><i class="ti ti-box"></i> Tensor</a><ul class="sb-methods"><li><a href="#tensor-constructor">constructor</a></li><li><a href="#tensor-put">put</a></li><li><a href="#tensor-at">at</a></li><li><a href="#tensor-show">show</a></li><li><a href="#tensor-dispose">dispose</a></li><li><a href="#tensor-finalize">finalize</a></li><li><a href="#tensor-matmul">matmul</a></li><li><a href="#tensor-transpose">transpose</a></li><li><a href="#tensor-add">add</a></li><li><a href="#tensor-relu">relu</a></li><li><a href="#tensor-sigmoid">sigmoid</a></li><li><a href="#tensor-tanh">tanh</a></li><li><a href="#tensor-softmax">softmax</a></li><li><a href="#tensor-scale">scale</a></li><li><a href="#tensor-fill">fill</a></li><li><a href="#tensor-zeros">zeros</a></li><li><a href="#tensor-ones">ones</a></li><li><a href="#tensor-concat">concat</a></li><li><a href="#tensor-one_minus_mul">one_minus_mul</a></li><li><a href="#tensor-mul">mul</a></li><li><a href="#tensor-clone_tensor">clone_tensor</a></li><li><a href="#tensor-sign">sign</a></li><li><a href="#tensor-outer">outer</a></li><li><a href="#tensor-zero_diagonal">zero_diagonal</a></li><li><a href="#tensor-add_inplace">add_inplace</a></li><li><a href="#tensor-equals">equals</a></li><li><a href="#tensor-get_row">get_row</a></li></ul></li><li class="sb-fn"><a href="#neuron_db_setup"><i class="ti ti-function"></i> neuron_db_setup</a></li><li class="sb-fn"><a href="#neuron_db_write_meta"><i class="ti ti-function"></i> neuron_db_write_meta</a></li><li class="sb-fn"><a href="#neuron_db_read_meta"><i class="ti ti-function"></i> neuron_db_read_meta</a></li><li class="sb-fn"><a href="#neuron_db_write_array"><i class="ti ti-function"></i> neuron_db_write_array</a></li><li class="sb-fn"><a href="#neuron_db_read_array_cell"><i class="ti ti-function"></i> neuron_db_read_array_cell</a></li><li class="sb-fn"><a href="#neuron_save_tensor"><i class="ti ti-function"></i> neuron_save_tensor</a></li><li class="sb-fn"><a href="#neuron_load_tensor"><i class="ti ti-function"></i> neuron_load_tensor</a></li><li class="sb-class"><a href="#dense"><i class="ti ti-box"></i> Dense</a><ul class="sb-methods"><li><a href="#dense-constructor">constructor</a></li><li><a href="#dense-forward">forward</a></li><li><a href="#dense-backward">backward</a></li><li><a href="#dense-backward_core">backward_core</a></li><li><a href="#dense-dispose">dispose</a></li><li><a href="#dense-save">save</a></li><li><a href="#dense-load">load</a></li></ul></li><li class="sb-class"><a href="#network"><i class="ti ti-box"></i> Network</a><ul class="sb-methods"><li><a href="#network-constructor">constructor</a></li><li><a href="#network-add">add</a></li><li><a href="#network-fit_step">fit_step</a></li><li><a href="#network-predict">predict</a></li><li><a href="#network-dispose">dispose</a></li><li><a href="#network-save">save</a></li><li><a href="#network-load">load</a></li></ul></li><li class="sb-class"><a href="#gru"><i class="ti ti-box"></i> Gru</a><ul class="sb-methods"><li><a href="#gru-constructor">constructor</a></li><li><a href="#gru-forward">forward</a></li><li><a href="#gru-backward">backward</a></li><li><a href="#gru-forward_seq">forward_seq</a></li><li><a href="#gru-sig_grad">sig_grad</a></li><li><a href="#gru-tanh_grad">tanh_grad</a></li><li><a href="#gru-bias_grad">bias_grad</a></li><li><a href="#gru-tr">tr</a></li><li><a href="#gru-cl">cl</a></li><li><a href="#gru-omm">omm</a></li><li><a href="#gru-backward_seq">backward_seq</a></li><li><a href="#gru-free_t">free_t</a></li><li><a href="#gru-clear_seq">clear_seq</a></li><li><a href="#gru-dispose">dispose</a></li><li><a href="#gru-save">save</a></li><li><a href="#gru-load">load</a></li></ul></li><li class="sb-class"><a href="#bigru"><i class="ti ti-box"></i> BiGru</a><ul class="sb-methods"><li><a href="#bigru-constructor">constructor</a></li><li><a href="#bigru-forward">forward</a></li><li><a href="#bigru-dispose">dispose</a></li><li><a href="#bigru-save">save</a></li><li><a href="#bigru-load">load</a></li></ul></li><li class="sb-fn"><a href="#flip_bits"><i class="ti ti-function"></i> flip_bits</a></li><li class="sb-class"><a href="#hopfield"><i class="ti ti-box"></i> Hopfield</a><ul class="sb-methods"><li><a href="#hopfield-constructor">constructor</a></li><li><a href="#hopfield-store">store</a></li><li><a href="#hopfield-store_values">store_values</a></li><li><a href="#hopfield-normalize">normalize</a></li><li><a href="#hopfield-recall_values">recall_values</a></li><li><a href="#hopfield-recall">recall</a></li><li><a href="#hopfield-dispose">dispose</a></li><li><a href="#hopfield-save">save</a></li><li><a href="#hopfield-load">load</a></li></ul></li><li class="sb-class"><a href="#attention"><i class="ti ti-box"></i> Attention</a><ul class="sb-methods"><li><a href="#attention-constructor">constructor</a></li><li><a href="#attention-forward">forward</a></li><li><a href="#attention-backward">backward</a></li><li><a href="#attention-dispose">dispose</a></li><li><a href="#attention-save">save</a></li><li><a href="#attention-load">load</a></li></ul></li><li class="sb-class"><a href="#layernorm"><i class="ti ti-box"></i> LayerNorm</a><ul class="sb-methods"><li><a href="#layernorm-constructor">constructor</a></li><li><a href="#layernorm-forward">forward</a></li><li><a href="#layernorm-backward">backward</a></li><li><a href="#layernorm-dispose">dispose</a></li><li><a href="#layernorm-save">save</a></li><li><a href="#layernorm-load">load</a></li></ul></li><li class="sb-class"><a href="#bertlayer"><i class="ti ti-box"></i> BertLayer</a><ul class="sb-methods"><li><a href="#bertlayer-constructor">constructor</a></li><li><a href="#bertlayer-forward">forward</a></li><li><a href="#bertlayer-backward">backward</a></li><li><a href="#bertlayer-dispose">dispose</a></li><li><a href="#bertlayer-save">save</a></li><li><a href="#bertlayer-load">load</a></li></ul></li><li class="sb-class"><a href="#lsm"><i class="ti ti-box"></i> Lsm</a><ul class="sb-methods"><li><a href="#lsm-constructor">constructor</a></li><li><a href="#lsm-step">step</a></li><li><a href="#lsm-reset">reset</a></li><li><a href="#lsm-train">train</a></li><li><a href="#lsm-dispose">dispose</a></li><li><a href="#lsm-save">save</a></li><li><a href="#lsm-load">load</a></li></ul></li><li class="sb-class"><a href="#rbm"><i class="ti ti-box"></i> Rbm</a><ul class="sb-methods"><li><a href="#rbm-constructor">constructor</a></li><li><a href="#rbm-sample_hidden">sample_hidden</a></li><li><a href="#rbm-sample_visible">sample_visible</a></li><li><a href="#rbm-reconstruct">reconstruct</a></li><li><a href="#rbm-train_step">train_step</a></li><li><a href="#rbm-reconstruction_error">reconstruction_error</a></li><li><a href="#rbm-binarize">binarize</a></li><li><a href="#rbm-dispose">dispose</a></li><li><a href="#rbm-save">save</a></li><li><a href="#rbm-load">load</a></li></ul></li><li class="sb-class"><a href="#embedding"><i class="ti ti-box"></i> Embedding</a><ul class="sb-methods"><li><a href="#embedding-constructor">constructor</a></li><li><a href="#embedding-forward">forward</a></li><li><a href="#embedding-backward">backward</a></li><li><a href="#embedding-dispose">dispose</a></li><li><a href="#embedding-save">save</a></li><li><a href="#embedding-load">load</a></li></ul></li><li class="sb-class"><a href="#positionalencoding"><i class="ti ti-box"></i> PositionalEncoding</a><ul class="sb-methods"><li><a href="#positionalencoding-constructor">constructor</a></li><li><a href="#positionalencoding-encode">encode</a></li><li><a href="#positionalencoding-dispose">dispose</a></li></ul></li><li class="sb-class"><a href="#bertclassifier"><i class="ti ti-box"></i> BertClassifier</a><ul class="sb-methods"><li><a href="#bertclassifier-bc_fit">bc_fit</a></li><li><a href="#bertclassifier-bc_size">bc_size</a></li><li><a href="#bertclassifier-bc_encode">bc_encode</a></li><li><a href="#bertclassifier-bc_join">bc_join</a></li><li><a href="#bertclassifier-bc_make_labels">bc_make_labels</a></li><li><a href="#bertclassifier-bc_shuffled_order">bc_shuffled_order</a></li><li><a href="#bertclassifier-constructor">constructor</a></li><li><a href="#bertclassifier-train">train</a></li><li><a href="#bertclassifier-train_labelled">train_labelled</a></li><li><a href="#bertclassifier-predict">predict</a></li><li><a href="#bertclassifier-accuracy">accuracy</a></li><li><a href="#bertclassifier-dispose">dispose</a></li></ul></li><li class="sb-class"><a href="#gruclassifier"><i class="ti ti-box"></i> GruClassifier</a><ul class="sb-methods"><li><a href="#gruclassifier-gc_fit">gc_fit</a></li><li><a href="#gruclassifier-gc_size">gc_size</a></li><li><a href="#gruclassifier-gc_encode">gc_encode</a></li><li><a href="#gruclassifier-gc_free">gc_free</a></li><li><a href="#gruclassifier-gc_rows">gc_rows</a></li><li><a href="#gruclassifier-gc_free_rows">gc_free_rows</a></li><li><a href="#gruclassifier-gc_join">gc_join</a></li><li><a href="#gruclassifier-gc_make_labels">gc_make_labels</a></li><li><a href="#gruclassifier-gc_shuffled_order">gc_shuffled_order</a></li><li><a href="#gruclassifier-constructor">constructor</a></li><li><a href="#gruclassifier-train">train</a></li><li><a href="#gruclassifier-train_labelled">train_labelled</a></li><li><a href="#gruclassifier-predict">predict</a></li><li><a href="#gruclassifier-accuracy">accuracy</a></li><li><a href="#gruclassifier-gc_word">gc_word</a></li><li><a href="#gruclassifier-save">save</a></li><li><a href="#gruclassifier-load">load</a></li><li><a href="#gruclassifier-dispose">dispose</a></li></ul></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-neuron.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="mocha_cuda_init">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_cuda_init</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_new">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_new</span><span class="paren">(</span><span class="param-name">rows</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cols</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_free">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_free</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_set">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_set</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">col</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_get">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_get</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">col</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_rows">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_rows</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_cols">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_cols</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_print">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_print</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_matmul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_matmul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_add</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_scale">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_scale</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_fill">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_fill</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_zeros">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_zeros</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_ones">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_ones</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_relu">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_relu</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_sigmoid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_sigmoid</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_tanh">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_tanh</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_softmax">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_softmax</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_relu_bias">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_relu_bias</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">bias</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_add_bias">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_add_bias</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">bias</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_transpose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_transpose</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_relu_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_relu_grad</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_sigmoid_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_sigmoid_grad</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_tanh_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_tanh_grad</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_softmax_ce_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_softmax_ce_grad</span><span class="paren">(</span><span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_bias_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_bias_grad</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_mse_loss">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_mse_loss</span><span class="paren">(</span><span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_mse_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_mse_grad</span><span class="paren">(</span><span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_ce_loss">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_ce_loss</span><span class="paren">(</span><span class="param-name">out</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_adam_update">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_adam_update</span><span class="paren">(</span><span class="param-name">w</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">m</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">v</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">dw</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">eps</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta1t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta2t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_concat">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_concat</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_one_minus_mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_one_minus_mul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_split_a">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_split_a</span><span class="paren">(</span><span class="param-name">grad</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">cols_a</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_split_b">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_split_b</span><span class="paren">(</span><span class="param-name">grad</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">cols_a</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_mul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_clone">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_clone</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_sign">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_sign</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_outer">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_outer</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_zero_diagonal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_zero_diagonal</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_add_inplace">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_add_inplace</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_equal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_equal</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_layer_norm">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_layer_norm</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">gamma</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">beta</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">eps</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_layer_norm_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_layer_norm_grad</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">gamma</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">dx</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">dgamma</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">dbeta</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">eps</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_upload">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_upload</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_download">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_download</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_lsm_scale_reservoir">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_lsm_scale_reservoir</span><span class="paren">(</span><span class="param-name">w</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">target_sr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_ridge_regression">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_ridge_regression</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">y</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">max_iter</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_tensor_get_row">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_tensor_get_row</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">vast</span>, <span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">vast</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_db_setup">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_db_setup</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_db_write_meta">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_db_write_meta</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_db_read_meta">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_db_read_meta</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_db_write_array">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_db_write_array</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_db_read_array_cell">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_db_read_array_cell</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_save_tensor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_save_tensor</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="neuron_load_tensor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">neuron_load_tensor</span><span class="paren">(</span><span class="param-name">db</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">name</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="flip_bits">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">flip_bits</span><span class="paren">(</span><span class="param-name">values</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">n_flips</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Returns a copy of a +1 / -1 pattern with n_flips distinct random bits flipped.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">values:</td><td class="tag-desc">float[] pattern of +1.0 / -1.0</td></tr><tr><td class="tag-name">n_flips:</td><td class="tag-desc">how many bits to flip, from 0 to values.length</td></tr></tbody></table>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="tensor">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Tensor</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="tensor-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">rows</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cols</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-put">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">put</span><span class="paren">(</span><span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">col</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-at">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">at</span><span class="paren">(</span><span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">col</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-show">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">show</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-finalize">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">finalize</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-matmul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">matmul</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-transpose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transpose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-relu">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">relu</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-sigmoid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sigmoid</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-tanh">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tanh</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-softmax">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">softmax</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-scale">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">scale</span><span class="paren">(</span><span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-fill">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fill</span><span class="paren">(</span><span class="param-name">val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-zeros">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">zeros</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-ones">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ones</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-concat">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">concat</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-one_minus_mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">one_minus_mul</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mul</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-clone_tensor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clone_tensor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-sign">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sign</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-outer">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">outer</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-zero_diagonal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">zero_diagonal</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-add_inplace">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add_inplace</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-equals">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">equals</span><span class="paren">(</span><span class="param-name">other</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="tensor-get_row">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get_row</span><span class="paren">(</span><span class="param-name">row</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="dense">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Dense</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="dense-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">input_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">output_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">activation</span><span class="colon">:</span> <span class="param-type">Activation</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="dense-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">input</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="dense-backward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="dense-backward_core">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward_core</span><span class="paren">(</span><span class="param-name">dact</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="dense-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="dense-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="dense-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="network">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Network</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="network-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="network-add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add</span><span class="paren">(</span><span class="param-name">layer</span><span class="colon">:</span> <span class="param-type">Dense</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="network-fit_step">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fit_step</span><span class="paren">(</span><span class="param-name">input</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">loss</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="network-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">input</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="network-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="network-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="network-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="gru">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Gru</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="gru-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">input_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">hidden_size</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">h</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-backward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward</span><span class="paren">(</span><span class="param-name">dh_new</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">dh_new:</td><td class="tag-desc">gradient of loss w.r.t h_new [batch x hidden_size]</td></tr><tr><td class="tag-name">lr:</td><td class="tag-desc">learning rate</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: gradient w.r.t input x [batch x input_size]</span></div>
+  </div>
+</div>
+<div class="card" id="gru-forward_seq">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward_seq</span><span class="paren">(</span><span class="param-name">xs</span><span class="colon">:</span> <span class="param-type">Tensor[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">runs forward over a whole sequence, returns the LAST hidden state.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">xs:</td><td class="tag-desc">one [1 x input_size] tensor per timestep</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="gru-sig_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sig_grad</span><span class="paren">(</span><span class="param-name">d</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-tanh_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tanh_grad</span><span class="paren">(</span><span class="param-name">d</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-bias_grad">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bias_grad</span><span class="paren">(</span><span class="param-name">d</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-tr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tr</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-cl">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cl</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-omm">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">omm</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-backward_seq">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward_seq</span><span class="paren">(</span><span class="param-name">dh_last</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">dX</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-free_t">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">free_t</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-clear_seq">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clear_seq</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gru-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="bigru">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BiGru</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="bigru-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">input_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">hidden_size</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bigru-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">xs</span><span class="colon">:</span> <span class="param-type">Tensor[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Forward pass over a full sequence.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">xs:</td><td class="tag-desc">array of input tensors [seq_len x (1 x input_size)]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: array of output tensors [seq_len x (1 x hidden_size*2)]</span></div>
+  </div>
+</div>
+<div class="card" id="bigru-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bigru-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bigru-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="hopfield">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Hopfield</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="hopfield-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">size</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Inits state.</p>
+  </div>
+</div>
+<div class="card" id="hopfield-store">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">store</span><span class="paren">(</span><span class="param-name">pattern</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Store a pattern in the network.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">pattern:</td><td class="tag-desc">[1 x size] tensor with values +1 or -1</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="hopfield-store_values">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">store_values</span><span class="paren">(</span><span class="param-name">values</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Store a pattern given as a plain array of +1 / -1 values.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">values:</td><td class="tag-desc">float[] of length size, each +1.0 or -1.0</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="hopfield-normalize">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">normalize</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Normalize weights by number of stored patterns. Call once, after ALL store() calls: storing after this would weight. the new pattern more heavily than the earlier ones.</p>
+  </div>
+</div>
+<div class="card" id="hopfield-recall_values">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall_values</span><span class="paren">(</span><span class="param-name">values</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">max_iter</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Recall from a plain array of +1 / -1 values, returns a plain array.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">values:</td><td class="tag-desc">float[] of length size, each +1.0 or -1.0</td></tr><tr><td class="tag-name">max_iter:</td><td class="tag-desc">maximum iterations before giving up</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="hopfield-recall">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recall</span><span class="paren">(</span><span class="param-name">input</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">max_iter</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Recall a pattern from a noisy/partial input. Recall a pattern from a noisy/partial input.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">input:</td><td class="tag-desc">[1 x size] tensor with values +1 or -1</td></tr><tr><td class="tag-name">max_iter:</td><td class="tag-desc">maximum iterations before giving up</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: recalled pattern [1 x size]</span></div>
+  </div>
+</div>
+<div class="card" id="hopfield-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="hopfield-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="hopfield-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="attention">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Attention</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="attention-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">d_model</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="attention-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Forward pass — bidirectional self attention.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">x:</td><td class="tag-desc">input sequence [seq_len x d_model]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: output [seq_len x d_model]</span></div>
+  </div>
+</div>
+<div class="card" id="attention-backward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Backward pass.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">dout:</td><td class="tag-desc">gradient [seq_len x d_model]</td></tr><tr><td class="tag-name">lr:</td><td class="tag-desc">learning rate</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: gradient w.r.t input x [seq_len x d_model]</span></div>
+  </div>
+</div>
+<div class="card" id="attention-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="attention-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="attention-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="layernorm">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">LayerNorm</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="layernorm-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">size</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="layernorm-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="layernorm-backward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="layernorm-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="layernorm-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="layernorm-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="bertlayer">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BertLayer</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="bertlayer-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">d_model</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_k</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_ff</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertlayer-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Forward pass — one BERT layer.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">x:</td><td class="tag-desc">input [seq_len x d_model]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: output [seq_len x d_model]</span></div>
+  </div>
+</div>
+<div class="card" id="bertlayer-backward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Backward pass.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">dout:</td><td class="tag-desc">gradient [seq_len x d_model]</td></tr><tr><td class="tag-name">lr:</td><td class="tag-desc">learning rate</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: gradient w.r.t input x</span></div>
+  </div>
+</div>
+<div class="card" id="bertlayer-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertlayer-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertlayer-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="lsm">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Lsm</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="lsm-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">input_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">reservoir_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">output_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">spectral_radius</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="lsm-step">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">step</span><span class="paren">(</span><span class="param-name">u</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Run one timestep.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">u:</td><td class="tag-desc">input [1 x input_size]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: output [1 x output_size]</span></div>
+  </div>
+</div>
+<div class="card" id="lsm-reset">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reset</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Reset reservoir state to zeros.</p>
+  </div>
+</div>
+<div class="card" id="lsm-train">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train</span><span class="paren">(</span><span class="param-name">states</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">targets</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Train readout weights using ridge regression.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">states:</td><td class="tag-desc">collected reservoir states [T x reservoir_size]</td></tr><tr><td class="tag-name">targets:</td><td class="tag-desc">target outputs [T x output_size]</td></tr><tr><td class="tag-name">lambda:</td><td class="tag-desc">regularization strength</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="lsm-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="lsm-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="lsm-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="rbm">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Rbm</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="rbm-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">visible_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">hidden_size</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbm-sample_hidden">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sample_hidden</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Compute hidden probabilities given visible: P(h=1|v).</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">v:</td><td class="tag-desc">[1 x visible_size]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: [1 x hidden_size] probabilities</span></div>
+  </div>
+</div>
+<div class="card" id="rbm-sample_visible">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sample_visible</span><span class="paren">(</span><span class="param-name">h</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Compute visible probabilities given hidden: P(v=1|h).</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">h:</td><td class="tag-desc">[1 x hidden_size]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: [1 x visible_size] probabilities</span></div>
+  </div>
+</div>
+<div class="card" id="rbm-reconstruct">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reconstruct</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Reconstruct visible from visible (one CD step).</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">v:</td><td class="tag-desc">[1 x visible_size]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: reconstructed [1 x visible_size]</span></div>
+  </div>
+</div>
+<div class="card" id="rbm-train_step">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train_step</span><span class="paren">(</span><span class="param-name">v0</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Train one step using Contrastive Divergence (CD-1).</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">v0:</td><td class="tag-desc">one data sample [1 x visible_size]</td></tr><tr><td class="tag-name">lr:</td><td class="tag-desc">learning rate</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="rbm-reconstruction_error">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reconstruction_error</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Compute mean reconstruction error on a sample.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">v:</td><td class="tag-desc">[1 x visible_size]</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: mean squared error as float</span></div>
+  </div>
+</div>
+<div class="card" id="rbm-binarize">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">binarize</span><span class="paren">(</span><span class="param-name">probs</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert probability tensor to binary sample in-place.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">probs:</td><td class="tag-desc">[1 x n] sigmoid probabilities, modified in place to 0/1</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="rbm-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbm-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbm-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="embedding">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Embedding</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="embedding-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">vocab_size</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_model</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="embedding-forward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">forward</span><span class="paren">(</span><span class="param-name">ids</span><span class="colon">:</span> <span class="param-type">int[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Look up embeddings for a sequence of token IDs.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">ids:</td><td class="tag-desc">int[] of token IDs</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: [seq_len x d_model] tensor</span></div>
+  </div>
+</div>
+<div class="card" id="embedding-backward">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">backward</span><span class="paren">(</span><span class="param-name">dout</span><span class="colon">:</span> <span class="param-type">Tensor</span>, <span class="param-name">ids</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Backward — accumulate gradients into embedding rows.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">dout:</td><td class="tag-desc">[seq_len x d_model] gradient</td></tr><tr><td class="tag-name">ids:</td><td class="tag-desc">same int[] passed to forward</td></tr></tbody></table>
+  </div>
+</div>
+<div class="card" id="embedding-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="embedding-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="embedding-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="positionalencoding">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">PositionalEncoding</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="positionalencoding-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">max_len</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_model</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="positionalencoding-encode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">encode</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Add positional encoding to embedding output.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">x:</td><td class="tag-desc">[seq_len x d_model] from Embedding</td></tr></tbody></table>
+<div class="return-row"><span class="tag-label">returns</span><span class="tag-desc">: [seq_len x d_model] with position info added</span></div>
+  </div>
+</div>
+<div class="card" id="positionalencoding-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="bertclassifier">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BertClassifier</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="bertclassifier-bc_fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bc_fit</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span>, <span class="param-name">texts</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-bc_size">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bc_size</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-bc_encode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bc_encode</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span>, <span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-bc_join">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bc_join</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-bc_make_labels">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bc_make_labels</span><span class="paren">(</span><span class="param-name">n_pos</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">n_neg</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-bc_shuffled_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bc_shuffled_order</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">positive</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">negative</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">d_model</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_k</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_ff</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-train">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train</span><span class="paren">(</span><span class="param-name">positive</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">negative</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">epochs</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-train_labelled">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train_labelled</span><span class="paren">(</span><span class="param-name">texts</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">epochs</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">positive</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">negative</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bertclassifier-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="gruclassifier">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">GruClassifier</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="gruclassifier-gc_fit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_fit</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span>, <span class="param-name">texts</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_size">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_size</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_encode">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_encode</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span>, <span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_free">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_free</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_rows">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_rows</span><span class="paren">(</span><span class="param-name">t</span><span class="colon">:</span> <span class="param-type">Tensor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">Tensor[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_free_rows">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_free_rows</span><span class="paren">(</span><span class="param-name">xs</span><span class="colon">:</span> <span class="param-type">Tensor[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_join">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_join</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_make_labels">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_make_labels</span><span class="paren">(</span><span class="param-name">n_pos</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">n_neg</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_shuffled_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_shuffled_order</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">positive</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">negative</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">d_model</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">d_hidden</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-train">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train</span><span class="paren">(</span><span class="param-name">positive</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">negative</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">epochs</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-train_labelled">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">train_labelled</span><span class="paren">(</span><span class="param-name">texts</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">labels</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">epochs</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-predict">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predict</span><span class="paren">(</span><span class="param-name">text</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-accuracy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accuracy</span><span class="paren">(</span><span class="param-name">positive</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">negative</span><span class="colon">:</span> <span class="param-type">str[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-gc_word">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gc_word</span><span class="paren">(</span><span class="param-name">tk</span><span class="colon">:</span> <span class="param-type">Tokenizer</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-save">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">save</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-load">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">load</span><span class="paren">(</span><span class="param-name">path</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="gruclassifier-dispose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dispose</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

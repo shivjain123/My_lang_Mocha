@@ -1,0 +1,1961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-bio.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-bio.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#mean_arterial_pressure"><i class="ti ti-function"></i> mean_arterial_pressure</a></li><li class="sb-fn"><a href="#pulse_pressure"><i class="ti ti-function"></i> pulse_pressure</a></li><li class="sb-fn"><a href="#cardiac_output"><i class="ti ti-function"></i> cardiac_output</a></li><li class="sb-fn"><a href="#cardiac_index"><i class="ti ti-function"></i> cardiac_index</a></li><li class="sb-fn"><a href="#ejection_fraction"><i class="ti ti-function"></i> ejection_fraction</a></li><li class="sb-fn"><a href="#stroke_volume"><i class="ti ti-function"></i> stroke_volume</a></li><li class="sb-fn"><a href="#body_surface_area"><i class="ti ti-function"></i> body_surface_area</a></li><li class="sb-fn"><a href="#rate_pressure_product"><i class="ti ti-function"></i> rate_pressure_product</a></li><li class="sb-fn"><a href="#aortic_size_index"><i class="ti ti-function"></i> aortic_size_index</a></li><li class="sb-fn"><a href="#svr"><i class="ti ti-function"></i> svr</a></li><li class="sb-fn"><a href="#qtc_bazett"><i class="ti ti-function"></i> qtc_bazett</a></li><li class="sb-fn"><a href="#shock_index"><i class="ti ti-function"></i> shock_index</a></li><li class="sb-fn"><a href="#vo2_max_fick"><i class="ti ti-function"></i> vo2_max_fick</a></li><li class="sb-fn"><a href="#framingham_risk"><i class="ti ti-function"></i> framingham_risk</a></li><li class="sb-fn"><a href="#ideal_body_weight"><i class="ti ti-function"></i> ideal_body_weight</a></li><li class="sb-fn"><a href="#tidal_volume"><i class="ti ti-function"></i> tidal_volume</a></li><li class="sb-fn"><a href="#minute_ventilation"><i class="ti ti-function"></i> minute_ventilation</a></li><li class="sb-fn"><a href="#alveolar_po2"><i class="ti ti-function"></i> alveolar_po2</a></li><li class="sb-fn"><a href="#aa_gradient"><i class="ti ti-function"></i> aa_gradient</a></li><li class="sb-fn"><a href="#fev1_fvc_ratio"><i class="ti ti-function"></i> fev1_fvc_ratio</a></li><li class="sb-fn"><a href="#dead_space_fraction"><i class="ti ti-function"></i> dead_space_fraction</a></li><li class="sb-fn"><a href="#lung_compliance"><i class="ti ti-function"></i> lung_compliance</a></li><li class="sb-fn"><a href="#pf_ratio"><i class="ti ti-function"></i> pf_ratio</a></li><li class="sb-fn"><a href="#ards_severity"><i class="ti ti-function"></i> ards_severity</a></li><li class="sb-fn"><a href="#oxygen_content"><i class="ti ti-function"></i> oxygen_content</a></li><li class="sb-fn"><a href="#gcs"><i class="ti ti-function"></i> gcs</a></li><li class="sb-fn"><a href="#gcs_score"><i class="ti ti-function"></i> gcs_score</a></li><li class="sb-fn"><a href="#cerebral_perfusion_pressure"><i class="ti ti-function"></i> cerebral_perfusion_pressure</a></li><li class="sb-fn"><a href="#cerebral_blood_flow"><i class="ti ti-function"></i> cerebral_blood_flow</a></li><li class="sb-fn"><a href="#serum_osmolality"><i class="ti ti-function"></i> serum_osmolality</a></li><li class="sb-fn"><a href="#osmolar_gap"><i class="ti ti-function"></i> osmolar_gap</a></li><li class="sb-fn"><a href="#corrected_sodium"><i class="ti ti-function"></i> corrected_sodium</a></li><li class="sb-fn"><a href="#ckd_epi_gfr"><i class="ti ti-function"></i> ckd_epi_gfr</a></li><li class="sb-fn"><a href="#ckd_epi_gfr_value"><i class="ti ti-function"></i> ckd_epi_gfr_value</a></li><li class="sb-fn"><a href="#cockcroft_gault"><i class="ti ti-function"></i> cockcroft_gault</a></li><li class="sb-fn"><a href="#bun_creatinine_ratio"><i class="ti ti-function"></i> bun_creatinine_ratio</a></li><li class="sb-fn"><a href="#fena"><i class="ti ti-function"></i> fena</a></li><li class="sb-fn"><a href="#fena_value"><i class="ti ti-function"></i> fena_value</a></li><li class="sb-fn"><a href="#feurea"><i class="ti ti-function"></i> feurea</a></li><li class="sb-fn"><a href="#feurea_value"><i class="ti ti-function"></i> feurea_value</a></li><li class="sb-fn"><a href="#urine_specific_gravity"><i class="ti ti-function"></i> urine_specific_gravity</a></li><li class="sb-fn"><a href="#urine_sg_interpretation"><i class="ti ti-function"></i> urine_sg_interpretation</a></li><li class="sb-fn"><a href="#urine_sg_message"><i class="ti ti-function"></i> urine_sg_message</a></li><li class="sb-fn"><a href="#body_adiposity_index"><i class="ti ti-function"></i> body_adiposity_index</a></li><li class="sb-fn"><a href="#ponderal_index"><i class="ti ti-function"></i> ponderal_index</a></li><li class="sb-fn"><a href="#waist_height_ratio"><i class="ti ti-function"></i> waist_height_ratio</a></li><li class="sb-fn"><a href="#waist_height_ratio_value"><i class="ti ti-function"></i> waist_height_ratio_value</a></li><li class="sb-fn"><a href="#relative_fat_mass"><i class="ti ti-function"></i> relative_fat_mass</a></li><li class="sb-fn"><a href="#basal_metabolic_rate"><i class="ti ti-function"></i> basal_metabolic_rate</a></li><li class="sb-fn"><a href="#total_daily_energy_expenditure"><i class="ti ti-function"></i> total_daily_energy_expenditure</a></li><li class="sb-fn"><a href="#hba1c_to_eag"><i class="ti ti-function"></i> hba1c_to_eag</a></li><li class="sb-fn"><a href="#homa_ir"><i class="ti ti-function"></i> homa_ir</a></li><li class="sb-fn"><a href="#corrected_calcium"><i class="ti ti-function"></i> corrected_calcium</a></li><li class="sb-fn"><a href="#free_water_deficit"><i class="ti ti-function"></i> free_water_deficit</a></li><li class="sb-fn"><a href="#elimination_rate_constant"><i class="ti ti-function"></i> elimination_rate_constant</a></li><li class="sb-fn"><a href="#half_life"><i class="ti ti-function"></i> half_life</a></li><li class="sb-fn"><a href="#half_life_from_cl_vd"><i class="ti ti-function"></i> half_life_from_cl_vd</a></li><li class="sb-fn"><a href="#volume_of_distribution"><i class="ti ti-function"></i> volume_of_distribution</a></li><li class="sb-fn"><a href="#clearance"><i class="ti ti-function"></i> clearance</a></li><li class="sb-fn"><a href="#loading_dose"><i class="ti ti-function"></i> loading_dose</a></li><li class="sb-fn"><a href="#maintenance_dose"><i class="ti ti-function"></i> maintenance_dose</a></li><li class="sb-fn"><a href="#bioavailability_adjusted_dose"><i class="ti ti-function"></i> bioavailability_adjusted_dose</a></li><li class="sb-fn"><a href="#concentration_at_time"><i class="ti ti-function"></i> concentration_at_time</a></li><li class="sb-fn"><a href="#steady_state_concentration"><i class="ti ti-function"></i> steady_state_concentration</a></li><li class="sb-fn"><a href="#accumulation_factor"><i class="ti ti-function"></i> accumulation_factor</a></li><li class="sb-fn"><a href="#hill_effect"><i class="ti ti-function"></i> hill_effect</a></li><li class="sb-fn"><a href="#hill_concentration"><i class="ti ti-function"></i> hill_concentration</a></li><li class="sb-fn"><a href="#mcv"><i class="ti ti-function"></i> mcv</a></li><li class="sb-fn"><a href="#mcv_value"><i class="ti ti-function"></i> mcv_value</a></li><li class="sb-fn"><a href="#mch"><i class="ti ti-function"></i> mch</a></li><li class="sb-fn"><a href="#mchc"><i class="ti ti-function"></i> mchc</a></li><li class="sb-fn"><a href="#corrected_reticulocyte"><i class="ti ti-function"></i> corrected_reticulocyte</a></li><li class="sb-fn"><a href="#reticulocyte_production_index"><i class="ti ti-function"></i> reticulocyte_production_index</a></li><li class="sb-fn"><a href="#blood_volume"><i class="ti ti-function"></i> blood_volume</a></li><li class="sb-fn"><a href="#anc"><i class="ti ti-function"></i> anc</a></li><li class="sb-fn"><a href="#anc_value"><i class="ti ti-function"></i> anc_value</a></li><li class="sb-fn"><a href="#transferrin_saturation"><i class="ti ti-function"></i> transferrin_saturation</a></li><li class="sb-fn"><a href="#rule_of_nines"><i class="ti ti-function"></i> rule_of_nines</a></li><li class="sb-fn"><a href="#parkland"><i class="ti ti-function"></i> parkland</a></li><li class="sb-fn"><a href="#parkland_first_8hr_rate"><i class="ti ti-function"></i> parkland_first_8hr_rate</a></li><li class="sb-fn"><a href="#parkland_next_16hr_rate"><i class="ti ti-function"></i> parkland_next_16hr_rate</a></li><li class="sb-fn"><a href="#burn_severity"><i class="ti ti-function"></i> burn_severity</a></li><li class="sb-fn"><a href="#drip_rate_gtt_min"><i class="ti ti-function"></i> drip_rate_gtt_min</a></li><li class="sb-fn"><a href="#infusion_time_hr"><i class="ti ti-function"></i> infusion_time_hr</a></li><li class="sb-fn"><a href="#volume_to_infuse"><i class="ti ti-function"></i> volume_to_infuse</a></li><li class="sb-fn"><a href="#mcg_kg_min_to_ml_hr"><i class="ti ti-function"></i> mcg_kg_min_to_ml_hr</a></li><li class="sb-fn"><a href="#ml_hr_to_mcg_kg_min"><i class="ti ti-function"></i> ml_hr_to_mcg_kg_min</a></li><li class="sb-fn"><a href="#mg_hr_to_ml_hr"><i class="ti ti-function"></i> mg_hr_to_ml_hr</a></li><li class="sb-fn"><a href="#ml_hr_to_mg_hr"><i class="ti ti-function"></i> ml_hr_to_mg_hr</a></li><li class="sb-fn"><a href="#bolus_rate_ml_hr"><i class="ti ti-function"></i> bolus_rate_ml_hr</a></li><li class="sb-fn"><a href="#units_hr_to_ml_hr"><i class="ti ti-function"></i> units_hr_to_ml_hr</a></li><li class="sb-fn"><a href="#ml_hr_to_units_hr"><i class="ti ti-function"></i> ml_hr_to_units_hr</a></li><li class="sb-fn"><a href="#naegele_edd"><i class="ti ti-function"></i> naegele_edd</a></li><li class="sb-fn"><a href="#gestational_age_days"><i class="ti ti-function"></i> gestational_age_days</a></li><li class="sb-fn"><a href="#gestational_age_weeks"><i class="ti ti-function"></i> gestational_age_weeks</a></li><li class="sb-fn"><a href="#bmi_fertility_risk"><i class="ti ti-function"></i> bmi_fertility_risk</a></li><li class="sb-fn"><a href="#amh_ovarian_reserve"><i class="ti ti-function"></i> amh_ovarian_reserve</a></li><li class="sb-fn"><a href="#kupperman_index"><i class="ti ti-function"></i> kupperman_index</a></li><li class="sb-fn"><a href="#lh_surge_day"><i class="ti ti-function"></i> lh_surge_day</a></li><li class="sb-fn"><a href="#uterine_ri"><i class="ti ti-function"></i> uterine_ri</a></li><li class="sb-fn"><a href="#uterine_pi"><i class="ti ti-function"></i> uterine_pi</a></li><li class="sb-fn"><a href="#uterine_resistance"><i class="ti ti-function"></i> uterine_resistance</a></li><li class="sb-fn"><a href="#fertility_window_begin"><i class="ti ti-function"></i> fertility_window_begin</a></li><li class="sb-fn"><a href="#fertility_window_peak"><i class="ti ti-function"></i> fertility_window_peak</a></li><li class="sb-fn"><a href="#free_testosterone"><i class="ti ti-function"></i> free_testosterone</a></li><li class="sb-fn"><a href="#sperm_concentration"><i class="ti ti-function"></i> sperm_concentration</a></li><li class="sb-fn"><a href="#sperm_motility"><i class="ti ti-function"></i> sperm_motility</a></li><li class="sb-fn"><a href="#exponential_growth"><i class="ti ti-function"></i> exponential_growth</a></li><li class="sb-fn"><a href="#logistic_growth"><i class="ti ti-function"></i> logistic_growth</a></li><li class="sb-fn"><a href="#doubling_time"><i class="ti ti-function"></i> doubling_time</a></li><li class="sb-fn"><a href="#carrying_capacity_usage"><i class="ti ti-function"></i> carrying_capacity_usage</a></li><li class="sb-fn"><a href="#population_density"><i class="ti ti-function"></i> population_density</a></li><li class="sb-fn"><a href="#lotka_volterra"><i class="ti ti-function"></i> lotka_volterra</a></li><li class="sb-fn"><a href="#michaelis_menten"><i class="ti ti-function"></i> michaelis_menten</a></li><li class="sb-fn"><a href="#half_velocity_substrate"><i class="ti ti-function"></i> half_velocity_substrate</a></li><li class="sb-fn"><a href="#velocity_fraction"><i class="ti ti-function"></i> velocity_fraction</a></li><li class="sb-fn"><a href="#absorbance"><i class="ti ti-function"></i> absorbance</a></li><li class="sb-fn"><a href="#concentration_from_absorbance"><i class="ti ti-function"></i> concentration_from_absorbance</a></li><li class="sb-fn"><a href="#henderson_hasselbalch"><i class="ti ti-function"></i> henderson_hasselbalch</a></li><li class="sb-fn"><a href="#q10"><i class="ti ti-function"></i> q10</a></li><li class="sb-fn"><a href="#rate_at_temperature"><i class="ti ti-function"></i> rate_at_temperature</a></li><li class="sb-fn"><a href="#hardy_weinberg"><i class="ti ti-function"></i> hardy_weinberg</a></li><li class="sb-fn"><a href="#hardy_weinberg_check"><i class="ti ti-function"></i> hardy_weinberg_check</a></li><li class="sb-fn"><a href="#allele_freq_after_mutation"><i class="ti ti-function"></i> allele_freq_after_mutation</a></li><li class="sb-fn"><a href="#allele_freq_after_selection"><i class="ti ti-function"></i> allele_freq_after_selection</a></li><li class="sb-fn"><a href="#effective_population_size"><i class="ti ti-function"></i> effective_population_size</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-bio.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="mean_arterial_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mean_arterial_pressure</span><span class="paren">(</span><span class="param-name">systolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">diastolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">MAP = diastolic + (1/3 * pulse_pressure). Normal range: 70-100 mmHg.</p>
+  </div>
+</div>
+
+<div class="card" id="pulse_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pulse_pressure</span><span class="paren">(</span><span class="param-name">systolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">diastolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Pulse pressure = systolic - diastolic. Normal range: 40 mmHg. &gt; 60 mmHg suggests aortic stiffness.</p>
+  </div>
+</div>
+
+<div class="card" id="cardiac_output">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cardiac_output</span><span class="paren">(</span><span class="param-name">heart_rate</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">stroke_volume</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cardiac output = heart_rate * stroke_volume / 1000. Result in L/min. Normal range: 4-8 L/min.</p>
+  </div>
+</div>
+
+<div class="card" id="cardiac_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cardiac_index</span><span class="paren">(</span><span class="param-name">cardiac_output</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">body_surface_area</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cardiac index = cardiac_output / body_surface_area. Result in L/min/m². Normal range: 2.5-4.0 L/min/m².</p>
+  </div>
+</div>
+
+<div class="card" id="ejection_fraction">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ejection_fraction</span><span class="paren">(</span><span class="param-name">stroke_volume</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">end_diastolic_volume</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Ejection fraction = (stroke_volume / end_diastolic_volume) * 100. Result in %. Normal: &gt;= 55%. Reduced: &lt; 40%.</p>
+  </div>
+</div>
+
+<div class="card" id="stroke_volume">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">stroke_volume</span><span class="paren">(</span><span class="param-name">end_diastolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">end_systolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Stroke volume = end_diastolic_volume - end_systolic_volume. Result in mL.</p>
+  </div>
+</div>
+
+<div class="card" id="body_surface_area">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">body_surface_area</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Body surface area — Mosteller formula. BSA = sqrt((weight_kg * height_cm) / 3600). Result in m².</p>
+  </div>
+</div>
+
+<div class="card" id="rate_pressure_product">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rate_pressure_product</span><span class="paren">(</span><span class="param-name">heart_rate</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">systolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Rate pressure product = heart_rate * systolic. Indicator of myocardial oxygen demand. &gt; 20000 indicates high cardiac stress.</p>
+  </div>
+</div>
+
+<div class="card" id="aortic_size_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">aortic_size_index</span><span class="paren">(</span><span class="param-name">aortic_diameter_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">body_surface_area</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Aortic size index = aortic_diameter_cm / body_surface_area. Result in cm/m². &gt; 2.75 cm/m² indicates high risk of aortic dissection.</p>
+  </div>
+</div>
+
+<div class="card" id="svr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">svr</span><span class="paren">(</span><span class="param-name">map</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cvp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cardiac_output</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Systemic vascular resistance = ((MAP - CVP) / cardiac_output) * 80. Result in dynes·s/cm⁵. Normal range: 800–1200 dynes·s/cm⁵. CVP (central venous pressure) normal range: 2–8 mmHg.</p>
+  </div>
+</div>
+
+<div class="card" id="qtc_bazett">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">qtc_bazett</span><span class="paren">(</span><span class="param-name">qt_ms</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">heart_rate</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">QTc (Bazett) = QT_ms / sqrt(RR_s). where RR_s = 60.0 / heart_rate (in seconds). Result in ms. Normal: &lt; 440 ms (male), &lt; 460 ms (female). &gt; 500 ms: high risk of torsades de pointes.</p>
+  </div>
+</div>
+
+<div class="card" id="shock_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shock_index</span><span class="paren">(</span><span class="param-name">heart_rate</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">systolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shock index = heart_rate / systolic_pressure. Normal: 0.5–0.7. &gt; 1.0: significant haemodynamic compromise. &gt; 1.4: critical — consider immediate intervention.</p>
+  </div>
+</div>
+
+<div class="card" id="vo2_max_fick">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">vo2_max_fick</span><span class="paren">(</span><span class="param-name">cardiac_output</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cao2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cvo2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">VO2 max (Fick) = cardiac_output * (cao2 - cvo2). cao2: arterial oxygen content (mL O₂ / dL blood). cvo2: mixed venous oxygen content (mL O₂ / dL blood). cardiac_output in L/min → multiply by 10 to convert dL. Result in mL O₂/min. Normal a-vO₂ difference at rest: 4–6 mL O₂/dL. At peak exercise: up to 15–16 mL O₂/dL.</p>
+  </div>
+</div>
+
+<div class="card" id="framingham_risk">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">framingham_risk</span><span class="paren">(</span><span class="param-name">age</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span>, <span class="param-name">total_cholesterol</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">hdl_cholesterol</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">systolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bp_treated</span><span class="colon">:</span> <span class="param-type">bool</span>, <span class="param-name">smoking</span><span class="colon">:</span> <span class="param-type">SmokingStatus</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Framingham 10-year Hard CHD risk (D&#x27;Agostino et al.). Uses natural log of inputs — do NOT pass pre-logged values. total_cholesterol, hdl_cholesterol in mg/dL. systolic in mmHg, age in years (valid range: 30–79). bp_treated: true if patient is on BP medication. Non-diabetic patients only — excludes angina pectoris history. Returns risk as a percentage (0.0–100.0).</p>
+  </div>
+</div>
+
+<div class="card" id="ideal_body_weight">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ideal_body_weight</span><span class="paren">(</span><span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Ideal body weight (Devine formula). Male:   IBW = 50.0 + 2.3 * ((height_cm / 2.54) - 60). Female: IBW = 45.5 + 2.3 * ((height_cm / 2.54) - 60). Result in kg. Valid for height &gt; 152.4 cm (5 feet) — below this IBW = actual weight.</p>
+  </div>
+</div>
+
+<div class="card" id="tidal_volume">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tidal_volume</span><span class="paren">(</span><span class="param-name">ibw_kg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Tidal volume = 6-8 mL/kg IBW (lung protective ventilation). Uses 6 mL/kg — ARDSnet lower limit, safest default. Result in mL. Normal spontaneous tidal volume: 400-600 mL.</p>
+  </div>
+</div>
+
+<div class="card" id="minute_ventilation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">minute_ventilation</span><span class="paren">(</span><span class="param-name">tidal_volume_ml</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">respiratory_rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Minute ventilation = tidal_volume * respiratory_rate. Result in L/min. Normal range: 5-10 L/min.</p>
+  </div>
+</div>
+
+<div class="card" id="alveolar_po2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">alveolar_po2</span><span class="paren">(</span><span class="param-name">fio2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">patm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">paco2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rq</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Alveolar partial pressure of oxygen. PAO2 = FiO2 * (Patm - PH2O) - (PaCO2 / RQ). PH2O = 47 mmHg at body temperature (constant). Result in mmHg. Exposed standalone — useful independently of A-a gradient.</p>
+  </div>
+</div>
+
+<div class="card" id="aa_gradient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">aa_gradient</span><span class="paren">(</span><span class="param-name">fio2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">patm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">paco2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pao2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rq</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Alveolar-arterial oxygen gradient. A-a gradient = PAO2 - PaO2. Normal range: increases with age — roughly (age / 4) mmHg. &gt; 15 mmHg on room air suggests V/Q mismatch or shunt.</p>
+  </div>
+</div>
+
+<div class="card" id="fev1_fvc_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fev1_fvc_ratio</span><span class="paren">(</span><span class="param-name">fev1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">fvc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">FEV1/FVC ratio. FEV1: forced expiratory volume in 1 second (L). FVC: forced vital capacity (L). &lt; 0.70 suggests obstructive pattern (asthma, COPD). &gt;= 0.70 with reduced FVC suggests restrictive pattern.</p>
+  </div>
+</div>
+
+<div class="card" id="dead_space_fraction">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dead_space_fraction</span><span class="paren">(</span><span class="param-name">paco2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">peco2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Dead space fraction (Bohr equation). Vd/Vt = (PaCO2 - PECO2) / PaCO2. PaCO2: arterial CO2 (mmHg). PECO2: mixed expired CO2 (mmHg). Normal: 0.2-0.35 (20-35% of tidal volume is dead space). &gt; 0.6 associated with poor outcomes in ARDS.</p>
+  </div>
+</div>
+
+<div class="card" id="lung_compliance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lung_compliance</span><span class="paren">(</span><span class="param-name">tidal_volume_ml</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">plateau_pressure</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">peep</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Static lung compliance. C = tidal_volume / (plateau_pressure - peep). Result in mL/cmH2O. Normal: 60-100 mL/cmH2O. &lt; 40 mL/cmH2O suggests stiff lungs (ARDS, pulmonary fibrosis).</p>
+  </div>
+</div>
+
+<div class="card" id="pf_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pf_ratio</span><span class="paren">(</span><span class="param-name">pao2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">fio2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">PaO2/FiO2 ratio (P/F ratio). Result in mmHg. Normal &gt; 300.</p>
+  </div>
+</div>
+
+<div class="card" id="ards_severity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ards_severity</span><span class="paren">(</span><span class="param-name">pf</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">ArdsSeverity</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ARDS severity classifier — Berlin criteria. Pass result of pf_ratio() directly. &gt; 300: no ARDS. 200-300: mild. 100-200: moderate. &lt; 100: severe.</p>
+  </div>
+</div>
+
+<div class="card" id="oxygen_content">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">oxygen_content</span><span class="paren">(</span><span class="param-name">hgb</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sao2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">pao2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Oxygen content of blood (CaO2). CaO2 = (Hgb * 1.34 * SaO2) + (0.0031 * PaO2). Hgb in g/dL, SaO2 as fraction (0.0-1.0), PaO2 in mmHg. Result in mL O2/dL blood. 1.34 = Hüfner constant (O2 carrying capacity per gram Hgb). 0.0031 = dissolved O2 coefficient. Normal arterial: ~20 mL O2/dL.</p>
+  </div>
+</div>
+
+<div class="card" id="gcs">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gcs</span><span class="paren">(</span><span class="param-name">eye</span><span class="colon">:</span> <span class="param-type">GcsEye</span>, <span class="param-name">verbal</span><span class="colon">:</span> <span class="param-type">GcsVerbal</span>, <span class="param-name">motor</span><span class="colon">:</span> <span class="param-type">GcsMotor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">GcsSeverity</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Glasgow Coma Scale. Total score 3–15. Severe: 3–8, Moderate: 9–12, Mild: 13–15. Score of 3 = no response in any component — deep coma or death. Score of 8 or below = unable to protect airway — intubation threshold.</p>
+  </div>
+</div>
+
+<div class="card" id="gcs_score">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gcs_score</span><span class="paren">(</span><span class="param-name">eye</span><span class="colon">:</span> <span class="param-type">GcsEye</span>, <span class="param-name">verbal</span><span class="colon">:</span> <span class="param-type">GcsVerbal</span>, <span class="param-name">motor</span><span class="colon">:</span> <span class="param-type">GcsMotor</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">GCS total score — returns raw int if caller needs the number.</p>
+  </div>
+</div>
+
+<div class="card" id="cerebral_perfusion_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cerebral_perfusion_pressure</span><span class="paren">(</span><span class="param-name">map</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">icp</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cerebral perfusion pressure. CPP = MAP - ICP. Result in mmHg. Normal: 60–80 mmHg. &lt; 60 mmHg: cerebral ischaemia risk. &lt; 40 mmHg: severe — incompatible with consciousness.</p>
+  </div>
+</div>
+
+<div class="card" id="cerebral_blood_flow">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cerebral_blood_flow</span><span class="paren">(</span><span class="param-name">cmro2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">avdo2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cerebral blood flow (Fick principle). CBF = CMRO2 / AVDO2. CMRO2: cerebral metabolic rate of O2 in mL O2/100g/min. AVDO2: arteriovenous O2 difference in mL O2/100mL blood. Result in mL/100g/min. Normal CBF: 50–60 mL/100g/min. &lt; 20 mL/100g/min: ischaemic threshold. &lt; 10 mL/100g/min: infarction threshold.</p>
+  </div>
+</div>
+
+<div class="card" id="serum_osmolality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">serum_osmolality</span><span class="paren">(</span><span class="param-name">na</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">glucose</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bun</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Serum osmolality. Osm = 2*Na + glucose/18 + BUN/2.8. Na in mEq/L, glucose in mg/dL, BUN in mg/dL. Result in mOsm/kg. Normal: 275–295 mOsm/kg. &gt; 320 mOsm/kg: hyperosmolar state.</p>
+  </div>
+</div>
+
+<div class="card" id="osmolar_gap">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">osmolar_gap</span><span class="paren">(</span><span class="param-name">measured_osm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">calculated_osm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Osmolar gap. Gap = measured_osm - calculated_osm. calculated_osm should be from serum_osmolality(). Normal: &lt; 10 mOsm/kg. &gt; 10 mOsm/kg: suggests unmeasured osmoles — toxic alcohols, mannitol.</p>
+  </div>
+</div>
+
+<div class="card" id="corrected_sodium">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">corrected_sodium</span><span class="paren">(</span><span class="param-name">na</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">glucose</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Corrected sodium for hyperglycaemia. Corrected Na = Na + 0.016 * (glucose - 100). Na in mEq/L, glucose in mg/dL. Accounts for osmotic shift of water out of cells in hyperglycaemia. Each 100 mg/dL rise in glucose above normal drops Na by ~1.6 mEq/L.</p>
+  </div>
+</div>
+
+<div class="card" id="ckd_epi_gfr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ckd_epi_gfr</span><span class="paren">(</span><span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">age</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">CkdStage</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">CKD-EPI GFR (2021 — no race coefficient). Serum creatinine in mg/dL, age in years. Result in mL/min/1.73m². G1: &gt;= 90, G2: 60-89, G3a: 45-59, G3b: 30-44, G4: 15-29, G5: &lt; 15.</p>
+  </div>
+</div>
+
+<div class="card" id="ckd_epi_gfr_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ckd_epi_gfr_value</span><span class="paren">(</span><span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">age</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">CKD-EPI GFR raw value — returns float if caller needs the number. Same inputs as ckd_epi_gfr().</p>
+  </div>
+</div>
+
+<div class="card" id="cockcroft_gault">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cockcroft_gault</span><span class="paren">(</span><span class="param-name">age</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cockcroft-Gault creatinine clearance. CrCl = ((140 - age) * weight_kg) / (72 * serum_cr). Multiply by 0.85 for females. Result in mL/min. Used for drug dosing — not interchangeable with CKD-EPI GFR.</p>
+  </div>
+</div>
+
+<div class="card" id="bun_creatinine_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bun_creatinine_ratio</span><span class="paren">(</span><span class="param-name">bun</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">BUN/creatinine ratio. Both in mg/dL. Normal: 10-20. &gt; 20: prerenal (dehydration, GI bleeding, high protein intake). &lt; 10: intrinsic renal disease, liver failure, low protein intake.</p>
+  </div>
+</div>
+
+<div class="card" id="fena">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fena</span><span class="paren">(</span><span class="param-name">urine_na</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_na</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">urine_cr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AkiLikelihood</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Fractional excretion of sodium (FENa). FENa = (urine_na * serum_cr) / (serum_na * urine_cr) * 100. All sodium in mEq/L, creatinine in mg/dL. Result in %. &lt; 1%: prerenal AKI (kidneys conserving sodium). &gt; 2%: intrinsic renal AKI (tubular damage). 1-2%: indeterminate. Unreliable in patients on diuretics — use FEUrea instead.</p>
+  </div>
+</div>
+
+<div class="card" id="fena_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fena_value</span><span class="paren">(</span><span class="param-name">urine_na</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_na</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">urine_cr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">FENa raw value — returns float if caller needs the number.</p>
+  </div>
+</div>
+
+<div class="card" id="feurea">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">feurea</span><span class="paren">(</span><span class="param-name">urine_urea</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_urea</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">urine_cr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AkiLikelihood</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Fractional excretion of urea (FEUrea). FEUrea = (urine_urea * serum_cr) / (serum_urea * urine_cr) * 100. All urea in mg/dL, creatinine in mg/dL. Result in %. &lt; 35%: prerenal AKI. &gt;= 35%: intrinsic renal AKI. Use when patient is on diuretics — FENa unreliable in that context.</p>
+  </div>
+</div>
+
+<div class="card" id="feurea_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">feurea_value</span><span class="paren">(</span><span class="param-name">urine_urea</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_cr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">serum_urea</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">urine_cr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">FEUrea raw value — returns float if caller needs the number.</p>
+  </div>
+</div>
+
+<div class="card" id="urine_specific_gravity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">urine_specific_gravity</span><span class="paren">(</span><span class="param-name">density_urine</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">density_water</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Urine specific gravity from solute and solvent densities. SG = density_urine / density_water.</p>
+  </div>
+</div>
+
+<div class="card" id="urine_sg_interpretation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">urine_sg_interpretation</span><span class="paren">(</span><span class="param-name">sg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">UrineSGInterpretation</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Interpret urine specific gravity value.</p>
+  </div>
+</div>
+
+<div class="card" id="urine_sg_message">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">urine_sg_message</span><span class="paren">(</span><span class="param-name">sg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Clinical message for urine SG interpretation.</p>
+  </div>
+</div>
+
+<div class="card" id="body_adiposity_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">body_adiposity_index</span><span class="paren">(</span><span class="param-name">hip_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Body adiposity index (BAI). BAI = (hip_cm / height_cm^1.5) - 18. Estimates body fat % directly. Normal: ~21-33% women, ~8-21% men. More accurate than BMI for estimating adiposity.</p>
+  </div>
+</div>
+
+<div class="card" id="ponderal_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ponderal_index</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Ponderal index. PI = weight_kg / (height_m^3). Less sensitive to height extremes than BMI. Normal range: 11-15 kg/m³.</p>
+  </div>
+</div>
+
+<div class="card" id="waist_height_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">waist_height_ratio</span><span class="paren">(</span><span class="param-name">waist_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">WaistHeightRisk</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Waist-to-height ratio. WHtR = waist_cm / height_cm. One of the strongest individual predictors of cardiometabolic risk. &lt; 0.4: low. 0.4-0.5: moderate. 0.5-0.6: high. &gt; 0.6: very high.</p>
+  </div>
+</div>
+
+<div class="card" id="waist_height_ratio_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">waist_height_ratio_value</span><span class="paren">(</span><span class="param-name">waist_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Waist-to-height ratio raw value.</p>
+  </div>
+</div>
+
+<div class="card" id="relative_fat_mass">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">relative_fat_mass</span><span class="paren">(</span><span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">waist_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Relative fat mass (RFM) — Woolcott &amp; Bergman 2018. Male:   RFM = 64 - (20 * height_cm / waist_cm). Female: RFM = 76 - (20 * height_cm / waist_cm). Result in % body fat. Designed specifically to replace BMI for individual assessment. Normal: ~6-24% men, ~14-36% women.</p>
+  </div>
+</div>
+
+<div class="card" id="basal_metabolic_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">basal_metabolic_rate</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">age</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Basal metabolic rate — Mifflin-St Jeor equation. Male:   BMR = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + 5. Female: BMR = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) - 161. Result in kcal/day. Most accurate BMR formula for general population.</p>
+  </div>
+</div>
+
+<div class="card" id="total_daily_energy_expenditure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">total_daily_energy_expenditure</span><span class="paren">(</span><span class="param-name">bmr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">activity</span><span class="colon">:</span> <span class="param-type">ActivityLevel</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total daily energy expenditure. TDEE = BMR * activity_multiplier. Result in kcal/day. Sedentary: 1.2, Light: 1.375, Moderate: 1.55, Active: 1.725, Very active: 1.9.</p>
+  </div>
+</div>
+
+<div class="card" id="hba1c_to_eag">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hba1c_to_eag</span><span class="paren">(</span><span class="param-name">hba1c</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">HbA1c to estimated average glucose (eAG). eAG = (HbA1c * 28.7) - 46.7. HbA1c in %, result in mg/dL. Normal HbA1c: &lt; 5.7%. Prediabetes: 5.7-6.4%. Diabetes: &gt;= 6.5%.</p>
+  </div>
+</div>
+
+<div class="card" id="homa_ir">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">homa_ir</span><span class="paren">(</span><span class="param-name">fasting_glucose</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">fasting_insulin</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">HOMA-IR — homeostatic model assessment of insulin resistance. HOMA-IR = (fasting_glucose_mg_dl * fasting_insulin_uU_ml) / 405. Normal: &lt; 1.0 (insulin sensitive). &gt; 1.9: early insulin resistance. &gt; 2.9: significant insulin resistance.</p>
+  </div>
+</div>
+
+<div class="card" id="corrected_calcium">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">corrected_calcium</span><span class="paren">(</span><span class="param-name">measured_calcium</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">albumin</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Corrected calcium for hypoalbuminaemia. Corrected Ca = measured_calcium + 0.8 * (4.0 - albumin). Calcium in mg/dL, albumin in g/dL. Normal corrected calcium: 8.5-10.5 mg/dL. Hypoalbuminaemia falsely lowers measured calcium.</p>
+  </div>
+</div>
+
+<div class="card" id="free_water_deficit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">free_water_deficit</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sodium</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Free water deficit. FWD = body_water_fraction * weight_kg * (sodium / 140.0 - 1.0). Body water fraction: 0.6 male, 0.5 female. Result in litres. Used in hypernatraemia management to estimate free water replacement. &gt; 5L: severe deficit.</p>
+  </div>
+</div>
+
+<div class="card" id="elimination_rate_constant">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">elimination_rate_constant</span><span class="paren">(</span><span class="param-name">cl</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Elimination rate constant. ke = CL / Vd. CL in L/h, Vd in L. Result in h⁻¹. Describes the fraction of Vd cleared per unit time.</p>
+  </div>
+</div>
+
+<div class="card" id="half_life">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">half_life</span><span class="paren">(</span><span class="param-name">ke</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Half-life. t½ = ln(2) / ke = 0.693 / ke. ke in h⁻¹, result in hours. Time for plasma concentration to halve.</p>
+  </div>
+</div>
+
+<div class="card" id="half_life_from_cl_vd">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">half_life_from_cl_vd</span><span class="paren">(</span><span class="param-name">cl</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Half-life from CL and Vd directly. t½ = (ln(2) * Vd) / CL. Convenience function — avoids caller computing ke manually.</p>
+  </div>
+</div>
+
+<div class="card" id="volume_of_distribution">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">volume_of_distribution</span><span class="paren">(</span><span class="param-name">dose_mg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">c0</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Volume of distribution. Vd = dose / C0. dose in mg, C0 in mg/L (initial plasma concentration after IV bolus). Result in L. Apparent volume into which drug distributes.</p>
+  </div>
+</div>
+
+<div class="card" id="clearance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clearance</span><span class="paren">(</span><span class="param-name">ke</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vd</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Clearance. CL = ke * Vd. ke in h⁻¹, Vd in L. Result in L/h. Volume of plasma cleared of drug per unit time.</p>
+  </div>
+</div>
+
+<div class="card" id="loading_dose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">loading_dose</span><span class="paren">(</span><span class="param-name">vd</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">target_concentration</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Loading dose. LD = Vd * target_concentration. Vd in L, target_concentration in mg/L. Result in mg. Dose required to immediately achieve target plasma concentration.</p>
+  </div>
+</div>
+
+<div class="card" id="maintenance_dose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">maintenance_dose</span><span class="paren">(</span><span class="param-name">cl</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">target_concentration</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tau</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Maintenance dose. MD = CL * target_concentration * tau. CL in L/h, target_concentration in mg/L, tau (dosing interval) in hours. Result in mg. Dose required to maintain target steady state concentration.</p>
+  </div>
+</div>
+
+<div class="card" id="bioavailability_adjusted_dose">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bioavailability_adjusted_dose</span><span class="paren">(</span><span class="param-name">intended_dose</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">f</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">route</span><span class="colon">:</span> <span class="param-type">RouteOfAdministration</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Bioavailability-adjusted dose. Adjusted dose = intended_dose / F. F: bioavailability fraction (0.0-1.0). IV route: F = 1.0 by definition. Oral/other routes: F &lt; 1.0 due to first-pass and absorption losses.</p>
+  </div>
+</div>
+
+<div class="card" id="concentration_at_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">concentration_at_time</span><span class="paren">(</span><span class="param-name">c0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ke</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">One-compartment concentration at time t. C(t) = C0 * e^(-ke * t). C0 in mg/L, ke in h⁻¹, t in hours. Result in mg/L. Assumes instantaneous distribution (IV bolus).</p>
+  </div>
+</div>
+
+<div class="card" id="steady_state_concentration">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">steady_state_concentration</span><span class="paren">(</span><span class="param-name">f</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dose_mg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cl</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tau</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Steady state concentration. Css = (F * dose) / (CL * tau). F: bioavailability, dose in mg, CL in L/h, tau in hours. Result in mg/L. Average plasma concentration at steady state. Reached after ~4-5 half-lives.</p>
+  </div>
+</div>
+
+<div class="card" id="accumulation_factor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">accumulation_factor</span><span class="paren">(</span><span class="param-name">ke</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tau</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Accumulation factor. R = 1 / (1 - e^(-ke * tau)). ke in h⁻¹, tau (dosing interval) in hours. Dimensionless — predicts ratio of steady state to first dose concentration. R = 1: no accumulation (tau &gt;&gt; t½). R &gt;&gt; 1: significant accumulation (tau &lt;&lt; t½).</p>
+  </div>
+</div>
+
+<div class="card" id="hill_effect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hill_effect</span><span class="paren">(</span><span class="param-name">c</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">emax</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ec50</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hill equation (Emax model). E = Emax * C^n / (EC50^n + C^n). Emax: maximum effect (same units as E). C: drug concentration in mg/L. EC50: concentration producing 50% Emax in mg/L. n: Hill coefficient (dimensionless). n = 1: hyperbolic (simple binding). n &gt; 1: sigmoidal (cooperative binding). n &lt; 1: shallow curve (heterogeneous receptors). Result in same units as Emax.</p>
+  </div>
+</div>
+
+<div class="card" id="hill_concentration">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hill_concentration</span><span class="paren">(</span><span class="param-name">e</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">emax</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ec50</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hill equation inverse — concentration to achieve target effect. C = EC50 * (E / (Emax - E))^(1/n). E must be strictly between 0 and Emax. Result in mg/L.</p>
+  </div>
+</div>
+
+<div class="card" id="mcv">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mcv</span><span class="paren">(</span><span class="param-name">hematocrit</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rbc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AnaemiaType</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean corpuscular volume (MCV). MCV = (hematocrit * 10) / RBC_count. Hematocrit in %, RBC in x10⁶/µL. Result in fL (femtolitres). Normal: 80-100 fL. &lt; 80: microcytic (iron deficiency, thalassaemia). &gt; 100: macrocytic (B12/folate deficiency).</p>
+  </div>
+</div>
+
+<div class="card" id="mcv_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mcv_value</span><span class="paren">(</span><span class="param-name">hematocrit</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rbc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">MCV raw value.</p>
+  </div>
+</div>
+
+<div class="card" id="mch">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mch</span><span class="paren">(</span><span class="param-name">hgb</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rbc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean corpuscular haemoglobin (MCH). MCH = (Hgb * 10) / RBC_count. Hgb in g/dL, RBC in x10⁶/µL. Result in pg (picograms). Normal: 27-33 pg.</p>
+  </div>
+</div>
+
+<div class="card" id="mchc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mchc</span><span class="paren">(</span><span class="param-name">hgb</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">hematocrit</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mean corpuscular haemoglobin concentration (MCHC). MCHC = (Hgb / hematocrit) * 100. Hgb in g/dL, hematocrit in %. Result in g/dL. Normal: 32-36 g/dL. &lt; 32: hypochromic (iron deficiency). &gt; 36: hyperchromic (spherocytosis, severe dehydration).</p>
+  </div>
+</div>
+
+<div class="card" id="corrected_reticulocyte">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">corrected_reticulocyte</span><span class="paren">(</span><span class="param-name">retic_pct</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">hematocrit</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Corrected reticulocyte count. Corrected retic% = retic% * (hematocrit / normal_hct). Normal Hct: 45% male, 41% female. Corrects for dilutional effect of anaemia on reticulocyte percentage. Normal corrected retic: 1-2%.</p>
+  </div>
+</div>
+
+<div class="card" id="reticulocyte_production_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reticulocyte_production_index</span><span class="paren">(</span><span class="param-name">retic_pct</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">hematocrit</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Reticulocyte production index (RPI). RPI = corrected_retic / maturation_factor. Maturation factor derived internally from hematocrit: Hct &gt;= 36%: 1.0, Hct 26-35%: 1.5, Hct 16-25%: 2.0, Hct &lt; 16%: 2.5. RPI &lt; 2: hypoproliferative (bone marrow not responding). RPI &gt;= 2: adequate response (haemolysis or blood loss).</p>
+  </div>
+</div>
+
+<div class="card" id="blood_volume">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">blood_volume</span><span class="paren">(</span><span class="param-name">height_cm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sex</span><span class="colon">:</span> <span class="param-type">Sex</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Blood volume estimation (Nadler equation). Male:   BV = (0.3669 * height_m^3) + (0.03219 * weight_kg) + 0.6041. Female: BV = (0.3561 * height_m^3) + (0.03308 * weight_kg) + 0.1833. Result in litres. Normal: ~5L male, ~4L female.</p>
+  </div>
+</div>
+
+<div class="card" id="anc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">anc</span><span class="paren">(</span><span class="param-name">wbc</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">neutrophils_pct</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bands_pct</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">NeutropeniaGrade</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Absolute neutrophil count (ANC). ANC = WBC * (neutrophils_pct + bands_pct) / 100. WBC in x10³/µL, percentages 0-100. Result in x10³/µL. Normal: &gt;= 1.5 x10³/µL. Mild neutropenia: 1.0-1.5. Moderate: 0.5-1.0. Severe: &lt; 0.5 — high infection risk.</p>
+  </div>
+</div>
+
+<div class="card" id="anc_value">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">anc_value</span><span class="paren">(</span><span class="param-name">wbc</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">neutrophils_pct</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bands_pct</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ANC raw value.</p>
+  </div>
+</div>
+
+<div class="card" id="transferrin_saturation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transferrin_saturation</span><span class="paren">(</span><span class="param-name">serum_iron</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tibc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Transferrin saturation. Tsat = (serum_iron / TIBC) * 100. Both in µg/dL, result in %. Normal: 20-50%. &lt; 20%: iron deficiency. &gt; 50%: iron overload (haemochromatosis).</p>
+  </div>
+</div>
+
+<div class="card" id="rule_of_nines">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rule_of_nines</span><span class="paren">(</span><span class="param-name">head</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">chest</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">abdomen</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left_arm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">right_arm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">left_leg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">right_leg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">perineum</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Rule of Nines — estimates total body surface area burned (% TBSA). Each param is the percentage of THAT region that is burned (0-100). Weightings: head=9%, chest=18%, abdomen=18%, left_arm=9%, right_arm=9%, left_leg=18%, right_leg=18%, perineum=1%.</p>
+  </div>
+</div>
+
+<div class="card" id="parkland">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">parkland</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tbsa_burned</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Parkland formula — total IV fluid (mL) in first 24 hours post-burn. Standard: 4 mL * weight_kg * %TBSA_burned. First half given in first 8 hours, second half over next 16 hours. Returns total 24hr volume in mL.</p>
+  </div>
+</div>
+
+<div class="card" id="parkland_first_8hr_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">parkland_first_8hr_rate</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tbsa_burned</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Parkland first 8 hours — mL/hr rate for first 8 hours.</p>
+  </div>
+</div>
+
+<div class="card" id="parkland_next_16hr_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">parkland_next_16hr_rate</span><span class="paren">(</span><span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">tbsa_burned</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Parkland next 16 hours — mL/hr rate for hours 8-24.</p>
+  </div>
+</div>
+
+<div class="card" id="burn_severity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">burn_severity</span><span class="paren">(</span><span class="param-name">tbsa</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">BurnSeverity</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="drip_rate_gtt_min">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">drip_rate_gtt_min</span><span class="paren">(</span><span class="param-name">volume_ml</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">drop_factor</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Drip rate in gtt/min. drop_factor: drops per mL (typically 10, 15, 20 for macrodrip; 60 for microdrip).</p>
+  </div>
+</div>
+
+<div class="card" id="infusion_time_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">infusion_time_hr</span><span class="paren">(</span><span class="param-name">volume_ml</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rate_ml_hr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Infusion time in hours given volume and rate.</p>
+  </div>
+</div>
+
+<div class="card" id="volume_to_infuse">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">volume_to_infuse</span><span class="paren">(</span><span class="param-name">rate_ml_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_hr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total volume to infuse given rate and time.</p>
+  </div>
+</div>
+
+<div class="card" id="mcg_kg_min_to_ml_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mcg_kg_min_to_ml_hr</span><span class="paren">(</span><span class="param-name">dose_mcg_kg_min</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration_mcg_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert mcg/kg/min dose to mL/hr pump rate. e.g. norepinephrine, dopamine, dobutamine, propofol.</p>
+  </div>
+</div>
+
+<div class="card" id="ml_hr_to_mcg_kg_min">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ml_hr_to_mcg_kg_min</span><span class="paren">(</span><span class="param-name">rate_ml_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">weight_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration_mcg_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert mL/hr pump rate back to mcg/kg/min dose.</p>
+  </div>
+</div>
+
+<div class="card" id="mg_hr_to_ml_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mg_hr_to_ml_hr</span><span class="paren">(</span><span class="param-name">dose_mg_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration_mg_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert mg/hr dose to mL/hr pump rate (non-weight-based). e.g. heparin units/hr, morphine mg/hr.</p>
+  </div>
+</div>
+
+<div class="card" id="ml_hr_to_mg_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ml_hr_to_mg_hr</span><span class="paren">(</span><span class="param-name">rate_ml_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration_mg_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert mL/hr pump rate back to mg/hr dose (non-weight-based).</p>
+  </div>
+</div>
+
+<div class="card" id="bolus_rate_ml_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bolus_rate_ml_hr</span><span class="paren">(</span><span class="param-name">volume_ml</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_min</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Bolus pump rate in mL/hr to deliver volume_ml over time_min minutes.</p>
+  </div>
+</div>
+
+<div class="card" id="units_hr_to_ml_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">units_hr_to_ml_hr</span><span class="paren">(</span><span class="param-name">dose_units_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration_units_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert units/hr to mL/hr (e.g. heparin 1000 units/mL bag).</p>
+  </div>
+</div>
+
+<div class="card" id="ml_hr_to_units_hr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ml_hr_to_units_hr</span><span class="paren">(</span><span class="param-name">rate_ml_hr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration_units_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Convert mL/hr back to units/hr.</p>
+  </div>
+</div>
+
+<div class="card" id="naegele_edd">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">naegele_edd</span><span class="paren">(</span><span class="param-name">lmp_day</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lmp_month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lmp_year</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(int, 3)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Naegele&#x27;s rule — estimated due date returned as (day, month, year). Add 7 days and 9 months (or subtract 3 months and add 1 year) to LMP.</p>
+  </div>
+</div>
+
+<div class="card" id="gestational_age_days">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gestational_age_days</span><span class="paren">(</span><span class="param-name">lmp_day</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lmp_month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lmp_year</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cur_day</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cur_month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cur_year</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Gestational age in total days from LMP to current date. Approximate: uses 30-day months.</p>
+  </div>
+</div>
+
+<div class="card" id="gestational_age_weeks">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gestational_age_weeks</span><span class="paren">(</span><span class="param-name">lmp_day</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lmp_month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">lmp_year</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cur_day</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cur_month</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">cur_year</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(int, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Gestational age as (weeks, days) tuple.</p>
+  </div>
+</div>
+
+<div class="card" id="bmi_fertility_risk">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bmi_fertility_risk</span><span class="paren">(</span><span class="param-name">bmi</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">BmiFertilityRisk</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">BMI-based fertility risk.</p>
+  </div>
+</div>
+
+<div class="card" id="amh_ovarian_reserve">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">amh_ovarian_reserve</span><span class="paren">(</span><span class="param-name">amh_ng_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">OvarianReserve</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">AMH-based ovarian reserve interpretation.</p>
+  </div>
+</div>
+
+<div class="card" id="kupperman_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kupperman_index</span><span class="paren">(</span><span class="param-name">hot_flushes</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">sweating</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">insomnia</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">nervousness</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">depression</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">dizziness</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">fatigue</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">joint_pain</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">headache</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">palpitations</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">paraesthesia</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Kupperman Menopausal Index. 11 symptoms scored 0-3 (none/mild/moderate/severe). Weighted sum: hot_flushes×4, sweating×2, insomnia×2, nervousness×2, depression×1, dizziness×1, fatigue×1, joint_pain×1, headache×1, palpitations×1, paraesthesia×1. Total ≤ 20 = mild, 21-35 = moderate, &gt; 35 = severe.</p>
+  </div>
+</div>
+
+<div class="card" id="lh_surge_day">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lh_surge_day</span><span class="paren">(</span><span class="param-name">cycle_length</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">LH surge timing — estimated day of LH surge from cycle length. Occurs approximately 14 days before next period.</p>
+  </div>
+</div>
+
+<div class="card" id="uterine_ri">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">uterine_ri</span><span class="paren">(</span><span class="param-name">peak_systolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">end_diastolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Uterine resistance index (RI) from Doppler waveform. RI = (S - D) / S. S = peak systolic velocity, D = end diastolic velocity.</p>
+  </div>
+</div>
+
+<div class="card" id="uterine_pi">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">uterine_pi</span><span class="paren">(</span><span class="param-name">peak_systolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">end_diastolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mean_velocity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Uterine pulsatility index (PI) from Doppler waveform. PI = (S - D) / mean_velocity.</p>
+  </div>
+</div>
+
+<div class="card" id="uterine_resistance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">uterine_resistance</span><span class="paren">(</span><span class="param-name">peak_systolic</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">end_diastolic</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">UterineResistance</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Uterine resistance interpretation from RI value.</p>
+  </div>
+</div>
+
+<div class="card" id="fertility_window_begin">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fertility_window_begin</span><span class="paren">(</span><span class="param-name">cycle_length</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">First day of fertility window (5 days before ovulation).</p>
+  </div>
+</div>
+
+<div class="card" id="fertility_window_peak">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fertility_window_peak</span><span class="paren">(</span><span class="param-name">cycle_length</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Peak fertility day (ovulation — 14 days before next period).</p>
+  </div>
+</div>
+
+<div class="card" id="free_testosterone">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">free_testosterone</span><span class="paren">(</span><span class="param-name">total_t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">shbg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">albumin</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Free testosterone estimation — Vermeulen equation (simplified). total_t: nmol/L, shbg: nmol/L, albumin: g/dL. Returns free testosterone in pmol/L.</p>
+  </div>
+</div>
+
+<div class="card" id="sperm_concentration">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sperm_concentration</span><span class="paren">(</span><span class="param-name">million_per_ml</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SpermConcentration</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sperm concentration interpretation (WHO 2021 reference: ≥16 million/mL normal).</p>
+  </div>
+</div>
+
+<div class="card" id="sperm_motility">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sperm_motility</span><span class="paren">(</span><span class="param-name">motility_pct</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">SpermMotility</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sperm motility interpretation (WHO 2021 reference: ≥42% total motility normal).</p>
+  </div>
+</div>
+
+<div class="card" id="exponential_growth">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">exponential_growth</span><span class="paren">(</span><span class="param-name">n0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Exponential growth: N(t) = N0 * e^(rt).</p>
+  </div>
+</div>
+
+<div class="card" id="logistic_growth">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">logistic_growth</span><span class="paren">(</span><span class="param-name">n0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Logistic growth (S-curve): N(t) = K / (1 + ((K - N0) / N0) * e^(-r*t)).</p>
+  </div>
+</div>
+
+<div class="card" id="doubling_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">doubling_time</span><span class="paren">(</span><span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Doubling time: t = ln(2) / r.</p>
+  </div>
+</div>
+
+<div class="card" id="carrying_capacity_usage">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">carrying_capacity_usage</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Carrying capacity utilization — what fraction of K is currently used.</p>
+  </div>
+</div>
+
+<div class="card" id="population_density">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">population_density</span><span class="paren">(</span><span class="param-name">population</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">area</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Population density — individuals per unit area.</p>
+  </div>
+</div>
+
+<div class="card" id="lotka_volterra">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lotka_volterra</span><span class="paren">(</span><span class="param-name">prey</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">predator</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">alpha</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">gamma</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dt</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Lotka-Volterra predator-prey — one time step. prey:     dN/dt = alpha*N - beta*N*P. predator: dP/dt = delta*N*P - gamma*P. alpha = prey birth rate, beta = predation rate, delta = predator reproduction per prey eaten, gamma = predator death rate. dt = time step size. Returns (prey_next, predator_next) as (float, 2) tuple.</p>
+  </div>
+</div>
+
+<div class="card" id="michaelis_menten">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">michaelis_menten</span><span class="paren">(</span><span class="param-name">vmax</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">km</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">substrate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Michaelis-Menten enzyme kinetics: v = Vmax * [S] / (Km + [S]).</p>
+  </div>
+</div>
+
+<div class="card" id="half_velocity_substrate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">half_velocity_substrate</span><span class="paren">(</span><span class="param-name">km</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Substrate concentration at half-maximal velocity (Km definition check). Returns substrate concentration giving v = Vmax/2 — always equals Km.</p>
+  </div>
+</div>
+
+<div class="card" id="velocity_fraction">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">velocity_fraction</span><span class="paren">(</span><span class="param-name">km</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">substrate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Reaction velocity as fraction of Vmax.</p>
+  </div>
+</div>
+
+<div class="card" id="absorbance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">absorbance</span><span class="paren">(</span><span class="param-name">epsilon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">path_length</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">concentration</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Beer-Lambert law: A = epsilon * l * c. epsilon = molar attenuation coefficient (L/mol/cm). l = path length (cm), c = concentration (mol/L).</p>
+  </div>
+</div>
+
+<div class="card" id="concentration_from_absorbance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">concentration_from_absorbance</span><span class="paren">(</span><span class="param-name">absorbance_val</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">epsilon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">path_length</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Concentration from Beer-Lambert: c = A / (epsilon * l).</p>
+  </div>
+</div>
+
+<div class="card" id="henderson_hasselbalch">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">henderson_hasselbalch</span><span class="paren">(</span><span class="param-name">pka</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">base_conc</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">acid_conc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Henderson-Hasselbalch: pH = pKa + log10([A-] / [HA]).</p>
+  </div>
+</div>
+
+<div class="card" id="q10">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">q10</span><span class="paren">(</span><span class="param-name">r1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Q10 temperature coefficient — rate change per 10°C. Q10 = (R2 / R1) ^ (10 / (T2 - T1)).</p>
+  </div>
+</div>
+
+<div class="card" id="rate_at_temperature">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rate_at_temperature</span><span class="paren">(</span><span class="param-name">r1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">q10_val</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Rate at new temperature using Q10: R2 = R1 * Q10 ^ ((T2-T1)/10).</p>
+  </div>
+</div>
+
+<div class="card" id="hardy_weinberg">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hardy_weinberg</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 3)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hardy-Weinberg genotype frequencies. Given dominant allele frequency p, returns (p², 2pq, q²). p² = homozygous dominant, 2pq = heterozygous, q² = homozygous recessive.</p>
+  </div>
+</div>
+
+<div class="card" id="hardy_weinberg_check">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hardy_weinberg_check</span><span class="paren">(</span><span class="param-name">homo_dom</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">hetero</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">homo_rec</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hardy-Weinberg equilibrium check — returns true if p² + 2pq + q² ≈ 1.</p>
+  </div>
+</div>
+
+<div class="card" id="allele_freq_after_mutation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">allele_freq_after_mutation</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu_forward</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mu_reverse</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Allele frequency after one generation of mutation pressure. p_next = p * (1 - mu_forward) + q * mu_reverse. mu_forward: rate of A→a, mu_reverse: rate of a→A.</p>
+  </div>
+</div>
+
+<div class="card" id="allele_freq_after_selection">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">allele_freq_after_selection</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Allele frequency after one generation of natural selection. Assumes diploid, selection against recessive homozygote (q²). s = selection coefficient (0 = neutral, 1 = lethal). p_next = p² + p*q / (1 - s*q²)   [mean fitness denominator].</p>
+  </div>
+</div>
+
+<div class="card" id="effective_population_size">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">effective_population_size</span><span class="paren">(</span><span class="param-name">n_male</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_female</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Effective population size from census size and sex ratio. Ne = 4 * Nm * Nf / (Nm + Nf).</p>
+  </div>
+</div>
+</main>
+</body>
+</html>

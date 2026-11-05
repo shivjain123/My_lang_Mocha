@@ -23,8 +23,6 @@ from "mocha-processing" import *;
 import mochaSymcha from "mocha-SymCha" as Sym;
 from "mocha-string" import *;
 
-function print(s: str) -> int native print;
-
 // =============================================================================
 // SECTION 1 — Complex Numbers
 // =============================================================================

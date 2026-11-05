@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-geo.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-geo.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_exp"><i class="ti ti-function"></i> c_exp</a></li><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#unsafe_mul"><i class="ti ti-function"></i> unsafe_mul</a></li><li class="sb-fn"><a href="#unsafe_div"><i class="ti ti-function"></i> unsafe_div</a></li><li class="sb-fn"><a href="#unsafe_add"><i class="ti ti-function"></i> unsafe_add</a></li><li class="sb-fn"><a href="#unsafe_sub"><i class="ti ti-function"></i> unsafe_sub</a></li><li class="sb-fn"><a href="#richter_magnitude"><i class="ti ti-function"></i> richter_magnitude</a></li><li class="sb-fn"><a href="#moment_magnitude"><i class="ti ti-function"></i> moment_magnitude</a></li><li class="sb-fn"><a href="#seismic_moment"><i class="ti ti-function"></i> seismic_moment</a></li><li class="sb-fn"><a href="#energy_release"><i class="ti ti-function"></i> energy_release</a></li><li class="sb-fn"><a href="#p_wave_travel_time"><i class="ti ti-function"></i> p_wave_travel_time</a></li><li class="sb-fn"><a href="#s_wave_travel_time"><i class="ti ti-function"></i> s_wave_travel_time</a></li><li class="sb-fn"><a href="#sp_time_interval_distance"><i class="ti ti-function"></i> sp_time_interval_distance</a></li><li class="sb-fn"><a href="#epicenter_triangulation"><i class="ti ti-function"></i> epicenter_triangulation</a></li><li class="sb-fn"><a href="#peak_ground_acceleration"><i class="ti ti-function"></i> peak_ground_acceleration</a></li><li class="sb-fn"><a href="#mercalli_intensity_estimate"><i class="ti ti-function"></i> mercalli_intensity_estimate</a></li><li class="sb-fn"><a href="#specific_gravity"><i class="ti ti-function"></i> specific_gravity</a></li><li class="sb-fn"><a href="#unit_cell_volume"><i class="ti ti-function"></i> unit_cell_volume</a></li><li class="sb-fn"><a href="#theoretical_density"><i class="ti ti-function"></i> theoretical_density</a></li><li class="sb-fn"><a href="#bragg_angle"><i class="ti ti-function"></i> bragg_angle</a></li><li class="sb-fn"><a href="#d_spacing_cubic"><i class="ti ti-function"></i> d_spacing_cubic</a></li><li class="sb-fn"><a href="#d_spacing_hexagonal"><i class="ti ti-function"></i> d_spacing_hexagonal</a></li><li class="sb-fn"><a href="#mohs_to_vickers_estimate"><i class="ti ti-function"></i> mohs_to_vickers_estimate</a></li><li class="sb-fn"><a href="#packing_efficiency"><i class="ti ti-function"></i> packing_efficiency</a></li><li class="sb-fn"><a href="#coordination_number_estimate"><i class="ti ti-function"></i> coordination_number_estimate</a></li><li class="sb-fn"><a href="#madelung_constant_estimate"><i class="ti ti-function"></i> madelung_constant_estimate</a></li><li class="sb-fn"><a href="#plate_velocity"><i class="ti ti-function"></i> plate_velocity</a></li><li class="sb-fn"><a href="#euler_pole_velocity"><i class="ti ti-function"></i> euler_pole_velocity</a></li><li class="sb-fn"><a href="#relative_plate_motion"><i class="ti ti-function"></i> relative_plate_motion</a></li><li class="sb-fn"><a href="#normal_stress"><i class="ti ti-function"></i> normal_stress</a></li><li class="sb-fn"><a href="#shear_stress"><i class="ti ti-function"></i> shear_stress</a></li><li class="sb-fn"><a href="#true_dip"><i class="ti ti-function"></i> true_dip</a></li><li class="sb-fn"><a href="#strike_from_dip_direction"><i class="ti ti-function"></i> strike_from_dip_direction</a></li><li class="sb-fn"><a href="#airy_isostasy_root"><i class="ti ti-function"></i> airy_isostasy_root</a></li><li class="sb-fn"><a href="#fault_heave_throw"><i class="ti ti-function"></i> fault_heave_throw</a></li><li class="sb-fn"><a href="#strain_ellipse_ratio"><i class="ti ti-function"></i> strain_ellipse_ratio</a></li><li class="sb-fn"><a href="#hydraulic_gradient"><i class="ti ti-function"></i> hydraulic_gradient</a></li><li class="sb-fn"><a href="#darcy_flux"><i class="ti ti-function"></i> darcy_flux</a></li><li class="sb-fn"><a href="#darcy_discharge"><i class="ti ti-function"></i> darcy_discharge</a></li><li class="sb-fn"><a href="#transmissivity"><i class="ti ti-function"></i> transmissivity</a></li><li class="sb-fn"><a href="#seepage_velocity"><i class="ti ti-function"></i> seepage_velocity</a></li><li class="sb-fn"><a href="#porosity"><i class="ti ti-function"></i> porosity</a></li><li class="sb-fn"><a href="#manning_velocity"><i class="ti ti-function"></i> manning_velocity</a></li><li class="sb-fn"><a href="#stream_discharge"><i class="ti ti-function"></i> stream_discharge</a></li><li class="sb-fn"><a href="#reynolds_number_pipe"><i class="ti ti-function"></i> reynolds_number_pipe</a></li><li class="sb-fn"><a href="#cooper_jacob_drawdown"><i class="ti ti-function"></i> cooper_jacob_drawdown</a></li><li class="sb-fn"><a href="#time_of_travel"><i class="ti ti-function"></i> time_of_travel</a></li><li class="sb-fn"><a href="#volcanic_explosivity_index_estimate"><i class="ti ti-function"></i> volcanic_explosivity_index_estimate</a></li><li class="sb-fn"><a href="#eruption_column_height"><i class="ti ti-function"></i> eruption_column_height</a></li><li class="sb-fn"><a href="#mass_eruption_rate"><i class="ti ti-function"></i> mass_eruption_rate</a></li><li class="sb-fn"><a href="#magma_ascent_velocity"><i class="ti ti-function"></i> magma_ascent_velocity</a></li><li class="sb-fn"><a href="#effusion_rate"><i class="ti ti-function"></i> effusion_rate</a></li><li class="sb-fn"><a href="#lava_volume_from_effusion"><i class="ti ti-function"></i> lava_volume_from_effusion</a></li><li class="sb-fn"><a href="#magma_viscosity_suspension"><i class="ti ti-function"></i> magma_viscosity_suspension</a></li><li class="sb-fn"><a href="#magma_chamber_overpressure"><i class="ti ti-function"></i> magma_chamber_overpressure</a></li><li class="sb-fn"><a href="#tephra_fallout_thickness"><i class="ti ti-function"></i> tephra_fallout_thickness</a></li><li class="sb-fn"><a href="#silica_classification_index"><i class="ti ti-function"></i> silica_classification_index</a></li><li class="sb-fn"><a href="#decay_constant_myr"><i class="ti ti-function"></i> decay_constant_myr</a></li><li class="sb-fn"><a href="#parent_daughter_age"><i class="ti ti-function"></i> parent_daughter_age</a></li><li class="sb-fn"><a href="#u238_pb206_age"><i class="ti ti-function"></i> u238_pb206_age</a></li><li class="sb-fn"><a href="#u235_pb207_age"><i class="ti ti-function"></i> u235_pb207_age</a></li><li class="sb-fn"><a href="#rb87_sr87_age"><i class="ti ti-function"></i> rb87_sr87_age</a></li><li class="sb-fn"><a href="#sm147_nd143_age"><i class="ti ti-function"></i> sm147_nd143_age</a></li><li class="sb-fn"><a href="#k40_ar40_age"><i class="ti ti-function"></i> k40_ar40_age</a></li><li class="sb-fn"><a href="#deposition_rate"><i class="ti ti-function"></i> deposition_rate</a></li><li class="sb-fn"><a href="#sediment_age_from_depth"><i class="ti ti-function"></i> sediment_age_from_depth</a></li><li class="sb-fn"><a href="#luminescence_age"><i class="ti ti-function"></i> luminescence_age</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-geo.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_exp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exp</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mocha-geo — Geoscience Library for Mocha. Section 1: Seismology. Section 2: Mineralogy &amp; Crystallography. Part of the Mocha Scientific Library Ecosystem. License: Polyform Non-Commercial.</p>
+  </div>
+</div>
+
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_mul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_div">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_div</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_add</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_sub">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_sub</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="richter_magnitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">richter_magnitude</span><span class="paren">(</span><span class="param-name">amplitude_mm</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">distance_km</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Computes Richter local magnitude (ML) from peak Wood-Anderson amplitude. and epicentral distance. amplitude_mm in mm, distance_km in km.</p>
+  </div>
+</div>
+
+<div class="card" id="moment_magnitude">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">moment_magnitude</span><span class="paren">(</span><span class="param-name">m0</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Computes moment magnitude (Mw) from scalar seismic moment M0 in N·m. Uses Hanks &amp; Kanamori (1979): Mw = (2/3)*log10(M0) - 6.07.</p>
+  </div>
+</div>
+
+<div class="card" id="seismic_moment">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">seismic_moment</span><span class="paren">(</span><span class="param-name">rigidity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">area</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">slip</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Computes scalar seismic moment M0 = μ * A * D in N·m. rigidity in Pa, area in m², slip in m. Uses unsafe_mul: real fault products far exceed fixed-point range.</p>
+  </div>
+</div>
+
+<div class="card" id="energy_release">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">energy_release</span><span class="paren">(</span><span class="param-name">mw</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Radiated seismic energy in joules from moment magnitude. Gutenberg-Richter energy relation: E = 10^(1.5*Mw + 4.8). Keep test values Mw &lt;= 6.0 to stay within fixed-point range.</p>
+  </div>
+</div>
+
+<div class="card" id="p_wave_travel_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">p_wave_travel_time</span><span class="paren">(</span><span class="param-name">distance_km</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vp</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">P-wave travel time in seconds from epicentral distance and P-wave velocity. distance_km in km, vp in km/s (typical crustal range: 5.5-8.0).</p>
+  </div>
+</div>
+
+<div class="card" id="s_wave_travel_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">s_wave_travel_time</span><span class="paren">(</span><span class="param-name">distance_km</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vs</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">S-wave travel time in seconds from epicentral distance and S-wave velocity. distance_km in km, vs in km/s (typical crustal range: 3.0-5.0).</p>
+  </div>
+</div>
+
+<div class="card" id="sp_time_interval_distance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sp_time_interval_distance</span><span class="paren">(</span><span class="param-name">sp_interval</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vs</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Estimates epicentral distance in km from S-P arrival time interval. Wadati method: distance = (vp*vs)/(vp-vs) * (ts-tp).</p>
+  </div>
+</div>
+
+<div class="card" id="epicenter_triangulation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">epicenter_triangulation</span><span class="paren">(</span><span class="param-name">d1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lon1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lon2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lat3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lon3</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Estimates epicenter lat/lon from three station distances via flat-Earth trilateration. d1/d2/d3 in km. lat/lon in degrees. Valid for distances &lt; 500 km. Returns (lat, lon) tuple.</p>
+  </div>
+</div>
+
+<div class="card" id="peak_ground_acceleration">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">peak_ground_acceleration</span><span class="paren">(</span><span class="param-name">mw</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">distance_km</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Peak ground acceleration in g from moment magnitude and distance. Joyner-Boore (1981) simplified attenuation relation. Valid range: Mw 5.0-7.5, distance 10-100 km.</p>
+  </div>
+</div>
+
+<div class="card" id="mercalli_intensity_estimate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mercalli_intensity_estimate</span><span class="paren">(</span><span class="param-name">pga_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Estimates Modified Mercalli Intensity (MMI) from peak ground acceleration in g. Wald et al. (1999). Returns continuous value; round to nearest 0.5 for reporting.</p>
+  </div>
+</div>
+
+<div class="card" id="specific_gravity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">specific_gravity</span><span class="paren">(</span><span class="param-name">density_kg_m3</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Specific gravity of a mineral as ratio of its density to water (1000 kg/m³). Input density in kg/m³. Returns dimensionless SG value.</p>
+  </div>
+</div>
+
+<div class="card" id="unit_cell_volume">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unit_cell_volume</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">c</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">alpha</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">beta</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">gamma</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Unit cell volume in Å³ from lattice parameters using general triclinic formula. a, b, c in Angstroms; alpha, beta, gamma in degrees. Covers all 7 crystal systems.</p>
+  </div>
+</div>
+
+<div class="card" id="theoretical_density">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">theoretical_density</span><span class="paren">(</span><span class="param-name">formula_mass</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">cell_volume</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Theoretical density in g/cm³ from unit cell parameters. formula_mass in g/mol, z = atoms per unit cell, cell_volume in Å³. Uses 1.6605 conversion factor (1e24 / Avogadro).</p>
+  </div>
+</div>
+
+<div class="card" id="bragg_angle">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bragg_angle</span><span class="paren">(</span><span class="param-name">wavelength</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">d_spacing</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Bragg diffraction angle θ in degrees from wavelength, d-spacing, and reflection order n. wavelength and d_spacing in Angstroms. Note: diffractometers report 2θ, so double if needed.</p>
+  </div>
+</div>
+
+<div class="card" id="d_spacing_cubic">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">d_spacing_cubic</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">h</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">l</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">d-spacing in Angstroms for cubic crystal system from Miller indices (hkl). d = a / sqrt(h² + k² + l²). a in Angstroms.</p>
+  </div>
+</div>
+
+<div class="card" id="d_spacing_hexagonal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">d_spacing_hexagonal</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">c</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">h</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">l</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">d-spacing in Angstroms for hexagonal crystal system from Miller indices (hkl). Covers quartz, calcite, apatite and most rock-forming hexagonal minerals.</p>
+  </div>
+</div>
+
+<div class="card" id="mohs_to_vickers_estimate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mohs_to_vickers_estimate</span><span class="paren">(</span><span class="param-name">mohs</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Estimates Vickers hardness (HV) from Mohs hardness scale value. Tabor empirical approximation: HV ≈ 10^(0.6 * Mohs). Rough ±50%.</p>
+  </div>
+</div>
+
+<div class="card" id="packing_efficiency">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">packing_efficiency</span><span class="paren">(</span><span class="param-name">structure</span><span class="colon">:</span> <span class="param-type">CrystalStructure</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Atomic packing efficiency for ideal hard-sphere model by crystal structure. FCC/HCP: 0.7405 | BCC: 0.6802 | SC: 0.5236.</p>
+  </div>
+</div>
+
+<div class="card" id="coordination_number_estimate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">coordination_number_estimate</span><span class="paren">(</span><span class="param-name">radius_cation</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">radius_anion</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Predicted coordination number from Pauling radius ratio rule. radius_cation and radius_anion in same units (typically Angstroms).</p>
+  </div>
+</div>
+
+<div class="card" id="madelung_constant_estimate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">madelung_constant_estimate</span><span class="paren">(</span><span class="param-name">coordination_number</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Madelung constant for common ionic crystal structures, looked up by coordination number. CN 4: zinc blende (1.6381) | CN 6: NaCl rock salt (1.7476) | CN 8: CsCl (1.7627).</p>
+  </div>
+</div>
+
+<div class="card" id="plate_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">plate_velocity</span><span class="paren">(</span><span class="param-name">displacement_km</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_myr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Plate velocity in cm/yr from displacement in km and time in Myr. Conversion: 1 km/Myr = 0.1 cm/yr.</p>
+  </div>
+</div>
+
+<div class="card" id="euler_pole_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">euler_pole_velocity</span><span class="paren">(</span><span class="param-name">angular_velocity_deg_myr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">angular_distance_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Linear plate velocity in cm/yr from Euler pole angular velocity and angular distance. angular_velocity in deg/Myr, angular_distance in degrees (angle from Euler pole). v = ω * R * sin(δ), using Earth radius R = 6371 km.</p>
+  </div>
+</div>
+
+<div class="card" id="relative_plate_motion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">relative_plate_motion</span><span class="paren">(</span><span class="param-name">vx1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vy1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vx2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">vy2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Relative plate motion vector from two absolute plate velocity vectors (cm/yr). Returns (rel_vx, rel_vy) = (v1 - v2) as a tuple.</p>
+  </div>
+</div>
+
+<div class="card" id="normal_stress">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">normal_stress</span><span class="paren">(</span><span class="param-name">sigma1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sigma3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">theta_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Normal stress on a plane oriented at angle theta from sigma1, using 2D Mohr circle relation. sigma1, sigma3 in MPa (or consistent units), theta in degrees.</p>
+  </div>
+</div>
+
+<div class="card" id="shear_stress">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">shear_stress</span><span class="paren">(</span><span class="param-name">sigma1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sigma3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">theta_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Shear stress on a plane oriented at angle theta, using 2D Mohr circle relation. sigma1, sigma3 in MPa (or consistent units), theta in degrees.</p>
+  </div>
+</div>
+
+<div class="card" id="true_dip">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">true_dip</span><span class="paren">(</span><span class="param-name">apparent_dip_deg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">alpha_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">True dip in degrees from apparent dip and the angle between the vertical cross-section and true dip direction. tan(true_dip) = tan(apparent_dip) / cos(alpha).</p>
+  </div>
+</div>
+
+<div class="card" id="strike_from_dip_direction">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">strike_from_dip_direction</span><span class="paren">(</span><span class="param-name">dip_direction_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Strike in degrees from dip direction, using the rule strike = dip_direction - 90°. Wraps result into [0, 360) range.</p>
+  </div>
+</div>
+
+<div class="card" id="airy_isostasy_root">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">airy_isostasy_root</span><span class="paren">(</span><span class="param-name">elevation_km</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">crust_density</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mantle_density</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Crustal root depth in km via Airy isostasy from topographic elevation and density contrast. elevation_km in km, crust_density and mantle_density in kg/m³. r = h * ρc / (ρm - ρc).</p>
+  </div>
+</div>
+
+<div class="card" id="fault_heave_throw">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">fault_heave_throw</span><span class="paren">(</span><span class="param-name">slip</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dip_deg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">(float, 2)</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Fault heave and throw from slip vector magnitude and dip angle. slip in any length unit, dip_deg in degrees. Returns (heave, throw) tuple.</p>
+  </div>
+</div>
+
+<div class="card" id="strain_ellipse_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">strain_ellipse_ratio</span><span class="paren">(</span><span class="param-name">e1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e3</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Strain ellipse axial ratio Rs from principal extensions e1 (max) and e3 (min). Rs = (1 + e1) / (1 + e3). e1, e3 as decimal extension values (e.g. 0.3 = 30%).</p>
+  </div>
+</div>
+
+<div class="card" id="hydraulic_gradient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">hydraulic_gradient</span><span class="paren">(</span><span class="param-name">h1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">h2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">distance</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Hydraulic gradient (dimensionless) between two points in an aquifer. h1, h2 = hydraulic head at points 1 and 2 (same length units), L = distance between them.</p>
+  </div>
+</div>
+
+<div class="card" id="darcy_flux">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">darcy_flux</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Darcy flux (specific discharge) in m/s from hydraulic conductivity and gradient. K = hydraulic conductivity (m/s), i = hydraulic gradient (dimensionless).</p>
+  </div>
+</div>
+
+<div class="card" id="darcy_discharge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">darcy_discharge</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">area</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Darcy volumetric discharge in m³/s through a cross-sectional area. K in m/s, area in m², i = hydraulic gradient.</p>
+  </div>
+</div>
+
+<div class="card" id="transmissivity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transmissivity</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">thickness</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Aquifer transmissivity in m²/s from hydraulic conductivity and saturated thickness. K in m/s, thickness in m.</p>
+  </div>
+</div>
+
+<div class="card" id="seepage_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">seepage_velocity</span><span class="paren">(</span><span class="param-name">darcy_flux_val</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">porosity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Seepage (linear) velocity in m/s, the actual average velocity of water through pore spaces. darcy_flux in m/s, porosity as decimal fraction (e.g. 0.3 = 30%).</p>
+  </div>
+</div>
+
+<div class="card" id="porosity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">porosity</span><span class="paren">(</span><span class="param-name">void_volume</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">total_volume</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Porosity as a decimal fraction from void volume and total volume. Same units for both volumes.</p>
+  </div>
+</div>
+
+<div class="card" id="manning_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">manning_velocity</span><span class="paren">(</span><span class="param-name">manning_n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">hydraulic_radius</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">slope</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Open-channel flow velocity in m/s via Manning&#x27;s equation. manning_n = roughness coefficient (dimensionless), hydraulic_radius in m, slope as decimal.</p>
+  </div>
+</div>
+
+<div class="card" id="stream_discharge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">stream_discharge</span><span class="paren">(</span><span class="param-name">area</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">velocity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Stream discharge in m³/s from channel cross-sectional area and average velocity. area in m², velocity in m/s.</p>
+  </div>
+</div>
+
+<div class="card" id="reynolds_number_pipe">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reynolds_number_pipe</span><span class="paren">(</span><span class="param-name">velocity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">diameter</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">kinematic_viscosity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Reynolds number for pipe flow (dimensionless), determines laminar vs turbulent regime. velocity in m/s, diameter in m, kinematic_viscosity in m²/s (water ≈ 1.0e-6).</p>
+  </div>
+</div>
+
+<div class="card" id="cooper_jacob_drawdown">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cooper_jacob_drawdown</span><span class="paren">(</span><span class="param-name">q</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_aquifer</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_s</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">storativity</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Cooper-Jacob approximation for aquifer drawdown at distance r and time t (confined aquifer, pumping test). Q in m³/s, T = transmissivity in m²/s, t in seconds, r in m, S = storativity (dimensionless). Valid for large t / small r (u &lt; 0.01).</p>
+  </div>
+</div>
+
+<div class="card" id="time_of_travel">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">time_of_travel</span><span class="paren">(</span><span class="param-name">path_length</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">seepage_velocity_val</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Groundwater time of travel in seconds over a flow path length using seepage velocity. path_length in m, seepage_velocity in m/s.</p>
+  </div>
+</div>
+
+<div class="card" id="volcanic_explosivity_index_estimate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">volcanic_explosivity_index_estimate</span><span class="paren">(</span><span class="param-name">volume_km3</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Estimates Volcanic Explosivity Index (0-8) from erupted tephra volume. volume_km3 in cubic kilometers. Coarse approximation from Newhall &amp; Self (1982) volume boundaries. VEI = floor(log10(V_m3)) - 3, clamped to [0, 8].</p>
+  </div>
+</div>
+
+<div class="card" id="eruption_column_height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">eruption_column_height</span><span class="paren">(</span><span class="param-name">mass_rate_kgs</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Eruption column height in km from mass eruption rate, via the Sparks et al. scaling law. mass_rate_kgs in kg/s. H = 0.236 * Q^0.25.</p>
+  </div>
+</div>
+
+<div class="card" id="mass_eruption_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mass_eruption_rate</span><span class="paren">(</span><span class="param-name">height_km</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mass eruption rate in kg/s from eruption column height (inverse Sparks scaling). height_km in km. Q = (H/0.236)^4.</p>
+  </div>
+</div>
+
+<div class="card" id="magma_ascent_velocity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">magma_ascent_velocity</span><span class="paren">(</span><span class="param-name">pressure_gradient</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">radius</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">viscosity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conduit_length</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Magma ascent velocity in m/s through a cylindrical conduit via Hagen-Poiseuille flow. pressure_gradient in Pa, radius in m, viscosity in Pa·s, conduit_length in m. v = ΔP·r² / (8·η·L).</p>
+  </div>
+</div>
+
+<div class="card" id="effusion_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">effusion_rate</span><span class="paren">(</span><span class="param-name">volume_km3</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">duration_days</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Effusion rate in m³/s from erupted lava volume and eruption duration. volume_km3 in cubic kilometers, duration_days in days.</p>
+  </div>
+</div>
+
+<div class="card" id="lava_volume_from_effusion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">lava_volume_from_effusion</span><span class="paren">(</span><span class="param-name">effusion_rate_m3s</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">duration_s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Total lava volume in m³ from effusion rate and eruption duration. effusion_rate_m3s in m³/s, duration_s in seconds.</p>
+  </div>
+</div>
+
+<div class="card" id="magma_viscosity_suspension">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">magma_viscosity_suspension</span><span class="paren">(</span><span class="param-name">melt_viscosity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">crystal_fraction</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">max_packing_fraction</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Crystal-bearing magma suspension viscosity via the Einstein-Roscoe equation. melt_viscosity in Pa·s, crystal_fraction and max_packing_fraction as decimals (0-1). η_suspension = η_melt * (1 - φ/φmax)^(-2.5·φmax).</p>
+  </div>
+</div>
+
+<div class="card" id="magma_chamber_overpressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">magma_chamber_overpressure</span><span class="paren">(</span><span class="param-name">tensile_strength</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rock_density</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">magma_density</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">depth</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Critical overpressure in Pa needed for dike initiation from a magma chamber (Gudmundsson model). tensile_strength in Pa, rock_density and magma_density in kg/m³, depth in m. ΔPc = σt + (ρrock - ρmagma)·g·depth.</p>
+  </div>
+</div>
+
+<div class="card" id="tephra_fallout_thickness">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">tephra_fallout_thickness</span><span class="paren">(</span><span class="param-name">t0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">decay_constant</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">distance_km</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Tephra deposit thickness in cm at a given distance from vent, via the Pyle (1989) exponential thinning model. t0 = thickness at vent (cm), decay_constant per km, distance_km from vent.</p>
+  </div>
+</div>
+
+<div class="card" id="silica_classification_index">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">silica_classification_index</span><span class="paren">(</span><span class="param-name">sio2_wt_pct</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">RockType</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Classifies volcanic rock type from silica content using standard TAS-adjacent thresholds. sio2_wt_pct in weight percent. Basalt &lt;52%, Andesite 52-63%, Dacite 63-70%, Rhyolite &gt;70%.</p>
+  </div>
+</div>
+
+<div class="card" id="decay_constant_myr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">decay_constant_myr</span><span class="paren">(</span><span class="param-name">half_life_myr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Decay constant in Myr⁻¹ from half-life in Myr. λ = ln(2)/t_half.</p>
+  </div>
+</div>
+
+<div class="card" id="parent_daughter_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">parent_daughter_age</span><span class="paren">(</span><span class="param-name">lambda_myr</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">daughter_excess</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">parent_remaining</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">General radiometric age in Myr from decay constant and parent/daughter isotope amounts. lambda in Myr⁻¹, daughter_excess and parent_remaining in same units (e.g. mol, or isotope ratio). age = (1/λ) * ln(1 + D/P).</p>
+  </div>
+</div>
+
+<div class="card" id="u238_pb206_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">u238_pb206_age</span><span class="paren">(</span><span class="param-name">pb206_excess</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">u238_remaining</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">U-238/Pb-206 radiometric age in Myr. Half-life = 4468 Myr. pb206_excess and u238_remaining in same units (e.g. mol or isotope ratio).</p>
+  </div>
+</div>
+
+<div class="card" id="u235_pb207_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">u235_pb207_age</span><span class="paren">(</span><span class="param-name">pb207_excess</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">u235_remaining</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">U-235/Pb-207 radiometric age in Myr. Half-life = 703.8 Myr. pb207_excess and u235_remaining in same units.</p>
+  </div>
+</div>
+
+<div class="card" id="rb87_sr87_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rb87_sr87_age</span><span class="paren">(</span><span class="param-name">sr87_excess</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rb87_remaining</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Rb-87/Sr-87 radiometric age in Myr. Half-life = 48800 Myr. sr87_excess and rb87_remaining in same units.</p>
+  </div>
+</div>
+
+<div class="card" id="sm147_nd143_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sm147_nd143_age</span><span class="paren">(</span><span class="param-name">nd143_excess</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sm147_remaining</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sm-147/Nd-143 radiometric age in Myr. Half-life = 106000 Myr. nd143_excess and sm147_remaining in same units.</p>
+  </div>
+</div>
+
+<div class="card" id="k40_ar40_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">k40_ar40_age</span><span class="paren">(</span><span class="param-name">ar40_excess</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k40_remaining</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">K-40/Ar-40 radiometric age in Myr, accounting for the electron-capture branching ratio. ar40_excess and k40_remaining in same units. Uses Steiger &amp; Jäger (1977) constants:. λtotal = 5.543e-4/Myr, λε = 0.581e-4/Myr.</p>
+  </div>
+</div>
+
+<div class="card" id="deposition_rate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">deposition_rate</span><span class="paren">(</span><span class="param-name">thickness_m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_kyr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sediment deposition rate in m/kyr from layer thickness and time elapsed. thickness_m in meters, time_kyr in thousands of years.</p>
+  </div>
+</div>
+
+<div class="card" id="sediment_age_from_depth">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sediment_age_from_depth</span><span class="paren">(</span><span class="param-name">depth_m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Sediment age in kyr from burial depth and deposition rate. depth_m in meters, rate in m/kyr.</p>
+  </div>
+</div>
+
+<div class="card" id="luminescence_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">luminescence_age</span><span class="paren">(</span><span class="param-name">paleodose_gy</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">dose_rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Luminescence (OSL/TL) age in kyr from paleodose and environmental dose rate. paleodose_gy in Gray (Gy), dose_rate in Gy/kyr.</p>
+  </div>
+</div>
+</main>
+</body>
+</html>

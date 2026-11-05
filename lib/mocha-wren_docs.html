@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-wren.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-wren.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#wren_open"><i class="ti ti-function"></i> wren_open</a></li><li class="sb-fn"><a href="#wren_close"><i class="ti ti-function"></i> wren_close</a></li><li class="sb-fn"><a href="#wren_run"><i class="ti ti-function"></i> wren_run</a></li><li class="sb-fn"><a href="#wren_run_file"><i class="ti ti-function"></i> wren_run_file</a></li><li class="sb-fn"><a href="#wren_try"><i class="ti ti-function"></i> wren_try</a></li><li class="sb-fn"><a href="#wren_eval_number"><i class="ti ti-function"></i> wren_eval_number</a></li><li class="sb-fn"><a href="#wren_eval_string"><i class="ti ti-function"></i> wren_eval_string</a></li><li class="sb-fn"><a href="#wren_eval_int"><i class="ti ti-function"></i> wren_eval_int</a></li><li class="sb-fn"><a href="#wren_eval_bool"><i class="ti ti-function"></i> wren_eval_bool</a></li><li class="sb-fn"><a href="#wren_call_number"><i class="ti ti-function"></i> wren_call_number</a></li><li class="sb-fn"><a href="#wren_call_string"><i class="ti ti-function"></i> wren_call_string</a></li><li class="sb-fn"><a href="#wren_call_int"><i class="ti ti-function"></i> wren_call_int</a></li><li class="sb-fn"><a href="#wren_call_number_1n"><i class="ti ti-function"></i> wren_call_number_1n</a></li><li class="sb-fn"><a href="#wren_call_string_1s"><i class="ti ti-function"></i> wren_call_string_1s</a></li><li class="sb-fn"><a href="#wren_call_number_2n"><i class="ti ti-function"></i> wren_call_number_2n</a></li><li class="sb-fn"><a href="#wren_call_string_2s"><i class="ti ti-function"></i> wren_call_string_2s</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-wren.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="wren_open">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_open</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Mocha-Wren FFI Library. Provides bidirectional Wren integration for Mocha programs. Use wren_open() to create a Wren VM and wren_close() to destroy it. Wren is class-based — most call functions require a module and class name. Creates a new Wren VM. Returns an opaque handle.</p>
+  </div>
+</div>
+
+<div class="card" id="wren_close">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_close</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Closes and destroys a Wren VM.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_run">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_run</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">code</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Runs Wren source code in a named module. Returns 0 on success.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">name for this code module</td></tr><tr><td class="tag-name">code</td><td class="tag-desc">Wren source code to execute</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_run_file">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_run_file</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">filename</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Runs a Wren file. Returns 0 on success.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">filename</td><td class="tag-desc">path to the .wren file</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_try">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_try</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">code</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Runs Wren source code safely. Returns error message or empty string.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">name for this code module</td></tr><tr><td class="tag-name">code</td><td class="tag-desc">Wren source code to execute</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_eval_number">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_eval_number</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">expr</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Evaluates a Wren expression and returns a float.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">expr</td><td class="tag-desc">Wren expression to evaluate</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_eval_string">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_eval_string</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">expr</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Evaluates a Wren expression and returns a string.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">expr</td><td class="tag-desc">Wren expression to evaluate</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_eval_int">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_eval_int</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">expr</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Evaluates a Wren expression and returns an int.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">expr</td><td class="tag-desc">Wren expression to evaluate</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_eval_bool">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_eval_bool</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">expr</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Evaluates a Wren boolean expression. Returns true or false.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">expr</td><td class="tag-desc">Wren boolean expression to evaluate</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_number">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_number</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a no-arg Wren static method, returns float.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod&quot;</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_string">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_string</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a no-arg Wren static method, returns str.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod&quot;</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_int">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_int</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a no-arg Wren static method, returns int.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod&quot;</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_number_1n">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_number_1n</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">arg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a Wren static method with 1 float arg, returns float.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod(_)&quot;</td></tr><tr><td class="tag-name">arg</td><td class="tag-desc">numeric argument</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_string_1s">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_string_1s</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">arg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a Wren static method with 1 str arg, returns str.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod(_)&quot;</td></tr><tr><td class="tag-name">arg</td><td class="tag-desc">string argument</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_number_2n">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_number_2n</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a Wren static method with 2 float args, returns float.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod(_,_)&quot;</td></tr><tr><td class="tag-name">a</td><td class="tag-desc">first numeric argument</td></tr><tr><td class="tag-name">b</td><td class="tag-desc">second numeric argument</td></tr></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="wren_call_string_2s">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wren_call_string_2s</span><span class="paren">(</span><span class="param-name">vm</span><span class="colon">:</span> <span class="param-type">null</span>, <span class="param-name">module</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">classname</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">sig</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Calls a Wren static method with 2 str args, returns str.</p>
+<table class="tag-table"><thead><tr><th>parameter</th><th>description</th></tr></thead><tbody><tr><td class="tag-name">vm</td><td class="tag-desc">the Wren VM handle</td></tr><tr><td class="tag-name">module</td><td class="tag-desc">module where the class is defined</td></tr><tr><td class="tag-name">classname</td><td class="tag-desc">Wren class name</td></tr><tr><td class="tag-name">sig</td><td class="tag-desc">method signature e.g. &quot;myMethod(_,_)&quot;</td></tr><tr><td class="tag-name">a</td><td class="tag-desc">first string argument</td></tr><tr><td class="tag-name">b</td><td class="tag-desc">second string argument</td></tr></tbody></table>
+  </div>
+</div>
+</main>
+</body>
+</html>

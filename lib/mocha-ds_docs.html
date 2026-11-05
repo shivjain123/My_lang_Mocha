@@ -1,0 +1,2842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-ds.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-ds.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#mocha_fnv1a"><i class="ti ti-function"></i> mocha_fnv1a</a></li><li class="sb-fn"><a href="#mocha_djb2"><i class="ti ti-function"></i> mocha_djb2</a></li><li class="sb-class"><a href="#dsvalue"><i class="ti ti-box"></i> DSValue</a><ul class="sb-methods"><li><a href="#dsvalue-constructor">constructor</a></li></ul></li><li class="sb-fn"><a href="#ds_int"><i class="ti ti-function"></i> ds_int</a></li><li class="sb-fn"><a href="#ds_float"><i class="ti ti-function"></i> ds_float</a></li><li class="sb-fn"><a href="#ds_str"><i class="ti ti-function"></i> ds_str</a></li><li class="sb-fn"><a href="#ds_bool"><i class="ti ti-function"></i> ds_bool</a></li><li class="sb-fn"><a href="#ds_equals"><i class="ti ti-function"></i> ds_equals</a></li><li class="sb-fn"><a href="#ds_to_str"><i class="ti ti-function"></i> ds_to_str</a></li><li class="sb-class"><a href="#slnode"><i class="ti ti-box"></i> SLNode</a><ul class="sb-methods"><li><a href="#slnode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#singlyll"><i class="ti ti-box"></i> SinglyLL</a><ul class="sb-methods"><li><a href="#singlyll-constructor">constructor</a></li><li><a href="#singlyll-prepend">prepend</a></li><li><a href="#singlyll-append">append</a></li><li><a href="#singlyll-remove">remove</a></li><li><a href="#singlyll-contains">contains</a></li><li><a href="#singlyll-get">get</a></li><li><a href="#singlyll-print_all">print_all</a></li><li><a href="#singlyll-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#dlnode"><i class="ti ti-box"></i> DLNode</a><ul class="sb-methods"><li><a href="#dlnode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#doublyll"><i class="ti ti-box"></i> DoublyLL</a><ul class="sb-methods"><li><a href="#doublyll-constructor">constructor</a></li><li><a href="#doublyll-push_front">push_front</a></li><li><a href="#doublyll-push_back">push_back</a></li><li><a href="#doublyll-pop_front">pop_front</a></li><li><a href="#doublyll-pop_back">pop_back</a></li><li><a href="#doublyll-front">front</a></li><li><a href="#doublyll-back">back</a></li><li><a href="#doublyll-remove">remove</a></li><li><a href="#doublyll-contains">contains</a></li><li><a href="#doublyll-get">get</a></li><li><a href="#doublyll-print_all">print_all</a></li><li><a href="#doublyll-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#stack"><i class="ti ti-box"></i> Stack</a><ul class="sb-methods"><li><a href="#stack-constructor">constructor</a></li><li><a href="#stack-push">push</a></li><li><a href="#stack-pop">pop</a></li><li><a href="#stack-print_all">print_all</a></li><li><a href="#stack-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#queue"><i class="ti ti-box"></i> Queue</a><ul class="sb-methods"><li><a href="#queue-constructor">constructor</a></li><li><a href="#queue-enqueue">enqueue</a></li><li><a href="#queue-dequeue">dequeue</a></li><li><a href="#queue-print_all">print_all</a></li><li><a href="#queue-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#deck"><i class="ti ti-box"></i> Deck</a><ul class="sb-methods"><li><a href="#deck-constructor">constructor</a></li><li><a href="#deck-push_front">push_front</a></li><li><a href="#deck-push_back">push_back</a></li><li><a href="#deck-pop_front">pop_front</a></li><li><a href="#deck-pop_back">pop_back</a></li><li><a href="#deck-print_all">print_all</a></li><li><a href="#deck-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#heap"><i class="ti ti-box"></i> Heap</a><ul class="sb-methods"><li><a href="#heap-constructor">constructor</a></li><li><a href="#heap-should_swap">should_swap</a></li><li><a href="#heap-sift_up">sift_up</a></li><li><a href="#heap-sift_down">sift_down</a></li><li><a href="#heap-insert">insert</a></li><li><a href="#heap-remove_top">remove_top</a></li><li><a href="#heap-is_empty">is_empty</a></li><li><a href="#heap-heapify">heapify</a></li></ul></li><li class="sb-class"><a href="#avlnode"><i class="ti ti-box"></i> AVLNode</a><ul class="sb-methods"><li><a href="#avlnode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#avltree"><i class="ti ti-box"></i> AVLTree</a><ul class="sb-methods"><li><a href="#avltree-constructor">constructor</a></li><li><a href="#avltree-node_height">node_height</a></li><li><a href="#avltree-balance_factor">balance_factor</a></li><li><a href="#avltree-update_height">update_height</a></li><li><a href="#avltree-cmp">cmp</a></li><li><a href="#avltree-rotate_right">rotate_right</a></li><li><a href="#avltree-rotate_left">rotate_left</a></li><li><a href="#avltree-rebalance">rebalance</a></li><li><a href="#avltree-insert_node">insert_node</a></li><li><a href="#avltree-min_node">min_node</a></li><li><a href="#avltree-max_node">max_node</a></li><li><a href="#avltree-remove_node">remove_node</a></li><li><a href="#avltree-contains_node">contains_node</a></li><li><a href="#avltree-inorder_node">inorder_node</a></li><li><a href="#avltree-successor_node">successor_node</a></li><li><a href="#avltree-predecessor_node">predecessor_node</a></li><li><a href="#avltree-insert">insert</a></li><li><a href="#avltree-remove">remove</a></li><li><a href="#avltree-contains">contains</a></li><li><a href="#avltree-min">min</a></li><li><a href="#avltree-max">max</a></li><li><a href="#avltree-height">height</a></li><li><a href="#avltree-inorder">inorder</a></li><li><a href="#avltree-successor">successor</a></li><li><a href="#avltree-predecessor">predecessor</a></li><li><a href="#avltree-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#rbnode"><i class="ti ti-box"></i> RBNode</a><ul class="sb-methods"><li><a href="#rbnode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#rbtree"><i class="ti ti-box"></i> RBTree</a><ul class="sb-methods"><li><a href="#rbtree-constructor">constructor</a></li><li><a href="#rbtree-cmp">cmp</a></li><li><a href="#rbtree-rotate_left">rotate_left</a></li><li><a href="#rbtree-rotate_right">rotate_right</a></li><li><a href="#rbtree-insert_fixup">insert_fixup</a></li><li><a href="#rbtree-transplant">transplant</a></li><li><a href="#rbtree-delete_fixup">delete_fixup</a></li><li><a href="#rbtree-min_node">min_node</a></li><li><a href="#rbtree-max_node">max_node</a></li><li><a href="#rbtree-inorder_node">inorder_node</a></li><li><a href="#rbtree-height_node">height_node</a></li><li><a href="#rbtree-successor_node">successor_node</a></li><li><a href="#rbtree-predecessor_node">predecessor_node</a></li><li><a href="#rbtree-insert_parent">insert_parent</a></li><li><a href="#rbtree-insert">insert</a></li><li><a href="#rbtree-remove">remove</a></li><li><a href="#rbtree-contains">contains</a></li><li><a href="#rbtree-min">min</a></li><li><a href="#rbtree-max">max</a></li><li><a href="#rbtree-height">height</a></li><li><a href="#rbtree-inorder">inorder</a></li><li><a href="#rbtree-successor">successor</a></li><li><a href="#rbtree-predecessor">predecessor</a></li><li><a href="#rbtree-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#ballpoint"><i class="ti ti-box"></i> BallPoint</a><ul class="sb-methods"><li><a href="#ballpoint-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#ballnode"><i class="ti ti-box"></i> BallNode</a><ul class="sb-methods"><li><a href="#ballnode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#balltree"><i class="ti ti-box"></i> BallTree</a><ul class="sb-methods"><li><a href="#balltree-constructor">constructor</a></li><li><a href="#balltree-dist_sq">dist_sq</a></li><li><a href="#balltree-dist">dist</a></li><li><a href="#balltree-compute_centroid">compute_centroid</a></li><li><a href="#balltree-compute_radius">compute_radius</a></li><li><a href="#balltree-max_spread_dim">max_spread_dim</a></li><li><a href="#balltree-build_node">build_node</a></li><li><a href="#balltree-collect_points">collect_points</a></li><li><a href="#balltree-balance_ratio">balance_ratio</a></li><li><a href="#balltree-update_threshold">update_threshold</a></li><li><a href="#balltree-recalibrate">recalibrate</a></li><li><a href="#balltree-insert_node">insert_node</a></li><li><a href="#balltree-nn_node">nn_node</a></li><li><a href="#balltree-range_node">range_node</a></li><li><a href="#balltree-insert">insert</a></li><li><a href="#balltree-nearest_neighbor">nearest_neighbor</a></li><li><a href="#balltree-range_search">range_search</a></li><li><a href="#balltree-contains">contains</a></li><li><a href="#balltree-contains_node">contains_node</a></li><li><a href="#balltree-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#patricianode"><i class="ti ti-box"></i> PatriciaNode</a><ul class="sb-methods"><li><a href="#patricianode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#patricia"><i class="ti ti-box"></i> Patricia</a><ul class="sb-methods"><li><a href="#patricia-constructor">constructor</a></li><li><a href="#patricia-char_at">char_at</a></li><li><a href="#patricia-common_prefix_len">common_prefix_len</a></li><li><a href="#patricia-substr">substr</a></li><li><a href="#patricia-insert">insert</a></li><li><a href="#patricia-insert_node">insert_node</a></li><li><a href="#patricia-find_node">find_node</a></li><li><a href="#patricia-contains">contains</a></li><li><a href="#patricia-get">get</a></li><li><a href="#patricia-starts_with">starts_with</a></li><li><a href="#patricia-collect_words">collect_words</a></li><li><a href="#patricia-all_with_prefix">all_with_prefix</a></li><li><a href="#patricia-remove_edge_at">remove_edge_at</a></li><li><a href="#patricia-delete_rec">delete_rec</a></li><li><a href="#patricia-delete">delete</a></li><li><a href="#patricia-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#graphedge"><i class="ti ti-box"></i> GraphEdge</a><ul class="sb-methods"><li><a href="#graphedge-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#graphnode"><i class="ti ti-box"></i> GraphNode</a><ul class="sb-methods"><li><a href="#graphnode-constructor">constructor</a></li></ul></li><li class="sb-class"><a href="#graph"><i class="ti ti-box"></i> Graph</a><ul class="sb-methods"><li><a href="#graph-constructor">constructor</a></li><li><a href="#graph-index_of">index_of</a></li><li><a href="#graph-contains">contains</a></li><li><a href="#graph-add_node">add_node</a></li><li><a href="#graph-add_edge">add_edge</a></li><li><a href="#graph-is_empty">is_empty</a></li><li><a href="#graph-bfs">bfs</a></li><li><a href="#graph-dfs">dfs</a></li><li><a href="#graph-dfs_visit">dfs_visit</a></li><li><a href="#graph-dijkstra">dijkstra</a></li><li><a href="#graph-bellman_ford">bellman_ford</a></li><li><a href="#graph-prim">prim</a></li><li><a href="#graph-find_set">find_set</a></li><li><a href="#graph-union_sets">union_sets</a></li><li><a href="#graph-kruskal">kruskal</a></li><li><a href="#graph-boruvka">boruvka</a></li><li><a href="#graph-gravity_merge">gravity_merge</a></li><li><a href="#graph-degree_centrality">degree_centrality</a></li><li><a href="#graph-network_density">network_density</a></li><li><a href="#graph-average_degree">average_degree</a></li><li><a href="#graph-clustering_coefficient">clustering_coefficient</a></li><li><a href="#graph-closeness_centrality">closeness_centrality</a></li><li><a href="#graph-betweenness_centrality">betweenness_centrality</a></li></ul></li><li class="sb-class"><a href="#bloomfilter"><i class="ti ti-box"></i> BloomFilter</a><ul class="sb-methods"><li><a href="#bloomfilter-constructor">constructor</a></li><li><a href="#bloomfilter-index_for">index_for</a></li><li><a href="#bloomfilter-add">add</a></li><li><a href="#bloomfilter-contains">contains</a></li><li><a href="#bloomfilter-is_empty">is_empty</a></li></ul></li><li class="sb-class"><a href="#countingbloomfilter"><i class="ti ti-box"></i> CountingBloomFilter</a><ul class="sb-methods"><li><a href="#countingbloomfilter-constructor">constructor</a></li><li><a href="#countingbloomfilter-index_for">index_for</a></li><li><a href="#countingbloomfilter-add">add</a></li><li><a href="#countingbloomfilter-contains">contains</a></li><li><a href="#countingbloomfilter-remove">remove</a></li><li><a href="#countingbloomfilter-is_empty">is_empty</a></li></ul></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-ds.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_fnv1a">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_fnv1a</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="mocha_djb2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mocha_djb2</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="ds_int">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ds_int</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">Smart constructors.</p>
+  </div>
+</div>
+
+<div class="card" id="ds_float">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ds_float</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="ds_str">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ds_str</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="ds_bool">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ds_bool</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">bool</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="ds_equals">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ds_equals</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">DSValue equality check.</p>
+  </div>
+</div>
+
+<div class="card" id="ds_to_str">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ds_to_str</span><span class="paren">(</span><span class="param-name">v</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">DSValue to string for printing.</p>
+  </div>
+</div>
+<h2>Classes</h2>
+<div class="card class-card" id="dsvalue">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">DSValue</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="dsvalue-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">kind</span><span class="colon">:</span> <span class="param-type">DSKind</span>, <span class="param-name">int_val</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">flt_val</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">str_val</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">bool_val</span><span class="colon">:</span> <span class="param-type">bool</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="slnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">SLNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="slnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">next</span><span class="colon">:</span> <span class="param-type">SLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="singlyll">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">SinglyLL</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="singlyll-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-prepend">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">prepend</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-append">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">append</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-remove">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-get">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get</span><span class="paren">(</span><span class="param-name">index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-print_all">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_all</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="singlyll-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="dlnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">DLNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="dlnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">next</span><span class="colon">:</span> <span class="param-type">DLNode</span>, <span class="param-name">prev</span><span class="colon">:</span> <span class="param-type">DLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="doublyll">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">DoublyLL</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="doublyll-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-push_front">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">push_front</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-push_back">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">push_back</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-pop_front">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pop_front</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-pop_back">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pop_back</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-front">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">front</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-back">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">back</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-remove">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-get">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get</span><span class="paren">(</span><span class="param-name">index</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-print_all">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_all</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="doublyll-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="stack">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Stack</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="stack-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="stack-push">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">push</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="stack-pop">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pop</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="stack-print_all">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_all</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="stack-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="queue">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Queue</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="queue-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="queue-enqueue">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">enqueue</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="queue-dequeue">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dequeue</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="queue-print_all">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_all</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="queue-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="deck">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Deck</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="deck-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="deck-push_front">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">push_front</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="deck-push_back">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">push_back</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="deck-pop_front">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pop_front</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="deck-pop_back">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pop_back</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="deck-print_all">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">print_all</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="deck-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="heap">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Heap</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="heap-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">kind</span><span class="colon">:</span> <span class="param-type">HeapKind</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-should_swap">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">should_swap</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-sift_up">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sift_up</span><span class="paren">(</span><span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-sift_down">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">sift_down</span><span class="paren">(</span><span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-insert">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert</span><span class="paren">(</span><span class="param-name">data</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-remove_top">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove_top</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="heap-heapify">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heapify</span><span class="paren">(</span><span class="param-name">arr</span><span class="colon">:</span> <span class="param-type">DSValue[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="avlnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">AVLNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="avlnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="avltree">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">AVLTree</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="avltree-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-node_height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">node_height</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-balance_factor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">balance_factor</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-update_height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">update_height</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-cmp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cmp</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-rotate_right">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rotate_right</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-rotate_left">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rotate_left</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-rebalance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rebalance</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-insert_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-min_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">min_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-max_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">max_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-remove_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-contains_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-inorder_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inorder_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-successor_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">successor_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">best</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-predecessor_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predecessor_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">AVLNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">best</span><span class="colon">:</span> <span class="param-type">AVLNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">AVLNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-insert">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-remove">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-min">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">min</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-max">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">max</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">height</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-inorder">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inorder</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-successor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">successor</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-predecessor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predecessor</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="avltree-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="rbnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">RBNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="rbnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">color</span><span class="colon">:</span> <span class="param-type">RBColor</span>, <span class="param-name">left</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">right</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">parent</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="rbtree">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">RBTree</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="rbtree-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-cmp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cmp</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-rotate_left">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rotate_left</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-rotate_right">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rotate_right</span><span class="paren">(</span><span class="param-name">y</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-insert_fixup">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert_fixup</span><span class="paren">(</span><span class="param-name">z</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-transplant">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transplant</span><span class="paren">(</span><span class="param-name">u</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">v</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-delete_fixup">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">delete_fixup</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-min_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">min_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">RBNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-max_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">max_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">RBNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-inorder_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inorder_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-height_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">height_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-successor_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">successor_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">best</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">RBNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-predecessor_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predecessor_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span>, <span class="param-name">best</span><span class="colon">:</span> <span class="param-type">RBNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">RBNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-insert_parent">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert_parent</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">parent</span><span class="colon">:</span> <span class="param-type">RBNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">RBNode</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-insert">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-remove">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-min">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">min</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-max">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">max</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-height">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">height</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-inorder">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">inorder</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-successor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">successor</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-predecessor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">predecessor</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="rbtree-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="ballpoint">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BallPoint</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="ballpoint-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">coords</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">label</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="ballnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BallNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="ballnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">point</span><span class="colon">:</span> <span class="param-type">BallPoint</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="balltree">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BallTree</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="balltree-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-dist_sq">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dist_sq</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-dist">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dist</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-compute_centroid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">compute_centroid</span><span class="paren">(</span><span class="param-name">points</span><span class="colon">:</span> <span class="param-type">BallPoint[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float[]</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-compute_radius">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">compute_radius</span><span class="paren">(</span><span class="param-name">centroid</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">points</span><span class="colon">:</span> <span class="param-type">BallPoint[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-max_spread_dim">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">max_spread_dim</span><span class="paren">(</span><span class="param-name">points</span><span class="colon">:</span> <span class="param-type">BallPoint[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-build_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">build_node</span><span class="paren">(</span><span class="param-name">points</span><span class="colon">:</span> <span class="param-type">BallPoint[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">BallNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-collect_points">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">collect_points</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">BallPoint[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-balance_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">balance_ratio</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-update_threshold">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">update_threshold</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-recalibrate">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">recalibrate</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-insert_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span>, <span class="param-name">point</span><span class="colon">:</span> <span class="param-type">BallPoint</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">BallNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-nn_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">nn_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span>, <span class="param-name">query</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-range_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">range_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span>, <span class="param-name">query</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">radius</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">DSValue[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-insert">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert</span><span class="paren">(</span><span class="param-name">coords</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">label</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-nearest_neighbor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">nearest_neighbor</span><span class="paren">(</span><span class="param-name">query</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-range_search">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">range_search</span><span class="paren">(</span><span class="param-name">query</span><span class="colon">:</span> <span class="param-type">float[]</span>, <span class="param-name">radius</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">coords</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-contains_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains_node</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">BallNode</span>, <span class="param-name">coords</span><span class="colon">:</span> <span class="param-type">float[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="balltree-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="patricianode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">PatriciaNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="patricianode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="patricia">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Patricia</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="patricia-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-char_at">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">char_at</span><span class="paren">(</span><span class="param-name">s</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-common_prefix_len">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">common_prefix_len</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-substr">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">substr</span><span class="paren">(</span><span class="param-name">s</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">begin</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">str</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-insert">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-insert_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">insert_node</span><span class="paren">(</span><span class="param-name">node</span><span class="colon">:</span> <span class="param-type">PatriciaNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">value</span><span class="colon">:</span> <span class="param-type">DSValue</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-find_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">find_node</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">PatriciaNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-get">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">get</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-starts_with">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">starts_with</span><span class="paren">(</span><span class="param-name">prefix</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-collect_words">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">collect_words</span><span class="paren">(</span><span class="param-name">node</span><span class="colon">:</span> <span class="param-type">PatriciaNode</span>, <span class="param-name">prefix</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">DSValue[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-all_with_prefix">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">all_with_prefix</span><span class="paren">(</span><span class="param-name">prefix</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-remove_edge_at">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove_edge_at</span><span class="paren">(</span><span class="param-name">node</span><span class="colon">:</span> <span class="param-type">PatriciaNode</span>, <span class="param-name">idx</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-delete_rec">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">delete_rec</span><span class="paren">(</span><span class="param-name">node</span><span class="colon">:</span> <span class="param-type">PatriciaNode</span>, <span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">PatriciaNode</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-delete">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">delete</span><span class="paren">(</span><span class="param-name">key</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="patricia-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="graphedge">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">GraphEdge</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="graphedge-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">to</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">weight</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="graphnode">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">GraphNode</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="graphnode-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="graph">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">Graph</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="graph-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">is_directed</span><span class="colon">:</span> <span class="param-type">bool</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-index_of">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">index_of</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-add_node">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add_node</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-add_edge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add_edge</span><span class="paren">(</span><span class="param-name">src</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">to</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">weight</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-bfs">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bfs</span><span class="paren">(</span><span class="param-name">begin_node</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-dfs">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dfs</span><span class="paren">(</span><span class="param-name">begin_node</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-dfs_visit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dfs_visit</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">visited</span><span class="colon">:</span> <span class="param-type">str[]</span>, <span class="param-name">out</span><span class="colon">:</span> <span class="param-type">DSValue[]</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-dijkstra">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dijkstra</span><span class="paren">(</span><span class="param-name">begin_node</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">end</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-bellman_ford">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bellman_ford</span><span class="paren">(</span><span class="param-name">begin_node</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">end</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-prim">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">prim</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-find_set">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">find_set</span><span class="paren">(</span><span class="param-name">parent</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">x</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-union_sets">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">union_sets</span><span class="paren">(</span><span class="param-name">parent</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">rank</span><span class="colon">:</span> <span class="param-type">int[]</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-kruskal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kruskal</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-boruvka">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">boruvka</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-gravity_merge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gravity_merge</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">DSValue[]</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-degree_centrality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degree_centrality</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-network_density">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">network_density</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-average_degree">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">average_degree</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-clustering_coefficient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clustering_coefficient</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-closeness_centrality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">closeness_centrality</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="graph-betweenness_centrality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">betweenness_centrality</span><span class="paren">(</span><span class="param-name">label</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="bloomfilter">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">BloomFilter</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="bloomfilter-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">expected_items</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">false_positive_rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bloomfilter-index_for">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">index_for</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bloomfilter-add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bloomfilter-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="bloomfilter-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+
+<div class="card class-card" id="countingbloomfilter">
+  <div class="class-header">
+    <span class="kw">class</span>
+    <span class="class-name">CountingBloomFilter</span>
+    <span class="inherit"></span>
+  </div>
+  
+  <div class="methods-section"><h4>Methods</h4>
+<div class="card" id="countingbloomfilter-constructor">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">constructor</span><span class="paren">(</span><span class="param-name">expected_items</span><span class="colon">:</span> <span class="param-type">int</span>, <span class="param-name">false_positive_rate</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="countingbloomfilter-index_for">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">index_for</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">int</span>
+  <span class="badge badge-private">private</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="countingbloomfilter-add">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">add</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="countingbloomfilter-contains">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">contains</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="countingbloomfilter-remove">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">remove</span><span class="paren">(</span><span class="param-name">item</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+<div class="card" id="countingbloomfilter-is_empty">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">is_empty</span><span class="paren">(</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">bool</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div></div>
+</div>
+</main>
+</body>
+</html>

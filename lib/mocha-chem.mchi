@@ -5,11 +5,11 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
-function c_exp(x: float) -> float native mocha_wrap_exp;
-function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
-function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
+local function c_exp(x: float) -> float;
+local function unsafe_mul(a: float, b: float) -> float;
+local function unsafe_div(a: float, b: float) -> float;
 const R_GAS: float = 0.082057;
 function moles_from_mass(mass_g: float, molar_mass: float) -> float;
 function mass_from_moles(moles: float, molar_mass: float) -> float;

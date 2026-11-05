@@ -27,21 +27,21 @@ local function c_exp(x: float) -> float native mocha_wrap_exp;
 const DEG_TO_RAD: float = 0.017453292519943295;
 const RAD_TO_DEG: float = 57.29577951308232;
 
-const G: float = 6.674E-11;
+const G: float = 6.6743E-11;
 const GM_SUN: float = 1.32712440018E20;
 const GM_EARTH: float = 3.986004418E14;
 const GM_MOON: float = 4.9048695E12;
 const GM_JUPITER: float = 1.26686534E17;
 
-const MASS_SUN: float = 1.989E30;
+const MASS_SUN: float = 1.98841E30;
 const MASS_EARTH: float = 5.972E24;
 const MASS_MOON: float = 7.342E22;
 const MASS_JUPITER: float = 1.898E27;
 
-const RADIUS_SUN: float = 6.957E8;
-const RADIUS_EARTH: float = 6.371E6;
-const RADIUS_MOON: float = 1.7374E6;
-const RADIUS_JUPITER: float = 6.9911E7;
+const RADIUS_SUN: float = 6.957E8;          // m, IAU nominal solar radius
+const RADIUS_EARTH: float = 6.371E6;        // m, MEAN radius (equatorial is 6.378E6)
+const RADIUS_MOON: float = 1.7374E6;        // m, mean radius
+const RADIUS_JUPITER: float = 6.9911E7;     // m, MEAN radius (equatorial, at 1 bar, is 7.1492E7)
 
 // ─── STELLAR PHYSICS & PHOTOMETRY ───────────────────────────────────────────
 
@@ -58,7 +58,7 @@ const BOLTZMANN_K: float = 1.380649E-23;          // J/K
 
 // ─── PLANETARY ATMOSPHERES & HABITABILITY ───────────────────────────────────
 
-const EARTH_ALBEDO: float = 0.31;
+const EARTH_ALBEDO: float = 0.306;           // Bond albedo (fraction of incident sunlight reflected)
 const EARTH_GRAVITY: float = 9.80665;        // m/s^2
 const EARTH_MEAN_MOLAR_MASS: float = 0.02896; // kg/mol, dry air
 const AVOGADRO: float = 6.02214076E23;        // mol^-1
@@ -71,6 +71,8 @@ const GALACTIC_POLE_RA: float = 192.859508;        // degrees, North Galactic Po
 const GALACTIC_POLE_DEC: float = 27.128336;        // degrees, North Galactic Pole Dec (J2000)
 const GALACTIC_NODE: float = 122.932;              // degrees, position angle of galactic node (J2000)
 const PRECESSION_RATE: float = 50.290966;          // arcsec/year, general precession in longitude (IAU 1976)
+const PRECESSION_M_ARCSEC: float = 46.124;         // arcsec/year, equatorial precession term m (J2000)
+const PRECESSION_N_ARCSEC: float = 20.043;         // arcsec/year, equatorial precession term n (J2000)
 const ARCSEC_TO_DEG: float = 0.0002777777777777778; // 1/3600
 const HOUR_TO_DEG: float = 15.0;                   // 1 hour of RA = 15 degrees
 
@@ -92,32 +94,6 @@ tag OrbitType {
     ELLIPTICAL,
     PARABOLIC,
     HYPERBOLIC
-};
-
-// ─── HELPER ──────────────────────────────────────────────────────────────────
-
-"""
-atan2(y, x) -> float
-Two-argument arctangent (rad). Manual implementation — not in mocha-math.
-atan2(-0.0, x) with x < 0 returns π not *-π*. Different from C, different from IEEE 754
-"""
-function atan2(y: float, x: float) -> float {
-    if (x > 0.0) {
-        return (y / x).inv_tan();
-    };
-    if (x < 0.0 && y >= 0.0) {
-        return (y / x).inv_tan() + PI;
-    };
-    if (x < 0.0 && y < 0.0) {
-        return (y / x).inv_tan() - PI;
-    };
-    if (x == 0.0 && y > 0.0) {
-        return PI / 2.0;
-    };
-    if (x == 0.0 && y < 0.0) {
-        return -(PI / 2.0);
-    };
-    return 0.0;
 };
 
 // ─── SECTION 1: ORBITAL MECHANICS ────────────────────────────────────────────
@@ -170,7 +146,9 @@ function orbital_velocity_circular(r: float, mu: float) -> float {
 };
 
 ~~ Orbital velocity in m/s at radius r (m) via vis-viva equation.
-~~ v = √(μ(2/r - 1/a)). Requires r > 0, a > 0, and mu > 0. For hyperbolic orbits use a > 0 convention or pass negative a.
+~~ v = sqrt(mu * (2/r - 1/a)). Requires r > 0, mu > 0 and a != 0.
+~~ Use a > 0 for circular and elliptical orbits (this needs r <= 2a, otherwise the orbit is invalid)
+~~ and a < 0 for hyperbolic orbits. A parabolic orbit (a = infinity) can't be passed; use escape velocity instead.
 function orbital_velocity_visviva(r: float, a: float, mu: float) -> float {
     if (r <= 0.0) {
         c_print_err("MochaLibError (mocha-space): Orbital radius must be positive.");
@@ -499,7 +477,7 @@ function hill_sphere(a: float, e: float, m_small: float, m_large: float) -> floa
 };
 
 ~~ Roche limit in m for a rigid satellite from primary radius R (m) and densities (kg/m³).
-~~ d = 2.46·R_primary·(ρ_primary/ρ_secondary)^(1/3). Requires R > 0 and both densities > 0.
+~~ d = 1.26·R_primary·(ρ_primary/ρ_secondary)^(1/3), where 1.26 is the cube root of 2. Requires R > 0 and both densities > 0.
 function roche_limit_rigid(R_primary: float, rho_primary: float, rho_secondary: float) -> float {
     if (R_primary <= 0.0) {
         c_print_err("MochaLibError (mocha-space): Primary radius must be positive.");
@@ -514,25 +492,25 @@ function roche_limit_rigid(R_primary: float, rho_primary: float, rho_secondary: 
         c_exit(2);
     };
     var inner: float = rho_primary / rho_secondary;
-    return 2.46 * R_primary * inner.cubrot();
+    return 1.26 * R_primary * inner.cubrot();
 };
 
-~~ Roche limit in m for a fluid satellite from primary radius R (m) and masses (kg).
-~~ d = 2.44·R_primary·(M_primary/M_secondary)^(1/3). Requires R > 0 and both masses > 0.
-function roche_limit_fluid(R_primary: float, M_primary: float, M_secondary: float) -> float {
+~~ Roche limit in m for a fluid satellite from primary radius R (m) and densities (kg/m³).
+~~ d = 2.44·R_primary·(ρ_primary/ρ_secondary)^(1/3). Requires R > 0 and both densities > 0.
+function roche_limit_fluid(R_primary: float, rho_primary: float, rho_secondary: float) -> float {
     if (R_primary <= 0.0) {
         c_print_err("MochaLibError (mocha-space): Primary radius must be positive.");
         c_exit(2);
     };
-    if (M_primary <= 0.0) {
-        c_print_err("MochaLibError (mocha-space): Primary mass must be positive.");
+    if (rho_primary <= 0.0) {
+        c_print_err("MochaLibError (mocha-space): Primary density must be positive.");
         c_exit(2);
     };
-    if (M_secondary <= 0.0) {
-        c_print_err("MochaLibError (mocha-space): Secondary mass must be positive.");
+    if (rho_secondary <= 0.0) {
+        c_print_err("MochaLibError (mocha-space): Secondary density must be positive.");
         c_exit(2);
     };
-    var inner: float = M_primary / M_secondary;
+    var inner: float = rho_primary / rho_secondary;
     return 2.44 * R_primary * inner.cubrot();
 };
 
@@ -892,6 +870,7 @@ function atmospheric_pressure_at_height(p0: float, h: float, scale_h: float) -> 
 
 ~~ Surface gravitational acceleration in m/s² from body mass (kg) and radius (m).
 ~~ g = GM/r². Requires mass > 0 and radius > 0.
+~~ The RADIUS_* constants are mean radii, so they give the mean surface gravity; for a point on the equator use the equatorial radius.
 function surface_gravity(mass: float, radius: float) -> float {
     if (mass <= 0.0) {
         c_print_err("MochaLibError (mocha-space): Body mass must be positive.");
@@ -908,6 +887,7 @@ function surface_gravity(mass: float, radius: float) -> float {
 
 ~~ Escape velocity in m/s from body mass (kg) and radius (m).
 ~~ v_esc = √(2GM/r). Requires mass > 0 and radius > 0.
+~~ Use the radius of the point you launch from; the RADIUS_* constants are mean radii.
 function escape_velocity_from_mass_radius(mass: float, radius: float) -> float {
     if (mass <= 0.0) {
         c_print_err("MochaLibError (mocha-space): Body mass must be positive.");
@@ -922,8 +902,10 @@ function escape_velocity_from_mass_radius(mass: float, radius: float) -> float {
     return radicand.sqrt().real;
 };
 
-~~ Simplified Earth-equivalent-insolation habitable zone distance in AU from stellar luminosity l_solar (solar units).
-~~ d_HZ = √(L / L_sun). First-pass estimate — for the full Kasting et al. (1993) model, use the temperature-dependent version. Requires l_solar > 0.
+~~ Simplified habitable zone distance in AU from stellar luminosity l_solar (solar units): the distance
+~~ at which a planet receives the same flux as Earth gets from the Sun.
+~~ d_HZ = √(L / L_sun). A first-pass estimate that ignores the star's temperature and spectrum, which
+~~ detailed models such as Kasting et al. (1993) take into account. Requires l_solar > 0.
 function habitable_zone_distance_simple(l_solar: float) -> float {
     if (l_solar <= 0.0) {
         c_print_err("MochaLibError (mocha-space): Stellar luminosity must be positive.");
@@ -1052,19 +1034,21 @@ function horizontal_to_equatorial(alt: float, az: float, lat: float, lst: float)
     return (ra, dec * RAD_TO_DEG);
 };
 
-~~ Angular separation in degrees between two celestial coordinates via spherical law of cosines.
-~~ Exact for any separation. No input constraints (any RA/Dec valid).
+~~ Angular separation in degrees between two celestial coordinates via the haversine formula.
+~~ Numerically stable for very small separations. No input constraints (any RA/Dec valid).
 function angular_separation(ra1: float, dec1: float, ra2: float, dec2: float) -> float {
-    var ra1_r: float = ra1 * DEG_TO_RAD;
     var dec1_r: float = dec1 * DEG_TO_RAD;
-    var ra2_r: float = ra2 * DEG_TO_RAD;
     var dec2_r: float = dec2 * DEG_TO_RAD;
+    var half_dra: float = (ra1 - ra2) * DEG_TO_RAD / 2.0;
+    var half_ddec: float = (dec1 - dec2) * DEG_TO_RAD / 2.0;
+    var s_ra: float = half_dra.sin(RAD);
+    var s_dec: float = half_ddec.sin(RAD);
 
-    var cos_sep: float = dec1_r.sin(RAD) * dec2_r.sin(RAD) +
-                          dec1_r.cos(RAD) * dec2_r.cos(RAD) * (ra1_r - ra2_r).cos(RAD);
-    if (cos_sep > 1.0) { cos_sep = 1.0; };
-    if (cos_sep < -1.0) { cos_sep = -1.0; };
-    return cos_sep.inv_cos().real * RAD_TO_DEG;
+    var h: float = s_dec * s_dec + dec1_r.cos(RAD) * dec2_r.cos(RAD) * s_ra * s_ra;
+    if (h > 1.0) { h = 1.0; };
+    if (h < 0.0) { h = 0.0; };
+    var root: float = h.sqrt().real;
+    return 2.0 * root.inv_sin().real * RAD_TO_DEG;
 };
 
 ~~ Fast small-angle approximation for angular separation in degrees.
@@ -1153,7 +1137,7 @@ function parallax_angle_to_distance(p_mas: float) -> float {
 
 ~~ Total proper motion magnitude in mas/year from pm_ra (assumed already pre-multiplied by cos(dec) — true angle) and pm_dec.
 ~~ μ_total = √(pm_ra² + pm_dec²). No input constraints.
-function proper_motion_total(pm_ra: float, pm_dec: float, dec: float) -> float {
+function proper_motion_total(pm_ra: float, pm_dec: float) -> float {
     var radicand: float = pm_ra * pm_ra + pm_dec * pm_dec;
     return radicand.sqrt().real;
 };
@@ -1183,8 +1167,8 @@ function position_angle(ra1: float, dec1: float, ra2: float, dec2: float) -> flo
     return pa;
 };
 
-~~ Approximate atmospheric refraction correction in arcminutes from apparent altitude in degrees.
-~~ R = cot(alt) — Bennett's simplified low-precision form. Valid only for altitudes above ~15°.
+~~ Atmospheric refraction in arcminutes from apparent altitude in degrees, using Bennett's formula:
+~~ R = cot(h + 7.31/(h + 4.4)), for standard conditions (about 1010 mb, 10°C). Usable down to the horizon.
 ~~ Requires apparent_alt in (0, 90).
 function atmospheric_refraction(apparent_alt: float) -> float {
     if (apparent_alt <= 0.0) {
@@ -1195,16 +1179,16 @@ function atmospheric_refraction(apparent_alt: float) -> float {
         c_print_err("MochaLibError (mocha-space): Apparent altitude must be less than 90 degrees.");
         c_exit(2);
     };
-    var alt_r: float = apparent_alt * DEG_TO_RAD;
-    var tan_alt: float = alt_r.tan(RAD);
-    if (tan_alt <= 0.0) {
-        c_print_err("MochaLibError (mocha-space): Apparent altitude too small — refraction formula breaks down near horizon.");
-        c_exit(2);
+    var corrected_deg: float = apparent_alt + 7.31 / (apparent_alt + 4.4);
+    if (corrected_deg >= 90.0) {
+        return 0.0;
     };
-    return 1.0 / tan_alt;
+    var tan_c: float = (corrected_deg * DEG_TO_RAD).tan(RAD);
+    return 1.0 / tan_c;
 };
 
-~~ Approximate precession correction in degrees over a number of years, using general precession rate.
+~~ Approximate precession of equatorial coordinates (degrees) over a number of years, using the linear
+~~ terms dRA = m + n·sin(ra)·tan(dec), dDec = n·cos(ra), evaluated at the starting position.
 ~~ Not a substitute for rigorous Meeus precession algorithm. Returns (new_ra, new_dec).
 ~~ Valid only for dec in (-90, 90) — pole is undefined. Recommended for spans under ~100 years.
 function precess_ra_dec(ra: float, dec: float, years: float) -> (float, 2) {
@@ -1216,18 +1200,18 @@ function precess_ra_dec(ra: float, dec: float, years: float) -> (float, 2) {
         c_print_err("MochaLibError (mocha-space): Precession simplification unreliable for spans over 1000 years.");
         c_exit(2);
     };
-    var total_arcsec: float = PRECESSION_RATE * years;
-    var total_deg: float = total_arcsec * ARCSEC_TO_DEG;
+    var ra_r: float = ra * DEG_TO_RAD;
     var dec_r: float = dec * DEG_TO_RAD;
 
-    var cos_dec: float = dec_r.cos(RAD);
-    var ra_shift: float = total_deg / cos_dec;
+    var dra_arcsec: float = (PRECESSION_M_ARCSEC + PRECESSION_N_ARCSEC * ra_r.sin(RAD) * dec_r.tan(RAD)) * years;
+    var ddec_arcsec: float = PRECESSION_N_ARCSEC * ra_r.cos(RAD) * years;
 
-    var new_ra: float = ra + ra_shift;
+    var new_ra: float = ra + dra_arcsec * ARCSEC_TO_DEG;
     while (new_ra < 0.0) { new_ra = new_ra + 360.0; };
     while (new_ra >= 360.0) { new_ra = new_ra - 360.0; };
+    var new_dec: float = dec + ddec_arcsec * ARCSEC_TO_DEG;
 
-    return (new_ra, dec);
+    return (new_ra, new_dec);
 };
 
 ~~ Convert hour-angle units (hours) to degrees. 1h = 15°. No input constraints.
@@ -1240,23 +1224,26 @@ function degrees_to_hours(deg: float) -> float {
     return deg / HOUR_TO_DEG;
 };
 
-~~ Convert degrees/arcminutes/arcseconds to decimal degrees. Sign of d determines overall sign.
-~~ No input constraints (any real d, m, s valid).
+~~ Convert degrees/arcminutes/arcseconds to decimal degrees. The overall sign is taken from the
+~~ first nonzero component (d, else m, else s); all three are then used as magnitudes, so -0°30'0" is -0.5.
 function dms_to_degrees(d: float, m: float, s: float) -> float {
     var sign: float = 1.0;
     if (d < 0.0) {
         sign = -1.0;
+    } else if (d == 0.0 && m < 0.0) {
+        sign = -1.0;
+    } else if (d == 0.0 && m == 0.0 && s < 0.0) {
+        sign = -1.0;
     };
-    var abs_d: float = abs(d);
-    return sign * (abs_d + m / 60.0 + s / 3600.0);
+    return sign * (abs(d) + abs(m) / 60.0 + abs(s) / 3600.0);
 };
 
-~~ Convert decimal degrees to (degrees, arcminutes, arcseconds). Sign carried on degrees component.
-~~ No input constraints.
+~~ Convert decimal degrees to (degrees, arcminutes, arcseconds). The sign is carried on the first
+~~ nonzero component: degrees, or arcminutes when degrees is 0, or arcseconds when both are 0.
 function degrees_to_dms(deg: float) -> (float, 3) {
-    var sign: float = 1.0;
+    var neg: bool = false;
     if (deg < 0.0) {
-        sign = -1.0;
+        neg = true;
     };
     var abs_deg: float = abs(deg);
     var d: float = float(int(abs_deg));
@@ -1265,7 +1252,16 @@ function degrees_to_dms(deg: float) -> (float, 3) {
     var m: float = float(int(m_full));
     var rem_min: float = m_full - m;
     var s: float = rem_min * 60.0;
-    return (sign * d, m, s);
+    if (neg) {
+        if (d > 0.0) {
+            d = 0.0 - d;
+        } else if (m > 0.0) {
+            m = 0.0 - m;
+        } else {
+            s = 0.0 - s;
+        };
+    };
+    return (d, m, s);
 };
 
 ~~ Convert hours/minutes/seconds (RA format) to decimal degrees. No input constraints.
@@ -1384,9 +1380,10 @@ function julian_date_to_unix(jd: float) -> float {
     return (jd - JD_UNIX_EPOCH) * SECONDS_PER_DAY;
 };
 
-~~ Convert a Julian Date in UTC to Terrestrial Time (TT).
-~~ Uses fixed offset of 69.184s (37 leap seconds + 32.184s), valid only for 2017-01-01 through the next leap second announcement.
-~~ Requires jd_utc in [2457754.5, 2465065.25] (2017 through ~2037).
+~~ Uses a fixed offset of 69.184 s (TAI-UTC = 37 s since 2017-01-01, plus TT-TAI = 32.184 s).
+~~ Still correct as of IERS Bulletin C 72 (6 July 2026), which announced no leap second for December 2026.
+~~ If a leap second is ever inserted, the TT_MINUS_UTC constant and the upper bound below must be updated.
+~~ Requires jd_utc in [2457754.5, 2465065.25] (2017-01-01 through about 6 January 2037).
 function utc_to_tt(jd_utc: float) -> float {
     if (jd_utc < 2457754.5) {
         c_print_err("MochaLibError (mocha-space): utc_to_tt valid only for 2017-01-01 onward (JD >= 2457754.5).");

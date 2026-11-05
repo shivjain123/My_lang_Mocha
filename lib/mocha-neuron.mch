@@ -887,6 +887,31 @@ class Gru {
         return dx;
     };
 
+    ~~ runs forward over a whole sequence, returns EVERY step's hidden state
+    ~~ @param xs: one [1 x input_size] tensor per timestep
+    ~~ @return: [seq_len x hidden_size], row k = hidden state after step k
+    function forward_all(xs: Tensor[]) -> Tensor {
+        this.clear_seq();
+        var out: Tensor = Tensor(xs.length, this.hidden_size);
+        var h: Tensor = Tensor(1, this.hidden_size);
+        h.zeros();
+        var i: int = 0;
+        while (i < xs.length) {
+            var h_new: Tensor = this.forward(xs[i], h);
+            var c: int = 0;
+            while (c < this.hidden_size) {
+                out.put(i, c, h_new.at(0, c));
+                c = c + 1;
+            };
+            h.dispose();
+            h = h_new.clone_tensor();
+            h_new.dispose();
+            i = i + 1;
+        };
+        h.dispose();
+        return out;
+    };
+
     ~~ runs forward over a whole sequence, returns the LAST hidden state
     ~~ @param xs: one [1 x input_size] tensor per timestep
     function forward_seq(xs: Tensor[]) -> Tensor {
@@ -937,10 +962,28 @@ class Gru {
         return a.one_minus_mul(b);
     };
 
-    // backprop through time after forward_seq
+    // backprop through time after forward_seq, gradient only at the LAST step
     // @param dh_last: gradient w.r.t the last hidden state [1 x hidden_size]
     // @param dX: output, [seq_len x input_size], row k = gradient w.r.t input at step k
     function backward_seq(dh_last: Tensor, dX: Tensor, lr: float) -> null {
+        var n: int = this.seq_x.length;
+        var dH: Tensor = Tensor(n, this.hidden_size);
+        dH.zeros();
+        var c: int = 0;
+        while (c < this.hidden_size) {
+            dH.put(n - 1, c, dh_last.at(0, c));
+            c++;
+        };
+        this.backward_steps(dH, dX, lr);
+        dH.dispose();
+    };
+
+    // backprop through time when EVERY step has an output gradient
+    // @param dH: [seq_len x hidden_size], row k = gradient w.r.t the hidden state of step k
+    //            (steps counted in the order forward ran them)
+    // @param dX: output, [seq_len x input_size], row k = gradient w.r.t input at step k
+    function backward_steps(dH: Tensor, dX: Tensor, lr: float) -> null {
+        this.t = this.t + 1;
         this.t = this.t + 1;
         var beta1t: float = fast_pow(0.9, this.t);
         var beta2t: float = fast_pow(0.999, this.t);
@@ -953,9 +996,17 @@ class Gru {
         var abz: Tensor = Tensor(1, this.hidden_size); abz.zeros();
         var abh: Tensor = Tensor(1, this.hidden_size); abh.zeros();
 
-        var dh: Tensor = dh_last.clone_tensor();
+        var dh: Tensor = Tensor(1, this.hidden_size);
+        dh.zeros();
         var k: int = this.seq_x.length - 1;
         while (k >= 0) {
+            // this step's own output gradient + what flows back from later steps
+            var g: Tensor = dH.get_row(k);
+            var dh_in: Tensor = dh.add(g);
+            g.dispose();
+            dh.dispose();
+            dh = dh_in.clone_tensor();
+            dh_in.dispose();
             // update gate: dz = dh * (cand - h), through sigmoid
             var h_neg: Tensor = this.cl(this.seq_h[k]);
             h_neg.scale(0.0 - 1.0);
@@ -1177,6 +1228,9 @@ class BiGru {
     ~~ @param xs: array of input tensors [seq_len x (1 x input_size)]
     ~~ @return: array of output tensors [seq_len x (1 x hidden_size*2)]
     function forward(xs: Tensor[]) -> Tensor[] {
+        // fresh step caches: backward must see exactly this forward's steps
+        this.fwd.clear_seq();
+        this.bwd.clear_seq();
         var seq_len: int = xs.length;
         var outputs: Tensor[] = [];
 
@@ -1222,6 +1276,58 @@ class BiGru {
         };
 
         return outputs;
+    };
+
+    ~~ Backward pass over a full sequence, after forward()
+    ~~ @param douts: array of gradients [seq_len x (1 x hidden_size*2)], one per output
+    ~~ @param lr: learning rate
+    ~~ @return: array of gradients [seq_len x (1 x input_size)], one per input
+    function backward(douts: Tensor[], lr: float) -> Tensor[] {
+        var n: int = douts.length;
+        var hsz: int = this.hidden_size;
+        var isz: int = this.input_size;
+
+        // forward half goes to fwd in time order; backward half is flipped
+        // because bwd processed the sequence from the end
+        var dHf: Tensor = Tensor(n, hsz);
+        var dHb: Tensor = Tensor(n, hsz);
+        var t: int = 0;
+        while (t < n) {
+            var c: int = 0;
+            while (c < hsz) {
+                dHf.put(t, c, douts[t].at(0, c));
+                dHb.put(n - 1 - t, c, douts[t].at(0, hsz + c));
+                c = c + 1;
+            };
+            t = t + 1;
+        };
+
+        var dXf: Tensor = Tensor(n, isz);
+        dXf.zeros();
+        var dXb: Tensor = Tensor(n, isz);
+        dXb.zeros();
+        this.fwd.backward_steps(dHf, dXf, lr);
+        this.bwd.backward_steps(dHb, dXb, lr);
+
+        // input gradient at time s = fwd's row s + bwd's row (n - 1 - s)
+        var dxs: Tensor[] = [];
+        var s: int = 0;
+        while (s < n) {
+            var dx: Tensor = Tensor(1, isz);
+            var d: int = 0;
+            while (d < isz) {
+                dx.put(0, d, dXf.at(s, d) + dXb.at(n - 1 - s, d));
+                d = d + 1;
+            };
+            dxs.push(dx);
+            s = s + 1;
+        };
+
+        dHf.dispose();
+        dHb.dispose();
+        dXf.dispose();
+        dXb.dispose();
+        return dxs;
     };
 
     function dispose() -> null {
@@ -1405,9 +1511,9 @@ class Hopfield {
         return out;
     };
 
-    ~~ Recall a pattern from a noisy/partial input
-
-    ~~ Recall a pattern from a noisy/partial input
+    ~~ Recall a pattern from a noisy/partial input (synchronous, Hopfield 1974 style).
+    ~~ All neurons update at once: fast, but can oscillate instead of settling.
+    ~~ For guaranteed settling use recall_async.
     ~~ @param input: [1 x size] tensor with values +1 or -1
     ~~ @param max_iter: maximum iterations before giving up
     ~~ @return: recalled pattern [1 x size]
@@ -1428,11 +1534,79 @@ class Hopfield {
             new_state.dispose();
 
             if (converged) {
-                iter = max_iter; // break
+                break;
             };
             iter = iter + 1;
         };
 
+                return state;
+    };
+
+    ~~ Recall with asynchronous updates (Hopfield 1982): one neuron at a time,
+    ~~ random order, reshuffled every sweep. Slower than recall, but settles.
+    ~~ @param input: [1 x size] tensor with values +1 or -1
+    ~~ @param max_sweeps: maximum full sweeps before giving up
+    ~~ @return: recalled pattern [1 x size]
+    function recall_async(input: Tensor, max_sweeps: int) -> Tensor {
+        if (input.nrows != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield.recall_async input must be a single row [1 x size].");
+            c_exit(2);
+        };
+        if (input.ncols != this.size) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield.recall_async input length must equal the network size.");
+            c_exit(2);
+        };
+        if (max_sweeps < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Hopfield.recall_async max_sweeps must be at least 1.");
+            c_exit(2);
+        };
+        var state: Tensor = input.clone_tensor();
+        var order: int[] = [];
+        var i0: int = 0;
+        while (i0 < this.size) {
+            order.push(i0);
+            i0 = i0 + 1;
+        };
+        var sweep: int = 0;
+        var settled: bool = false;
+        while (sweep < max_sweeps) {
+            // reshuffle the update order
+            var j: int = this.size - 1;
+            while (j > 0) {
+                var r: int = rand_int(0, j);
+                var tmp: int = order[j];
+                order[j] = order[r];
+                order[r] = tmp;
+                j = j - 1;
+            };
+            // update one neuron at a time, each seeing the latest state
+            var changed: bool = false;
+            var k: int = 0;
+            while (k < this.size) {
+                var n: int = order[k];
+                var sum: float = 0.0;
+                var m: int = 0;
+                while (m < this.size) {
+                    sum = sum + state.at(0, m) * this.weights.at(m, n);
+                    m = m + 1;
+                };
+                var nv: float = 0.0 - 1.0;
+                if (sum > 0.0) {
+                    nv = 1.0;
+                };
+                if (nv != state.at(0, n)) {
+                    state.put(0, n, nv);
+                    changed = true;
+                };
+                k = k + 1;
+            };
+            if (changed == false) {
+                settled = true;
+                break;
+            } else {
+                sweep = sweep + 1;
+            };
+        };
         return state;
     };
 
@@ -1975,6 +2149,25 @@ class Lsm {
     var state:       Tensor;
 
     function constructor(input_size: int, reservoir_size: int, output_size: int, spectral_radius: float) -> null {
+        if (input_size < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm input_size must be at least 1.");
+            c_exit(2);
+        };
+        if (reservoir_size < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm reservoir_size must be at least 1.");
+            c_exit(2);
+        };
+        if (output_size < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm output_size must be at least 1.");
+            c_exit(2);
+        };
+        if (spectral_radius <= 0.0) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm spectral_radius must be positive.");
+            c_exit(2);
+        };
+        if (spectral_radius >= 1.0) {
+            c_print_err("MochaLibWarning (mocha-neuron): Lsm spectral_radius >= 1.0 can make the reservoir unstable.");
+        };
         this.input_size     = input_size;
         this.reservoir_size = reservoir_size;
         this.output_size    = output_size;
@@ -2023,6 +2216,14 @@ class Lsm {
     ~~ @param u: input [1 x input_size]
     ~~ @return: output [1 x output_size]
     function step(u: Tensor) -> Tensor {
+        if (u.nrows != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.step input must be a single row [1 x input_size].");
+            c_exit(2);
+        };
+        if (u.ncols != this.input_size) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.step input length must equal input_size.");
+            c_exit(2);
+        };
         // x = tanh(Win^T @ u^T + w @ x)
         // since u is [1 x input_size], u @ Win gives [1 x reservoir_size]
         var win_out: Tensor = u.matmul(this.Win);
@@ -2039,6 +2240,32 @@ class Lsm {
         return out;
     };
 
+    ~~ Run one timestep on a plain array, returns a plain array
+    ~~ @param values: float[] of length input_size
+    ~~ @return: float[] of length output_size
+    function step_values(values: float[]) -> float[] {
+        if (values.length != this.input_size) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.step_values input length must equal input_size.");
+            c_exit(2);
+        };
+        var u: Tensor = Tensor(1, this.input_size);
+        var i: int = 0;
+        while (i < this.input_size) {
+            u.put(0, i, values[i]);
+            i = i + 1;
+        };
+        var res: Tensor = this.step(u);
+        u.dispose();
+        var out: float[] = [];
+        var j: int = 0;
+        while (j < this.output_size) {
+            out.push(res.at(0, j));
+            j = j + 1;
+        };
+        res.dispose();
+        return out;
+    };
+
     ~~ Reset reservoir state to zeros
     function reset() -> null {
         this.state.zeros();
@@ -2049,11 +2276,72 @@ class Lsm {
     ~~ @param targets: target outputs [T x output_size]
     ~~ @param lambda: regularization strength
     function train(states: Tensor, targets: Tensor, lamb_da: float) -> null {
+        if (this.output_size != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train supports output_size 1 only.");
+            c_exit(2);
+        };
+        if (states.ncols != this.reservoir_size) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train states must have reservoir_size columns.");
+            c_exit(2);
+        };
+        if (targets.ncols != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train targets must have a single column.");
+            c_exit(2);
+        };
+        if (states.nrows != targets.nrows) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train states and targets must have the same number of rows.");
+            c_exit(2);
+        };
+        if (lamb_da < 0.0) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train lambda cannot be negative.");
+            c_exit(2);
+        };
         var new_wout: Tensor = Tensor(this.reservoir_size, this.output_size);
         mocha_tensor_free(new_wout.ptr);
         new_wout.ptr = mocha_ridge_regression(states.ptr, targets.ptr, lamb_da, 100);
         this.Wout.dispose();
         this.Wout = new_wout;
+    };
+
+    ~~ Train the readout from plain arrays
+    ~~ @param inputs: float[] of T * input_size values, one timestep after another
+    ~~ @param targets: float[] of T values (output_size must be 1)
+    ~~ @param lamb_da: regularization strength
+    ~~ Does not reset the reservoir first; call reset() yourself if you want to.
+    function train_values(inputs: float[], targets: float[], lamb_da: float) -> null {
+        var n: int = targets.length;
+        if (n < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train_values needs at least one target.");
+            c_exit(2);
+        };
+        if (inputs.length != n * this.input_size) {
+            c_print_err("MochaLibError (mocha-neuron): Lsm.train_values inputs length must equal targets length times input_size.");
+            c_exit(2);
+        };
+        var states: Tensor = Tensor(n, this.reservoir_size);
+        var tg: Tensor = Tensor(n, 1);
+        var t: int = 0;
+        while (t < n) {
+            var u: Tensor = Tensor(1, this.input_size);
+            var k: int = 0;
+            while (k < this.input_size) {
+                u.put(0, k, inputs[t * this.input_size + k]);
+                k = k + 1;
+            };
+            var out: Tensor = this.step(u);
+            out.dispose();
+            u.dispose();
+            var s: int = 0;
+            while (s < this.reservoir_size) {
+                states.put(t, s, this.state.at(0, s));
+                s = s + 1;
+            };
+            tg.put(t, 0, targets[t]);
+            t = t + 1;
+        };
+        this.train(states, tg, lamb_da);
+        states.dispose();
+        tg.dispose();
     };
 
     function dispose() -> null {
@@ -2104,6 +2392,14 @@ class Rbm {
     var hidden_size:  int;
 
     function constructor(visible_size: int, hidden_size: int) -> null {
+        if (visible_size < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm visible_size must be at least 1.");
+            c_exit(2);
+        };
+        if (hidden_size < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm hidden_size must be at least 1.");
+            c_exit(2);
+        };
         this.visible_size = visible_size;
         this.hidden_size  = hidden_size;
 
@@ -2131,6 +2427,14 @@ class Rbm {
     ~~ @param v: [1 x visible_size]
     ~~ @return: [1 x hidden_size] probabilities
     function sample_hidden(v: Tensor) -> Tensor {
+        if (v.nrows != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.sample_hidden input must be a single row [1 x visible_size].");
+            c_exit(2);
+        };
+        if (v.ncols != this.visible_size) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.sample_hidden input length must equal visible_size.");
+            c_exit(2);
+        };
         var pre: Tensor = v.matmul(this.w);
         mocha_tensor_add_bias(pre.ptr, this.bh.ptr);
         pre.sigmoid();
@@ -2141,6 +2445,14 @@ class Rbm {
     ~~ @param h: [1 x hidden_size]
     ~~ @return: [1 x visible_size] probabilities
     function sample_visible(h: Tensor) -> Tensor {
+        if (h.nrows != 1) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.sample_visible input must be a single row [1 x hidden_size].");
+            c_exit(2);
+        };
+        if (h.ncols != this.hidden_size) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.sample_visible input length must equal hidden_size.");
+            c_exit(2);
+        };
         var Wt: Tensor = this.w.transpose();
         var pre: Tensor = h.matmul(Wt);
         Wt.dispose();
@@ -2163,6 +2475,10 @@ class Rbm {
     ~~ @param v0: one data sample [1 x visible_size]
     ~~ @param lr: learning rate
     function train_step(v0: Tensor, lr: float) -> null {
+        if (lr <= 0.0) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.train_step lr must be positive.");
+            c_exit(2);
+        };
         // positive phase: h0 = sigmoid(v0 @ w + bh)
         var h0: Tensor = this.sample_hidden(v0);
         this.binarize(h0);  // sample binary
@@ -2186,10 +2502,7 @@ class Rbm {
         pos.scale(lr);
         this.w.add_inplace(pos);
 
-        // dbv = lr * (v0 - v1)
-        neg.scale(0.0 - 1.0);  // restore neg sign for reuse? no — do fresh
-        var dv: Tensor = v0.add(v1);  // we need v0 - v1
-        // can't subtract directly, scale v1 by -1 first
+        // dbv = v0 - v1: scale v1 by -1, then add
         v1.scale(0.0 - 1.0);
         var dbv: Tensor = v0.add(v1);
         dbv.scale(lr);
@@ -2206,12 +2519,89 @@ class Rbm {
         v1t.dispose();
         pos.dispose();
         neg.dispose();
-        dv.dispose();
         dbv.dispose();
         dbh.dispose();
         h0.dispose();
         h1.dispose();
         v1.dispose();
+    };
+
+        ~~ Train from a plain array of samples
+    ~~ @param samples: float[] of n * visible_size values, one sample after another
+    ~~ @param epochs: number of passes over all samples
+    ~~ @param lr: learning rate
+    function train_values(samples: float[], epochs: int, lr: float) -> null {
+        if (samples.length < this.visible_size) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.train_values needs at least one sample.");
+            c_exit(2);
+        };
+        if (samples.length % this.visible_size != 0) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.train_values samples length must be a multiple of visible_size.");
+            c_exit(2);
+        };
+        if (epochs < 1) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.train_values epochs must be at least 1.");
+            c_exit(2);
+        };
+        var n: int = samples.length / this.visible_size;
+        var e: int = 0;
+        while (e < epochs) {
+            var s: int = 0;
+            while (s < n) {
+                var v: Tensor = Tensor(1, this.visible_size);
+                var k: int = 0;
+                while (k < this.visible_size) {
+                    v.put(0, k, samples[s * this.visible_size + k]);
+                    k = k + 1;
+                };
+                this.train_step(v, lr);
+                v.dispose();
+                s = s + 1;
+            };
+            e = e + 1;
+            if (e % 100 == 0) {
+                var total: float = 0.0;
+                var es: int = 0;
+                while (es < n) {
+                    var ev: Tensor = Tensor(1, this.visible_size);
+                    var ek: int = 0;
+                    while (ek < this.visible_size) {
+                        ev.put(0, ek, samples[es * this.visible_size + ek]);
+                        ek = ek + 1;
+                    };
+                    total = total + this.reconstruction_error(ev);
+                    ev.dispose();
+                    es = es + 1;
+                };
+                print("epoch ", e, " reconstruction error ", total / n, newLine=true);
+            };
+        };
+    };
+
+    ~~ Reconstruct from a plain array, returns a plain array
+    ~~ @param values: float[] of length visible_size
+    ~~ @return: float[] of length visible_size (probabilities)
+    function reconstruct_values(values: float[]) -> float[] {
+        if (values.length != this.visible_size) {
+            c_print_err("MochaLibError (mocha-neuron): Rbm.reconstruct_values input length must equal visible_size.");
+            c_exit(2);
+        };
+        var v: Tensor = Tensor(1, this.visible_size);
+        var i: int = 0;
+        while (i < this.visible_size) {
+            v.put(0, i, values[i]);
+            i = i + 1;
+        };
+        var res: Tensor = this.reconstruct(v);
+        v.dispose();
+        var out: float[] = [];
+        var j: int = 0;
+        while (j < this.visible_size) {
+            out.push(res.at(0, j));
+            j = j + 1;
+        };
+        res.dispose();
+        return out;
     };
 
     ~~ Compute mean reconstruction error on a sample
@@ -2628,6 +3018,65 @@ class BertClassifier {
         this.emb.dispose();
         this.bert.dispose();
         this.head.dispose();
+    };
+
+        function save(path: str) -> null {
+        this.emb.save(path + ".emb");
+        this.bert.save(path + ".bert");
+        this.head.save(path + ".head");
+
+        var db: null = sqlite3_open(path);
+        neuron_db_setup(db);
+        sqlite3_exec(db, "BEGIN TRANSACTION;");
+        neuron_db_write_meta(db, "model_type", "BertClassifier");
+        neuron_db_write_meta(db, "d_model", str(this.d_model));
+        neuron_db_write_meta(db, "max_len", str(this.max_len));
+        var n: int = this.bc_size(this.tok);
+        neuron_db_write_meta(db, "vocab_size", str(n));
+        var i: int = 0;
+        while (i < n) {
+            neuron_db_write_meta(db, "word_" + str(i), this.tok.word(i));
+            i++;
+        };
+        sqlite3_exec(db, "COMMIT;");
+        sqlite3_close(db);
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        var dm: int = neuron_db_read_meta(db, "d_model").toInt();
+        var ml: int = neuron_db_read_meta(db, "max_len").toInt();
+        var n: int = neuron_db_read_meta(db, "vocab_size").toInt();
+
+        // words after the 4 special tokens, in saved order
+        var sentence: str = "";
+        var i: int = 4;
+        while (i < n) {
+            var w: str = neuron_db_read_meta(db, "word_" + str(i));
+            sentence = sentence + w + " ";
+            i++;
+        };
+        sqlite3_close(db);
+
+        this.d_model = dm;
+        this.max_len = ml;
+
+        this.tok = Tokenizer();
+        var one: str[] = [];
+        one.push(sentence);
+        this.bc_fit(this.tok, one);
+
+        this.emb.dispose();
+        this.bert.dispose();
+        this.head.dispose();
+
+        this.emb = Embedding(n, dm);
+        this.emb.load(path + ".emb");
+        this.pe = PositionalEncoding(ml, dm);
+        this.bert = BertLayer(dm, dm, dm);
+        this.bert.load(path + ".bert");
+        this.head = Dense(dm, 1, Activation.SIGMOID);
+        this.head.load(path + ".head");
     };
 };
 

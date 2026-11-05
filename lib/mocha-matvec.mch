@@ -210,20 +210,10 @@ Changes from v2:
 Dependencies: mocha-math (already a dep of mocha-matvec)
 """
 
-// ============================================================
-// HELPER: Newton's method sqrt
-// ============================================================
-
 local function newton_sqrt(x: float) -> float {
     if (x <= 0.0) { return 0.0; };
-    var guess: float = x / 2.0;
-    if (guess == 0.0) { guess = 0.0001; };
-    var i: int = 0;
-    while (i < 20) {
-        guess = (guess + (x / guess)) / 2.0;
-        i++;
-    };
-    return guess;
+    var s: float = x;
+    return s.sqrt().real;
 };
 
 // ============================================================
@@ -1045,7 +1035,7 @@ extend float[][] {
                 rmat[col][col] = norm;
                 var qi: int = 0;
                 while (qi < n) {
-                    if (norm > 0.0001) {
+                    if (norm > 0.0000000001) {
                         q[qi][col] = v[qi] / norm;
                     } else {
                         q[qi][col] = 0.0;
@@ -1291,7 +1281,7 @@ extend float[][] {
             };
 
             // Normalise
-            var norm: float = complex_norm(vec, n);
+            var norm: float = complex_norm(vec);
             if (norm < 0.0001) { norm = 1.0; };
 
             var si: int = 0;

@@ -1,7 +1,7 @@
 from "mocha-space" import *;
 
 function assert_close(label: str, got: float, expected: float, tol: float, counts: int[]) -> null {
-    var rel: float = unsafe_div(abs(got - expected), abs(expected));
+    var rel: float = abs(got - expected)/ abs(expected);
     if (rel < tol) {
         print("  PASS: " + label, newLine=true);
         counts[0] = counts[0] + 1;
@@ -79,7 +79,7 @@ function main(didLoad) -> null {
     assert_close("Position angle due east", position_angle(100.0, 10.0, 100.5, 10.0), 89.957, 0.01, tracking);
 
     // ── Proper Motion ──────────────────────────────────────────────────────
-    assert_close("Proper motion total (3-4-5)", proper_motion_total(3.0, 4.0, 0.0), 5.0, 0.001, tracking);
+    assert_close("Proper motion total (3-4-5)", proper_motion_total(3.0, 4.0), 5.0, 0.001, tracking);
 
     // ── Atmospheric Refraction ────────────────────────────────────────────
     assert_close("Refraction at 45deg altitude", atmospheric_refraction(45.0), 1.0, 0.001, tracking);

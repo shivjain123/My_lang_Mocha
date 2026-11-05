@@ -49,7 +49,6 @@ from "mocha-math" import *;
 // FFI DECLARATIONS
 // ============================================================
 
-function puts(s: str) -> int native puts;
 function isalpha(c: int) -> int native mocha_wrap_isalpha;
 function isdigit(c: int) -> int native mocha_wrap_isdigit;
 function toupper(c: int) -> int native mocha_wrap_toupper;
@@ -59,7 +58,7 @@ function fmod(x: float, y: float) -> float native mocha_wrap_fmod;
 function clock_now() -> int native mocha_wrap_clock;
 function fopen(path: str, mode: str) -> null native fopen;
 function fclose(file: null) -> int native fclose;
-function fputs(s: str, file: null) -> int native fputs;
+function fprint(s: str, file: null) -> int native fprint;
 
 
 // ============================================================
@@ -371,95 +370,95 @@ function section_inlineReturn() -> null {
 function section_mathFull() -> null {
     print("--- 13. MochaMath ---", newLine=true);
 
-    puts("--- abs ---");
-    puts(str(abs(3.5)));    // 3.5
-    puts(str(abs(-3.5)));   // 3.5
-    puts(str(abs(0.0)));    // 0
+    print("--- abs ---");
+    print(str(abs(3.5)));    // 3.5
+    print(str(abs(-3.5)));   // 3.5
+    print(str(abs(0.0)));    // 0
 
-    puts("--- round / rdown / rup ---");
-    puts(str(round(2.5)));  // 3
-    puts(str(round(-2.5))); // -2
-    puts(str(rdown(3.9)));  // 3
-    puts(str(rdown(-3.1))); // -4
-    puts(str(rup(3.1)));    // 4
-    puts(str(rup(-3.9)));   // -3
+    print("--- round / rdown / rup ---");
+    print(str(round(2.5)));  // 3
+    print(str(round(-2.5))); // -2
+    print(str(rdown(3.9)));  // 3
+    print(str(rdown(-3.1))); // -4
+    print(str(rup(3.1)));    // 4
+    print(str(rup(-3.9)));   // -3
 
-    puts("--- pow ---");
-    puts(str(fast_pow(2.0, 0)));    // 1
-    puts(str(fast_pow(2.0, 10)));   // 1024
-    puts(str(fast_pow(2.0, -1)));   // 0.5
-    puts(str(fast_pow(-3.0, 3)));   // -27
-    puts(str(c_pow(2.0, 0.5)));     // 1.41421
-    puts(str(c_pow(10.0, 3.0)));    // 1000
+    print("--- pow ---");
+    print(str(fast_pow(2.0, 0)));    // 1
+    print(str(fast_pow(2.0, 10)));   // 1024
+    print(str(fast_pow(2.0, -1)));   // 0.5
+    print(str(fast_pow(-3.0, 3)));   // -27
+    print(str(c_pow(2.0, 0.5)));     // 1.41421
+    print(str(c_pow(10.0, 3.0)));    // 1000
 
-    puts("--- sin / cos ---");
-    puts(str((0.0).sin(mes=RAD)));     // 0
-    puts(str((90.0).sin(mes=DEG)));    // 1
-    puts(str((0.0).cos(mes=RAD)));     // 1
-    puts(str((90.0).cos(mes=DEG)));    // ~0
+    print("--- sin / cos ---");
+    print(str((0.0).sin(mes=RAD)));     // 0
+    print(str((90.0).sin(mes=DEG)));    // 1
+    print(str((0.0).cos(mes=RAD)));     // 1
+    print(str((90.0).cos(mes=DEG)));    // ~0
 
-    puts("--- inv_sin / inv_cos / inv_tan ---");
-    puts((1.0).inv_sin().toString());    // 1.5707+0im
-    puts((1.0).inv_cos().toString());    // 0+0im
-    puts(str((1.0).inv_tan()));          // ~0.7853
+    print("--- inv_sin / inv_cos / inv_tan ---");
+    print((1.0).inv_sin().toString());    // 1.5707+0im
+    print((1.0).inv_cos().toString());    // 0+0im
+    print(str((1.0).inv_tan()));          // ~0.7853
 
-    puts("--- inv_sin / inv_cos outside [-1, 1] ---");
-    puts((2.0).inv_sin().toString());    // complex result
-    puts((2.0).inv_cos().toString());    // complex result
+    print("--- inv_sin / inv_cos outside [-1, 1] ---");
+    print((2.0).inv_sin().toString());    // complex result
+    print((2.0).inv_cos().toString());    // complex result
 
-    puts("--- tan ---");
-    puts(str((0.0).tan(mes=RAD)));     // 0
-    puts(str((45.0).tan(mes=DEG)));    // 1
-    puts(str((90.0).tan(mes=DEG)));    // inf
+    print("--- tan ---");
+    print(str((0.0).tan(mes=RAD)));     // 0
+    print(str((45.0).tan(mes=DEG)));    // 1
+    print(str((90.0).tan(mes=DEG)));    // inf
 
-    puts("--- sqrt ---");
-    puts((4.0).sqrt().toString());     // 2+0im
-    puts((2.0).sqrt().toString());     // 1.41421+0im
-    puts((0.0).sqrt().toString());     // 0+0im
-    puts((-1.0).sqrt().toString());    // 0+1im
+    print("--- sqrt ---");
+    print((4.0).sqrt().toString());     // 2+0im
+    print((2.0).sqrt().toString());     // 1.41421+0im
+    print((0.0).sqrt().toString());     // 0+0im
+    print((-1.0).sqrt().toString());    // 0+1im
 
-    puts("--- cubrot ---");
-    puts(str((27.0).cubrot()));    // 3
-    puts(str((8.0).cubrot()));     // 2
-    puts(str((-27.0).cubrot()));   // -3
+    print("--- cubrot ---");
+    print(str((27.0).cubrot()));    // 3
+    print(str((8.0).cubrot()));     // 2
+    print(str((-27.0).cubrot()));   // -3
 
-    puts("--- log / log2 / log10 ---");
-    puts((2.71828182845904).log().toString());   // ~1+0im
-    puts((1.0).log().toString());               // 0+0im
-    puts((0.0).log().toString());               // -inf+0im
-    puts((-1.0).log().toString());              // 0+3.14159im
-    puts((8.0).log2().toString());              // 3+0im
-    puts((0.0).log2().toString());              // -inf+0im
-    puts((100.0).log10().toString());           // 2+0im
-    puts((0.0).log10().toString());             // -inf+0im
+    print("--- log / log2 / log10 ---");
+    print((2.71828182845904).log().toString());   // ~1+0im
+    print((1.0).log().toString());               // 0+0im
+    print((0.0).log().toString());               // -inf+0im
+    print((-1.0).log().toString());              // 0+3.14159im
+    print((8.0).log2().toString());              // 3+0im
+    print((0.0).log2().toString());              // -inf+0im
+    print((100.0).log10().toString());           // 2+0im
+    print((0.0).log10().toString());             // -inf+0im
 
-    puts("--- complex pow ---");
+    print("--- complex pow ---");
     var ci: Complex = 0.0 + 1.0im;
-    puts(complex_pow(ci, 2.0).toString());      // -1+0im  (i² = -1)
-    puts(complex_pow(ci, 0.5).toString());      // complex result
+    print(complex_pow(ci, 2.0).toString());      // -1+0im  (i² = -1)
+    print(complex_pow(ci, 0.5).toString());      // complex result
 
-    puts("--- INF detection ---");
+    print("--- INF detection ---");
     var t90: float = (90.0).tan(mes=DEG);
-    puts(str(t90));   // inf
+    print(str(t90));   // inf
 
-    puts("--- calculus ---");
+    print("--- calculus ---");
     var d1: float = (2.0).derivative(lambda (x: float) -> float: x * x);
-    puts(str(d1));   // ~4.0
+    print(str(d1));   // ~4.0
 
     var d2: float = (1.0).derivative(lambda (x: float) -> float: x * x * x);
-    puts(str(d2));   // ~3.0
+    print(str(d2));   // ~3.0
 
     var i1: float = integral(lambda (x: float) -> float: x * x, 0.0, 3.0);
-    puts(str(i1));   // ~9.0
+    print(str(i1));   // ~9.0
 
     var i2: float = integral(lambda (x: float) -> float: 1.0, 0.0, 5.0);
-    puts(str(i2));   // 5.0
+    print(str(i2));   // 5.0
 
     var l1: float = (2.0).limit(lambda (x: float) -> float: x * x);
-    puts(str(l1));   // ~4.0
+    print(str(l1));   // ~4.0
 
     var li: float = limit_inf(lambda (x: float) -> float: 1.0 / x);
-    puts(str(li));   // ~0.0
+    print(str(li));   // ~0.0
 };
 
 
@@ -643,19 +642,19 @@ function section_sortClosure() -> null {
 // ============================================================
 
 function section_ctypeFFI() -> null {
-    puts("--- 21. ctype FFI ---");
-    puts(str(isalpha(65)));   // 1 (A is alpha)
-    puts(str(isdigit(51)));   // 1 (3 is digit)
-    puts(str(toupper(97)));   // 65 (a → A)
-    puts(str(tolower(65)));   // 97 (A → a)
+    print("--- 21. ctype FFI ---");
+    print(str(isalpha(65)));   // 1 (A is alpha)
+    print(str(isdigit(51)));   // 1 (3 is digit)
+    print(str(toupper(97)));   // 65 (a → A)
+    print(str(tolower(65)));   // 97 (A → a)
 
     var h: float = hypot(3.0, 4.0);
-    puts(str(h));             // 5.0
+    print(str(h));             // 5.0
 
     var m: float = fmod(10.0, 3.0);
-    puts(str(m));             // 1.0
+    print(str(m));             // 1.0
 
-    puts(str(clock_now()));   // ticks since program start
+    print(str(clock_now()));   // ticks since program start
 };
 
 
@@ -664,11 +663,11 @@ function section_ctypeFFI() -> null {
 // ============================================================
 
 function section_fileIO() -> null {
-    puts("--- 22. File I/O FFI ---");
+    print("--- 22. File I/O FFI ---");
     var f: null = fopen("mocha_test_output.txt", "w");
-    fputs("Hello from Mocha file I/O!", f);
+    fprint("Hello from Mocha file I/O!", f);
     fclose(f);
-    puts("File written: mocha_test_output.txt");
+    print("File written: mocha_test_output.txt");
 };
 
 

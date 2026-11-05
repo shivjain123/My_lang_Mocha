@@ -122,3 +122,110 @@ function lua_call_string_2s(lua: null, func: str, a: str, b: str) -> str native 
 ~~ @param func  name of the Lua function
 ~~ @param arg   numeric argument
 function lua_call_string_1n(lua: null, func: str, arg: float) -> str native mocha_lua_call1n_string;
+
+~~ Calls a no-arg Lua function, returns bool.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+function lua_call_bool(lua: null, func: str) -> bool native mocha_lua_call_bool;
+
+~~ Calls a Lua function with 1 float arg, returns bool.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param arg   numeric argument
+function lua_call_bool_1n(lua: null, func: str, arg: float) -> bool native mocha_lua_call1n_bool;
+
+~~ Calls a Lua function with 1 str arg, returns bool.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param arg   string argument
+function lua_call_bool_1s(lua: null, func: str, arg: str) -> bool native mocha_lua_call1s_bool;
+
+~~ Calls a Lua function with 2 float args, returns bool.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param a     first numeric argument
+~~ @param b     second numeric argument
+function lua_call_bool_2n(lua: null, func: str, a: float, b: float) -> bool native mocha_lua_call2n_bool;
+
+~~ Calls a Lua function with 2 str args, returns bool.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param a     first string argument
+~~ @param b     second string argument
+function lua_call_bool_2s(lua: null, func: str, a: str, b: str) -> bool native mocha_lua_call2s_bool;
+
+~~ Calls a Lua function with 1 float arg, returns int.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param arg   numeric argument
+function lua_call_int_1n(lua: null, func: str, arg: float) -> int native mocha_lua_call1n_int;
+
+~~ Calls a Lua function with 1 str arg, returns int.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param arg   string argument
+function lua_call_int_1s(lua: null, func: str, arg: str) -> int native mocha_lua_call1s_int;
+
+~~ Calls a Lua function with 2 float args, returns int.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param a     first numeric argument
+~~ @param b     second numeric argument
+function lua_call_int_2n(lua: null, func: str, a: float, b: float) -> int native mocha_lua_call2n_int;
+
+~~ Calls a Lua function with 2 str args, returns int.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+~~ @param a     first string argument
+~~ @param b     second string argument
+function lua_call_int_2s(lua: null, func: str, a: str, b: str) -> int native mocha_lua_call2s_int;
+
+~~ ── Generic calls: any number of args, any mix of types ──
+~~ Usage: lua_begin_call(lua, "name"), then one lua_push_* per argument in order,
+~~ then lua_end_call_<return>(lua, number_of_args) to run it and get the result.
+~~ Pass the same count you pushed. A wrong count or a missing begin prints a MochaLuaError.
+
+~~ Starts a call: selects the Lua function to call.
+~~ @param lua   the Lua state handle
+~~ @param func  name of the Lua function
+function lua_begin_call(lua: null, func: str) -> null native mocha_lua_begin_call;
+
+~~ Adds a float argument to the pending call.
+~~ @param lua  the Lua state handle
+~~ @param val  numeric argument
+function lua_push_number(lua: null, val: float) -> null native mocha_lua_push_number;
+
+~~ Adds a str argument to the pending call.
+~~ @param lua  the Lua state handle
+~~ @param val  string argument
+function lua_push_string(lua: null, val: str) -> null native mocha_lua_push_string;
+
+~~ Adds an int argument to the pending call.
+~~ @param lua  the Lua state handle
+~~ @param val  integer argument
+function lua_push_int(lua: null, val: int) -> null native mocha_lua_push_int;
+
+~~ Adds a bool argument to the pending call.
+~~ @param lua  the Lua state handle
+~~ @param val  boolean argument
+function lua_push_bool(lua: null, val: bool) -> null native mocha_lua_push_bool;
+
+~~ Runs the pending call and returns a float.
+~~ @param lua    the Lua state handle
+~~ @param nargs  how many arguments were pushed
+function lua_end_call_number(lua: null, nargs: int) -> float native mocha_lua_end_call_number;
+
+~~ Runs the pending call and returns a str.
+~~ @param lua    the Lua state handle
+~~ @param nargs  how many arguments were pushed
+function lua_end_call_string(lua: null, nargs: int) -> str native mocha_lua_end_call_string;
+
+~~ Runs the pending call and returns an int.
+~~ @param lua    the Lua state handle
+~~ @param nargs  how many arguments were pushed
+function lua_end_call_int(lua: null, nargs: int) -> int native mocha_lua_end_call_int;
+
+~~ Runs the pending call and returns a bool.
+~~ @param lua    the Lua state handle
+~~ @param nargs  how many arguments were pushed
+function lua_end_call_bool(lua: null, nargs: int) -> bool native mocha_lua_end_call_bool;

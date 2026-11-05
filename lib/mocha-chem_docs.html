@@ -1,0 +1,1961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mocha-chem.mch — Mocha Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/dist/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: #f7f7f5;
+  color: #1a1a1a;
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #fff;
+  border-right: 1px solid #e8e8e4;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sb-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid #e8e8e4;
+  margin-bottom: 0.75rem;
+}
+
+.sb-list { list-style: none; padding: 0 0.5rem; }
+.sb-list li { margin: 1px 0; }
+.sb-list a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13.5px;
+  transition: background 0.1s;
+}
+.sb-list a:hover { background: #f0f0ec; color: #111; }
+.sb-list a .ti { font-size: 14px; color: #aaa; }
+.sb-class > a { font-weight: 500; color: #222; }
+.sb-methods { list-style: none; padding-left: 1.5rem; }
+.sb-methods li a { font-size: 13px; color: #666; }
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 860px;
+}
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 0.25rem; color: #111; }
+h2 { font-size: 18px; font-weight: 500; margin: 2.5rem 0 1rem; color: #111; border-bottom: 1px solid #e8e8e4; padding-bottom: 0.4rem; }
+h3 { font-size: 15px; font-weight: 500; margin: 1.5rem 0 0.5rem; color: #333; }
+h4 { font-size: 14px; font-weight: 500; margin: 1.25rem 0 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.subtitle { font-size: 13px; color: #888; margin-bottom: 2.5rem; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e8e8e4;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.class-card { border-left: 3px solid #7F77DD; }
+
+.class-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.class-name { font-size: 17px; font-weight: 500; color: #3C3489; }
+.class-desc { font-size: 14px; color: #555; margin-bottom: 1rem; }
+
+.inherit { font-size: 13px; color: #888; }
+.inherit-label { color: #aaa; margin-right: 2px; }
+.type-ref { color: #185FA5; }
+
+.methods-section { margin-top: 1.25rem; }
+.methods-section .card {
+  border-left: none;
+  background: #fafaf8;
+  margin-bottom: 0.75rem;
+}
+
+.sig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 13.5px;
+  margin-bottom: 0.85rem;
+}
+
+.kw   { color: #9333ea; }
+.fn-name { color: #111; font-weight: 500; }
+.paren { color: #888; }
+.colon { color: #888; }
+.arrow { color: #aaa; }
+.param-name { color: #185FA5; }
+.param-type { color: #0F6E56; }
+.ret-type   { color: #B45309; }
+
+.badge {
+  font-family: -apple-system, sans-serif;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-native    { background: #f0f0ec; color: #666; }
+.badge-shared    { background: #E6F1FB; color: #185FA5; }
+.badge-private   { background: #FCEBEB; color: #A32D2D; }
+.badge-protected { background: #FAEEDA; color: #854F0B; }
+
+.doc-body { font-size: 14px; color: #444; }
+.doc-desc { margin-bottom: 0.75rem; line-height: 1.65; }
+.no-doc   { color: #bbb; font-style: italic; font-size: 13px; }
+
+.tag-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 13.5px;
+}
+.tag-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #e8e8e4;
+}
+.tag-table td { padding: 5px 8px 5px 0; vertical-align: top; }
+.tag-name { font-family: monospace; color: #185FA5; font-size: 13px; white-space: nowrap; }
+.tag-desc { color: #444; }
+
+.return-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0.5rem;
+  font-size: 13.5px;
+}
+.tag-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .main { padding: 1.5rem 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sb-title">mocha-chem.mch</div>
+  <ul class="sb-list"><li class="sb-fn"><a href="#c_print_err"><i class="ti ti-function"></i> c_print_err</a></li><li class="sb-fn"><a href="#c_exit"><i class="ti ti-function"></i> c_exit</a></li><li class="sb-fn"><a href="#c_exp"><i class="ti ti-function"></i> c_exp</a></li><li class="sb-fn"><a href="#unsafe_mul"><i class="ti ti-function"></i> unsafe_mul</a></li><li class="sb-fn"><a href="#unsafe_div"><i class="ti ti-function"></i> unsafe_div</a></li><li class="sb-fn"><a href="#moles_from_mass"><i class="ti ti-function"></i> moles_from_mass</a></li><li class="sb-fn"><a href="#mass_from_moles"><i class="ti ti-function"></i> mass_from_moles</a></li><li class="sb-fn"><a href="#stoich_moles"><i class="ti ti-function"></i> stoich_moles</a></li><li class="sb-fn"><a href="#percent_yield"><i class="ti ti-function"></i> percent_yield</a></li><li class="sb-fn"><a href="#percent_composition"><i class="ti ti-function"></i> percent_composition</a></li><li class="sb-fn"><a href="#molarity"><i class="ti ti-function"></i> molarity</a></li><li class="sb-fn"><a href="#molality"><i class="ti ti-function"></i> molality</a></li><li class="sb-fn"><a href="#mole_fraction"><i class="ti ti-function"></i> mole_fraction</a></li><li class="sb-fn"><a href="#ppm_by_mass"><i class="ti ti-function"></i> ppm_by_mass</a></li><li class="sb-fn"><a href="#ppb_by_mass"><i class="ti ti-function"></i> ppb_by_mass</a></li><li class="sb-fn"><a href="#dilution_final_volume"><i class="ti ti-function"></i> dilution_final_volume</a></li><li class="sb-fn"><a href="#van_der_waals_pressure"><i class="ti ti-function"></i> van_der_waals_pressure</a></li><li class="sb-fn"><a href="#van_der_waals_molar_volume"><i class="ti ti-function"></i> van_der_waals_molar_volume</a></li><li class="sb-fn"><a href="#dalton_partial_pressure"><i class="ti ti-function"></i> dalton_partial_pressure</a></li><li class="sb-fn"><a href="#graham_effusion_ratio"><i class="ti ti-function"></i> graham_effusion_ratio</a></li><li class="sb-fn"><a href="#heat_q"><i class="ti ti-function"></i> heat_q</a></li><li class="sb-fn"><a href="#heat_constant_pressure"><i class="ti ti-function"></i> heat_constant_pressure</a></li><li class="sb-fn"><a href="#enthalpy_rxn"><i class="ti ti-function"></i> enthalpy_rxn</a></li><li class="sb-fn"><a href="#entropy_rxn"><i class="ti ti-function"></i> entropy_rxn</a></li><li class="sb-fn"><a href="#gibbs_free_energy"><i class="ti ti-function"></i> gibbs_free_energy</a></li><li class="sb-fn"><a href="#gibbs_from_keq"><i class="ti ti-function"></i> gibbs_from_keq</a></li><li class="sb-fn"><a href="#keq_from_gibbs"><i class="ti ti-function"></i> keq_from_gibbs</a></li><li class="sb-fn"><a href="#clausius_clapeyron_p2"><i class="ti ti-function"></i> clausius_clapeyron_p2</a></li><li class="sb-fn"><a href="#clausius_clapeyron_t2"><i class="ti ti-function"></i> clausius_clapeyron_t2</a></li><li class="sb-fn"><a href="#bond_enthalpy_rxn"><i class="ti ti-function"></i> bond_enthalpy_rxn</a></li><li class="sb-fn"><a href="#kirchhoff_enthalpy"><i class="ti ti-function"></i> kirchhoff_enthalpy</a></li><li class="sb-fn"><a href="#entropy_surroundings"><i class="ti ti-function"></i> entropy_surroundings</a></li><li class="sb-fn"><a href="#entropy_universe"><i class="ti ti-function"></i> entropy_universe</a></li><li class="sb-fn"><a href="#gibbs_equilibrium_temp"><i class="ti ti-function"></i> gibbs_equilibrium_temp</a></li><li class="sb-fn"><a href="#conc_zero_order"><i class="ti ti-function"></i> conc_zero_order</a></li><li class="sb-fn"><a href="#conc_first_order"><i class="ti ti-function"></i> conc_first_order</a></li><li class="sb-fn"><a href="#conc_second_order"><i class="ti ti-function"></i> conc_second_order</a></li><li class="sb-fn"><a href="#half_life_zero_order"><i class="ti ti-function"></i> half_life_zero_order</a></li><li class="sb-fn"><a href="#half_life_first_order"><i class="ti ti-function"></i> half_life_first_order</a></li><li class="sb-fn"><a href="#half_life_second_order"><i class="ti ti-function"></i> half_life_second_order</a></li><li class="sb-fn"><a href="#arrhenius_k"><i class="ti ti-function"></i> arrhenius_k</a></li><li class="sb-fn"><a href="#activation_energy_two_point"><i class="ti ti-function"></i> activation_energy_two_point</a></li><li class="sb-fn"><a href="#rate_law"><i class="ti ti-function"></i> rate_law</a></li><li class="sb-fn"><a href="#time_to_conc_first_order"><i class="ti ti-function"></i> time_to_conc_first_order</a></li><li class="sb-fn"><a href="#time_to_conc_second_order"><i class="ti ti-function"></i> time_to_conc_second_order</a></li><li class="sb-fn"><a href="#arrhenius_ratio"><i class="ti ti-function"></i> arrhenius_ratio</a></li><li class="sb-fn"><a href="#kc_from_kp"><i class="ti ti-function"></i> kc_from_kp</a></li><li class="sb-fn"><a href="#kp_from_kc"><i class="ti ti-function"></i> kp_from_kc</a></li><li class="sb-fn"><a href="#reaction_quotient"><i class="ti ti-function"></i> reaction_quotient</a></li><li class="sb-fn"><a href="#ksp_from_concentrations"><i class="ti ti-function"></i> ksp_from_concentrations</a></li><li class="sb-fn"><a href="#solubility_from_ksp_1_1"><i class="ti ti-function"></i> solubility_from_ksp_1_1</a></li><li class="sb-fn"><a href="#common_ion_solubility"><i class="ti ti-function"></i> common_ion_solubility</a></li><li class="sb-fn"><a href="#ph_from_h_conc"><i class="ti ti-function"></i> ph_from_h_conc</a></li><li class="sb-fn"><a href="#h_conc_from_ph"><i class="ti ti-function"></i> h_conc_from_ph</a></li><li class="sb-fn"><a href="#poh_from_oh_conc"><i class="ti ti-function"></i> poh_from_oh_conc</a></li><li class="sb-fn"><a href="#ph_from_poh"><i class="ti ti-function"></i> ph_from_poh</a></li><li class="sb-fn"><a href="#henderson_hasselbalch"><i class="ti ti-function"></i> henderson_hasselbalch</a></li><li class="sb-fn"><a href="#ph_weak_acid"><i class="ti ti-function"></i> ph_weak_acid</a></li><li class="sb-fn"><a href="#ph_weak_base"><i class="ti ti-function"></i> ph_weak_base</a></li><li class="sb-fn"><a href="#buffer_capacity"><i class="ti ti-function"></i> buffer_capacity</a></li><li class="sb-fn"><a href="#degree_of_dissociation"><i class="ti ti-function"></i> degree_of_dissociation</a></li><li class="sb-fn"><a href="#pka_from_ka"><i class="ti ti-function"></i> pka_from_ka</a></li><li class="sb-fn"><a href="#cell_potential_standard"><i class="ti ti-function"></i> cell_potential_standard</a></li><li class="sb-fn"><a href="#nernst_equation"><i class="ti ti-function"></i> nernst_equation</a></li><li class="sb-fn"><a href="#nernst_at_25c"><i class="ti ti-function"></i> nernst_at_25c</a></li><li class="sb-fn"><a href="#gibbs_from_emf"><i class="ti ti-function"></i> gibbs_from_emf</a></li><li class="sb-fn"><a href="#keq_from_emf"><i class="ti ti-function"></i> keq_from_emf</a></li><li class="sb-fn"><a href="#emf_from_keq"><i class="ti ti-function"></i> emf_from_keq</a></li><li class="sb-fn"><a href="#electrolysis_mass"><i class="ti ti-function"></i> electrolysis_mass</a></li><li class="sb-fn"><a href="#electrolysis_time"><i class="ti ti-function"></i> electrolysis_time</a></li><li class="sb-fn"><a href="#molar_conductivity"><i class="ti ti-function"></i> molar_conductivity</a></li><li class="sb-fn"><a href="#kohlrausch_conductivity"><i class="ti ti-function"></i> kohlrausch_conductivity</a></li><li class="sb-fn"><a href="#decay_constant"><i class="ti ti-function"></i> decay_constant</a></li><li class="sb-fn"><a href="#activity"><i class="ti ti-function"></i> activity</a></li><li class="sb-fn"><a href="#nuclei_remaining"><i class="ti ti-function"></i> nuclei_remaining</a></li><li class="sb-fn"><a href="#activity_remaining"><i class="ti ti-function"></i> activity_remaining</a></li><li class="sb-fn"><a href="#radiometric_age"><i class="ti ti-function"></i> radiometric_age</a></li><li class="sb-fn"><a href="#carbon14_age"><i class="ti ti-function"></i> carbon14_age</a></li><li class="sb-fn"><a href="#mass_defect"><i class="ti ti-function"></i> mass_defect</a></li><li class="sb-fn"><a href="#binding_energy"><i class="ti ti-function"></i> binding_energy</a></li><li class="sb-fn"><a href="#binding_energy_per_nucleon"><i class="ti ti-function"></i> binding_energy_per_nucleon</a></li><li class="sb-fn"><a href="#q_value_decay"><i class="ti ti-function"></i> q_value_decay</a></li><li class="sb-fn"><a href="#becquerel_to_curie"><i class="ti ti-function"></i> becquerel_to_curie</a></li><li class="sb-fn"><a href="#curie_to_becquerel"><i class="ti ti-function"></i> curie_to_becquerel</a></li><li class="sb-fn"><a href="#bohr_energy"><i class="ti ti-function"></i> bohr_energy</a></li><li class="sb-fn"><a href="#bohr_radius_n"><i class="ti ti-function"></i> bohr_radius_n</a></li><li class="sb-fn"><a href="#rydberg_wavelength"><i class="ti ti-function"></i> rydberg_wavelength</a></li><li class="sb-fn"><a href="#photon_energy"><i class="ti ti-function"></i> photon_energy</a></li><li class="sb-fn"><a href="#photon_energy_wavelength"><i class="ti ti-function"></i> photon_energy_wavelength</a></li><li class="sb-fn"><a href="#de_broglie_wavelength"><i class="ti ti-function"></i> de_broglie_wavelength</a></li><li class="sb-fn"><a href="#heisenberg_uncertainty_x"><i class="ti ti-function"></i> heisenberg_uncertainty_x</a></li><li class="sb-fn"><a href="#heisenberg_uncertainty_e"><i class="ti ti-function"></i> heisenberg_uncertainty_e</a></li><li class="sb-fn"><a href="#effective_nuclear_charge"><i class="ti ti-function"></i> effective_nuclear_charge</a></li><li class="sb-fn"><a href="#ionization_energy"><i class="ti ti-function"></i> ionization_energy</a></li><li class="sb-fn"><a href="#boiling_point_elevation"><i class="ti ti-function"></i> boiling_point_elevation</a></li><li class="sb-fn"><a href="#freezing_point_depression"><i class="ti ti-function"></i> freezing_point_depression</a></li><li class="sb-fn"><a href="#osmotic_pressure"><i class="ti ti-function"></i> osmotic_pressure</a></li><li class="sb-fn"><a href="#raoult_law_ideal"><i class="ti ti-function"></i> raoult_law_ideal</a></li><li class="sb-fn"><a href="#raoult_law_pressure_lowering"><i class="ti ti-function"></i> raoult_law_pressure_lowering</a></li><li class="sb-fn"><a href="#henry_law"><i class="ti ti-function"></i> henry_law</a></li><li class="sb-fn"><a href="#molarity_to_molality"><i class="ti ti-function"></i> molarity_to_molality</a></li><li class="sb-fn"><a href="#mole_fraction_to_molality"><i class="ti ti-function"></i> mole_fraction_to_molality</a></li><li class="sb-fn"><a href="#van_t_hoff_factor_apparent"><i class="ti ti-function"></i> van_t_hoff_factor_apparent</a></li><li class="sb-fn"><a href="#degree_of_dissociation_vant"><i class="ti ti-function"></i> degree_of_dissociation_vant</a></li><li class="sb-fn"><a href="#born_lande_lattice_energy"><i class="ti ti-function"></i> born_lande_lattice_energy</a></li><li class="sb-fn"><a href="#born_haber_lattice_energy"><i class="ti ti-function"></i> born_haber_lattice_energy</a></li><li class="sb-fn"><a href="#kapustinskii_lattice_energy"><i class="ti ti-function"></i> kapustinskii_lattice_energy</a></li><li class="sb-fn"><a href="#crystal_field_stabilization_energy"><i class="ti ti-function"></i> crystal_field_stabilization_energy</a></li><li class="sb-fn"><a href="#ionic_radius_ratio"><i class="ti ti-function"></i> ionic_radius_ratio</a></li><li class="sb-fn"><a href="#pauling_ionic_character"><i class="ti ti-function"></i> pauling_ionic_character</a></li><li class="sb-fn"><a href="#madelung_energy_per_ion"><i class="ti ti-function"></i> madelung_energy_per_ion</a></li><li class="sb-fn"><a href="#degree_of_unsaturation"><i class="ti ti-function"></i> degree_of_unsaturation</a></li><li class="sb-fn"><a href="#empirical_ratio"><i class="ti ti-function"></i> empirical_ratio</a></li><li class="sb-fn"><a href="#molecular_formula_multiplier"><i class="ti ti-function"></i> molecular_formula_multiplier</a></li><li class="sb-fn"><a href="#moles_from_combustion_co2"><i class="ti ti-function"></i> moles_from_combustion_co2</a></li><li class="sb-fn"><a href="#moles_from_combustion_h2o"><i class="ti ti-function"></i> moles_from_combustion_h2o</a></li><li class="sb-fn"><a href="#mass_oxygen_by_difference"><i class="ti ti-function"></i> mass_oxygen_by_difference</a></li><li class="sb-fn"><a href="#beer_lambert_absorbance"><i class="ti ti-function"></i> beer_lambert_absorbance</a></li><li class="sb-fn"><a href="#beer_lambert_concentration"><i class="ti ti-function"></i> beer_lambert_concentration</a></li><li class="sb-fn"><a href="#transmittance_from_absorbance"><i class="ti ti-function"></i> transmittance_from_absorbance</a></li><li class="sb-fn"><a href="#absorbance_from_transmittance"><i class="ti ti-function"></i> absorbance_from_transmittance</a></li><li class="sb-fn"><a href="#wavelength_to_frequency"><i class="ti ti-function"></i> wavelength_to_frequency</a></li><li class="sb-fn"><a href="#frequency_to_wavelength"><i class="ti ti-function"></i> frequency_to_wavelength</a></li><li class="sb-fn"><a href="#wavenumber_to_wavelength"><i class="ti ti-function"></i> wavenumber_to_wavelength</a></li><li class="sb-fn"><a href="#wavelength_to_wavenumber"><i class="ti ti-function"></i> wavelength_to_wavenumber</a></li><li class="sb-fn"><a href="#energy_per_mole_photons"><i class="ti ti-function"></i> energy_per_mole_photons</a></li></ul>
+</nav>
+<main class="main">
+  <h1>🔥 mocha-chem.mch</h1>
+  <p class="subtitle">Generated by <strong>mocha doc</strong></p>
+  <h2>Functions</h2>
+<div class="card" id="c_print_err">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_print_err</span><span class="paren">(</span><span class="param-name">msg</span><span class="colon">:</span> <span class="param-type">str</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mocha-chem: Section 1 — Stoichiometry &amp; Real Gases. Mole/mass conversions, concentration units, yield,. effusion, and real gas behavior via van der Waals. Ideal gas law excluded by design; PV = nRT does not model reality.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exit">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exit</span><span class="paren">(</span><span class="param-name">code</span><span class="colon">:</span> <span class="param-type">int</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">null</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="c_exp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">c_exp</span><span class="paren">(</span><span class="param-name">x</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_mul">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_mul</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="unsafe_div">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">unsafe_div</span><span class="paren">(</span><span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  <span class="badge badge-native">native</span>
+</div>
+  <div class="doc-body">
+    <p class="no-doc">No documentation.</p>
+  </div>
+</div>
+
+<div class="card" id="moles_from_mass">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">moles_from_mass</span><span class="paren">(</span><span class="param-name">mass_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">moles_from_mass: grams to moles given molar mass (g/mol). mass &gt;= 0, molar_mass &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="mass_from_moles">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mass_from_moles</span><span class="paren">(</span><span class="param-name">moles</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mass_from_moles: moles to grams given molar mass (g/mol). moles &gt;= 0, molar_mass &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="stoich_moles">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">stoich_moles</span><span class="paren">(</span><span class="param-name">moles_given</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">coeff_given</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">coeff_wanted</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">stoich_moles: scale moles through a stoichiometric ratio. moles_given &gt;= 0, coeff_given &gt; 0, coeff_wanted &gt; 0 (coefficients are counts, always &gt;= 1).</p>
+  </div>
+</div>
+
+<div class="card" id="percent_yield">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">percent_yield</span><span class="paren">(</span><span class="param-name">actual_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">theoretical_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">percent_yield: actual yield as percentage of theoretical yield (%). actual_g &gt;= 0, theoretical_g &gt; 0. Yield &gt; 100% is physically possible (impure/wet product) and not guarded.</p>
+  </div>
+</div>
+
+<div class="card" id="percent_composition">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">percent_composition</span><span class="paren">(</span><span class="param-name">mass_element_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_mass_compound</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">percent_composition: mass fraction of an element in a compound (%). mass_element_g &gt;= 0, molar_mass_compound &gt; 0, mass_element_g &lt;= molar_mass_compound.</p>
+  </div>
+</div>
+
+<div class="card" id="molarity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">molarity</span><span class="paren">(</span><span class="param-name">moles_solute</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">volume_l</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">molarity: moles of solute per litre of solution (mol/L). moles &gt;= 0, volume_l &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="molality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">molality</span><span class="paren">(</span><span class="param-name">moles_solute</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_solvent_kg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">molality: moles of solute per kilogram of solvent (mol/kg). moles &gt;= 0, mass_solvent_kg &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="mole_fraction">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mole_fraction</span><span class="paren">(</span><span class="param-name">moles_component</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">total_moles</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mole_fraction: component moles / total moles (dimensionless, 0-1). moles_component in [0, total_moles], total_moles &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="ppm_by_mass">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ppm_by_mass</span><span class="paren">(</span><span class="param-name">mass_solute_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_solution_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ppm_by_mass: parts per million by mass (mg solute / kg solution). mass_solute_g &gt;= 0, mass_solution_g &gt; 0, mass_solute &lt;= mass_solution.</p>
+  </div>
+</div>
+
+<div class="card" id="ppb_by_mass">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ppb_by_mass</span><span class="paren">(</span><span class="param-name">mass_solute_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_solution_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ppb_by_mass: parts per billion by mass (ug solute / kg solution). Same constraints as ppm_by_mass.</p>
+  </div>
+</div>
+
+<div class="card" id="dilution_final_volume">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dilution_final_volume</span><span class="paren">(</span><span class="param-name">c1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">v1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">c2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">dilution_final_volume: find V2 from M1V1 = M2V2. c1 &gt; 0, v1 &gt; 0, c2 &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="van_der_waals_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">van_der_waals_pressure</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">v_l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">van_der_waals_pressure: pressure of a real gas (atm). Uses R = 0.082057 L·atm/(mol·K). n &gt; 0, t_k &gt; 0, v_l &gt; n*b (volume must exceed excluded volume), a &gt; 0, b &gt; 0. P = nRT/(V - nb) - a(n/V)^2.</p>
+  </div>
+</div>
+
+<div class="card" id="van_der_waals_molar_volume">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">van_der_waals_molar_volume</span><span class="paren">(</span><span class="param-name">p</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">van_der_waals_molar_volume: molar volume (L/mol) of a real gas, via Newton-Raphson. p &gt; 0, t_k &gt; 0, a &gt; 0, b &gt; 0. Valid for gas-phase conditions (above critical temperature). Errors if Newton-Raphson fails to converge in 50 iterations.</p>
+  </div>
+</div>
+
+<div class="card" id="dalton_partial_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">dalton_partial_pressure</span><span class="paren">(</span><span class="param-name">mole_frac</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p_total</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">dalton_partial_pressure: partial pressure of a gas component. mole_frac in [0, 1], p_total &gt;= 0. p_i = mole_frac * p_total.</p>
+  </div>
+</div>
+
+<div class="card" id="graham_effusion_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">graham_effusion_ratio</span><span class="paren">(</span><span class="param-name">m1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">graham_effusion_ratio: relative effusion rate of gas 1 vs gas 2. rate1/rate2 = sqrt(m2/m1). m1 &gt; 0, m2 &gt; 0 (molar masses in g/mol).</p>
+  </div>
+</div>
+
+<div class="card" id="heat_q">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heat_q</span><span class="paren">(</span><span class="param-name">mass_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">specific_heat</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">heat_q: heat transferred via specific heat capacity (J). mass &gt;= 0, specific_heat &gt;= 0. q = m * c * delta_t.</p>
+  </div>
+</div>
+
+<div class="card" id="heat_constant_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heat_constant_pressure</span><span class="paren">(</span><span class="param-name">n_moles</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_cp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">heat_constant_pressure: heat at constant pressure (J). n_moles &gt;= 0, molar_cp &gt;= 0. q = n * cp * delta_t.</p>
+  </div>
+</div>
+
+<div class="card" id="enthalpy_rxn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">enthalpy_rxn</span><span class="paren">(</span><span class="param-name">sum_hf_products</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sum_hf_reactants</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">enthalpy_rxn: standard enthalpy of reaction (kJ/mol). No constraints (formation enthalpies can be negative). delta_h_rxn = sum_hf_products - sum_hf_reactants.</p>
+  </div>
+</div>
+
+<div class="card" id="entropy_rxn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">entropy_rxn</span><span class="paren">(</span><span class="param-name">sum_s_products</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sum_s_reactants</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">entropy_rxn: standard entropy of reaction (J/(mol·K)). No constraints. delta_s_rxn = sum_s_products - sum_s_reactants.</p>
+  </div>
+</div>
+
+<div class="card" id="gibbs_free_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gibbs_free_energy</span><span class="paren">(</span><span class="param-name">delta_h</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">gibbs_free_energy: Gibbs free energy change (J/mol). t_k &gt; 0 (absolute temperature). delta_g = delta_h - t_k * delta_s.</p>
+  </div>
+</div>
+
+<div class="card" id="gibbs_from_keq">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gibbs_from_keq</span><span class="paren">(</span><span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">keq</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">gibbs_from_keq: standard Gibbs free energy from equilibrium constant (J/mol). Requires t_k &gt; 0 and keq &gt; 0. delta_g_std = -RT ln(K).</p>
+  </div>
+</div>
+
+<div class="card" id="keq_from_gibbs">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">keq_from_gibbs</span><span class="paren">(</span><span class="param-name">delta_g_std</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">keq_from_gibbs: equilibrium constant from standard Gibbs free energy. Requires t_k &gt; 0. K = exp(-delta_g_std / RT).</p>
+  </div>
+</div>
+
+<div class="card" id="clausius_clapeyron_p2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clausius_clapeyron_p2</span><span class="paren">(</span><span class="param-name">p1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t2_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_h_vap</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">clausius_clapeyron_p2: vapour pressure at t2_k given known p1 at t1_k (same units as p1). Requires p1 &gt; 0, t1_k &gt; 0, t2_k &gt; 0, delta_h_vap &gt; 0. ln(P2/P1) = -(delta_h_vap/R) * (1/T2 - 1/T1).</p>
+  </div>
+</div>
+
+<div class="card" id="clausius_clapeyron_t2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">clausius_clapeyron_t2</span><span class="paren">(</span><span class="param-name">p1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_h_vap</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">clausius_clapeyron_t2: temperature at p2 given known p1 at t1_k (K). Requires p1 &gt; 0, p2 &gt; 0, t1_k &gt; 0, delta_h_vap &gt; 0. Errors if T2 solution is non-physical. 1/T2 = 1/T1 - (R/delta_h_vap) * ln(P2/P1).</p>
+  </div>
+</div>
+
+<div class="card" id="bond_enthalpy_rxn">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bond_enthalpy_rxn</span><span class="paren">(</span><span class="param-name">bonds_broken</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">bonds_formed</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">bond_enthalpy_rxn: enthalpy of reaction from bond energies (kJ/mol). No constraints. delta_h = bonds_broken - bonds_formed.</p>
+  </div>
+</div>
+
+<div class="card" id="kirchhoff_enthalpy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kirchhoff_enthalpy</span><span class="paren">(</span><span class="param-name">delta_h_t1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_cp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t2_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">kirchhoff_enthalpy: enthalpy at t2_k corrected for heat capacity (J/mol). Requires t1_k &gt; 0 and t2_k &gt; 0 (both absolute temperatures). delta_h(T2) = delta_h(T1) + delta_cp * (T2 - T1).</p>
+  </div>
+</div>
+
+<div class="card" id="entropy_surroundings">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">entropy_surroundings</span><span class="paren">(</span><span class="param-name">delta_h_sys</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">entropy_surroundings: entropy change of surroundings (J/K). Requires t_k &gt; 0. delta_s_surr = -delta_h_sys / T.</p>
+  </div>
+</div>
+
+<div class="card" id="entropy_universe">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">entropy_universe</span><span class="paren">(</span><span class="param-name">delta_s_sys</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_s_surr</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">entropy_universe: total entropy change (J/K). No constraints. delta_s_univ = delta_s_sys + delta_s_surr.</p>
+  </div>
+</div>
+
+<div class="card" id="gibbs_equilibrium_temp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gibbs_equilibrium_temp</span><span class="paren">(</span><span class="param-name">delta_h</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_s</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">gibbs_equilibrium_temp: temperature at which delta_g = 0 (K). T = delta_h / delta_s. Errors if delta_s = 0 (division by zero). NOTE: if delta_h and delta_s have opposite signs, the equation has NO positive-temperature solution — errors with explanation.</p>
+  </div>
+</div>
+
+<div class="card" id="conc_zero_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">conc_zero_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">conc_zero_order: concentration at time t for zero-order reaction (mol/L). Requires conc_init &gt;= 0, k &gt;= 0, t &gt;= 0. Errors if k*t &gt; conc_init (would give negative concentration). [A]t = [A]0 - k*t.</p>
+  </div>
+</div>
+
+<div class="card" id="conc_first_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">conc_first_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">conc_first_order: concentration at time t for first-order reaction (mol/L). Requires conc_init &gt;= 0, k &gt;= 0, t &gt;= 0. [A]t = [A]0 * exp(-k*t).</p>
+  </div>
+</div>
+
+<div class="card" id="conc_second_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">conc_second_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">conc_second_order: concentration at time t for second-order reaction (mol/L). Requires conc_init &gt; 0, k &gt;= 0, t &gt;= 0. [A]t = 1 / (1/[A]0 + k*t).</p>
+  </div>
+</div>
+
+<div class="card" id="half_life_zero_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">half_life_zero_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">half_life_zero_order: half-life for zero-order reaction (s). Requires conc_init &gt; 0, k &gt; 0. t½ = [A]0 / (2k).</p>
+  </div>
+</div>
+
+<div class="card" id="half_life_first_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">half_life_first_order</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">half_life_first_order: half-life for first-order reaction (s). Requires k &gt; 0. t½ = ln(2) / k.</p>
+  </div>
+</div>
+
+<div class="card" id="half_life_second_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">half_life_second_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">half_life_second_order: half-life for second-order reaction (s). Requires conc_init &gt; 0, k &gt; 0. t½ = 1 / (k * [A]0).</p>
+  </div>
+</div>
+
+<div class="card" id="arrhenius_k">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">arrhenius_k</span><span class="paren">(</span><span class="param-name">a_factor</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ea</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">arrhenius_k: rate constant from Arrhenius equation. Requires a_factor &gt; 0, ea &gt;= 0, t_k &gt; 0. k = A * exp(-Ea / RT).</p>
+  </div>
+</div>
+
+<div class="card" id="activation_energy_two_point">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">activation_energy_two_point</span><span class="paren">(</span><span class="param-name">k1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k2</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t2_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">activation_energy_two_point: Ea from two rate constants at two temperatures (J/mol). Requires k1 &gt; 0, k2 &gt; 0, t1_k &gt; 0, t2_k &gt; 0, t1_k != t2_k. Ea = -R * ln(k2/k1) / (1/T2 - 1/T1).</p>
+  </div>
+</div>
+
+<div class="card" id="rate_law">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rate_law</span><span class="paren">(</span><span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">order_a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_b</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">order_b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">rate_law: reaction rate from concentrations and orders. Requires k &gt;= 0, conc_a &gt; 0, conc_b &gt; 0. rate = k * [A]^a * [B]^b.</p>
+  </div>
+</div>
+
+<div class="card" id="time_to_conc_first_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">time_to_conc_first_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_final</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">time_to_conc_first_order: time to reach conc_final from conc_init (s). Requires conc_init &gt; 0, conc_final &gt; 0, k &gt; 0. t = ln([A]0 / [A]t) / k.</p>
+  </div>
+</div>
+
+<div class="card" id="time_to_conc_second_order">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">time_to_conc_second_order</span><span class="paren">(</span><span class="param-name">conc_init</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_final</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">time_to_conc_second_order: time to reach conc_final from conc_init (s). Requires conc_init &gt; 0, conc_final &gt; 0, k &gt; 0. t = (1/[A]t - 1/[A]0) / k.</p>
+  </div>
+</div>
+
+<div class="card" id="arrhenius_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">arrhenius_ratio</span><span class="paren">(</span><span class="param-name">ea</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t1_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t2_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">arrhenius_ratio: ratio k2/k1 at two temperatures given activation energy. Requires ea &gt;= 0, t1_k &gt; 0, t2_k &gt; 0. k2/k1 = exp(-Ea/R * (1/T2 - 1/T1)).</p>
+  </div>
+</div>
+
+<div class="card" id="kc_from_kp">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kc_from_kp</span><span class="paren">(</span><span class="param-name">kp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">kc_from_kp: equilibrium constant in concentration from pressure form. Kc = Kp / (RT)^delta_n. Requires kp &gt; 0, t_k &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="kp_from_kc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kp_from_kc</span><span class="paren">(</span><span class="param-name">kc</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">kp_from_kc: equilibrium constant in pressure from concentration form. Kp = Kc * (RT)^delta_n. Requires kc &gt; 0, t_k &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="reaction_quotient">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">reaction_quotient</span><span class="paren">(</span><span class="param-name">conc_products</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_reactants</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">reaction_quotient: Q = conc_products / conc_reactants. Requires conc_products &gt;= 0, conc_reactants &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="ksp_from_concentrations">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ksp_from_concentrations</span><span class="paren">(</span><span class="param-name">ion_a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ion_b</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ksp_from_concentrations: Ksp = [A]*[B] (pre-powered values). Requires ion_a &gt;= 0, ion_b &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="solubility_from_ksp_1_1">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">solubility_from_ksp_1_1</span><span class="paren">(</span><span class="param-name">ksp</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">solubility_from_ksp_1_1: molar solubility for 1:1 salt (mol/L). s = sqrt(Ksp). Requires ksp &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="common_ion_solubility">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">common_ion_solubility</span><span class="paren">(</span><span class="param-name">ksp</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">c_ion</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">common_ion_solubility: molar solubility of AB in solution containing B-. Requires ksp &gt;= 0, c_ion &gt;= 0. s = (-c_ion + sqrt(c_ion^2 + 4*Ksp)) / 2.</p>
+  </div>
+</div>
+
+<div class="card" id="ph_from_h_conc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ph_from_h_conc</span><span class="paren">(</span><span class="param-name">h_conc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ph_from_h_conc: pH = -log10([H+]). Requires h_conc &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="h_conc_from_ph">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">h_conc_from_ph</span><span class="paren">(</span><span class="param-name">ph</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">h_conc_from_ph: [H+] = 10^(-pH) (mol/L). No constraints (any real pH is mathematically valid).</p>
+  </div>
+</div>
+
+<div class="card" id="poh_from_oh_conc">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">poh_from_oh_conc</span><span class="paren">(</span><span class="param-name">oh_conc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">poh_from_oh_conc: pOH = -log10([OH-]). Requires oh_conc &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="ph_from_poh">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ph_from_poh</span><span class="paren">(</span><span class="param-name">poh</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ph_from_poh: pH = 14 - pOH (valid at 25°C). No constraints.</p>
+  </div>
+</div>
+
+<div class="card" id="henderson_hasselbalch">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">henderson_hasselbalch</span><span class="paren">(</span><span class="param-name">pka</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_base</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_acid</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">henderson_hasselbalch: pH = pKa + log10([A-]/[HA]). Requires conc_base &gt; 0, conc_acid &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="ph_weak_acid">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ph_weak_acid</span><span class="paren">(</span><span class="param-name">ka</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_acid</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ph_weak_acid: approximate pH of weak acid solution. [H+] = sqrt(Ka*Ca). Requires ka &gt; 0, conc_acid &gt; 0. Approximation valid for alpha &lt;&lt; 1 (Ka &lt;&lt; Ca).</p>
+  </div>
+</div>
+
+<div class="card" id="ph_weak_base">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ph_weak_base</span><span class="paren">(</span><span class="param-name">kb</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_base</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ph_weak_base: approximate pH of weak base solution. [OH-] = sqrt(Kb*Cb), pH = 14 - pOH. Requires kb &gt; 0, conc_base &gt; 0. Approximation valid for alpha &lt;&lt; 1 (Kb &lt;&lt; Cb).</p>
+  </div>
+</div>
+
+<div class="card" id="buffer_capacity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">buffer_capacity</span><span class="paren">(</span><span class="param-name">total_conc</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ka</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ph</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">buffer_capacity: resistance of buffer to pH change (mol/(L·pH)). Requires total_conc &gt; 0, ka &gt; 0. beta = 2.303 * C * Ka*[H+] / (Ka + [H+])^2.</p>
+  </div>
+</div>
+
+<div class="card" id="degree_of_dissociation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degree_of_dissociation</span><span class="paren">(</span><span class="param-name">ka</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_acid</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">degree_of_dissociation: fraction of weak acid dissociated (approx, alpha &lt;&lt; 1). Requires ka &gt; 0, conc_acid &gt; 0. Result must be &lt;= 1 for approximation to be valid.</p>
+  </div>
+</div>
+
+<div class="card" id="pka_from_ka">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pka_from_ka</span><span class="paren">(</span><span class="param-name">ka</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">pka_from_ka: pKa = -log10(Ka). Requires ka &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="cell_potential_standard">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">cell_potential_standard</span><span class="paren">(</span><span class="param-name">e_cathode</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e_anode</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">cell_potential_standard: E°cell = E°cathode - E°anode (V). No constraints (potentials can be negative).</p>
+  </div>
+</div>
+
+<div class="card" id="nernst_equation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">nernst_equation</span><span class="paren">(</span><span class="param-name">e_std</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">q</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">nernst_equation: cell potential at non-standard conditions (V). Requires n_electrons &gt; 0, q &gt; 0, t_k &gt; 0. E = E° - (RT/nF) * ln(Q).</p>
+  </div>
+</div>
+
+<div class="card" id="nernst_at_25c">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">nernst_at_25c</span><span class="paren">(</span><span class="param-name">e_std</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">q</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">nernst_at_25c: Nernst equation at 298K (V). Requires n_electrons &gt; 0, q &gt; 0. E = E° - (0.05916/n) * log10(Q).</p>
+  </div>
+</div>
+
+<div class="card" id="gibbs_from_emf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">gibbs_from_emf</span><span class="paren">(</span><span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e_cell</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">gibbs_from_emf: standard Gibbs free energy from cell potential (J/mol). Requires n_electrons &gt; 0. delta_g = -n * F * E°.</p>
+  </div>
+</div>
+
+<div class="card" id="keq_from_emf">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">keq_from_emf</span><span class="paren">(</span><span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">e_std</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">keq_from_emf: equilibrium constant from standard cell potential. Requires n_electrons &gt; 0, t_k &gt; 0. K = exp(nFE° / RT). Errors if exponent overflows.</p>
+  </div>
+</div>
+
+<div class="card" id="emf_from_keq">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">emf_from_keq</span><span class="paren">(</span><span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">keq</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">emf_from_keq: standard cell potential from equilibrium constant (V). Requires n_electrons &gt; 0, keq &gt; 0, t_k &gt; 0. E° = (RT/nF) * ln(K).</p>
+  </div>
+</div>
+
+<div class="card" id="electrolysis_mass">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">electrolysis_mass</span><span class="paren">(</span><span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">current_a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">time_s</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">electrolysis_mass: mass deposited by electrolysis (g). m = I*t*M/(nF). Requires molar_mass &gt; 0, current_a &gt;= 0, time_s &gt;= 0, n_electrons &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="electrolysis_time">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">electrolysis_time</span><span class="paren">(</span><span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">current_a</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_electrons</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">electrolysis_time: time needed to deposit a given mass (s). t = m*n*F/(I*M). Requires molar_mass &gt; 0, mass_g &gt;= 0, current_a &gt; 0, n_electrons &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="molar_conductivity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">molar_conductivity</span><span class="paren">(</span><span class="param-name">conductivity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc_mol_m3</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">molar_conductivity: molar conductivity from measured conductivity (S·m²/mol). Requires conductivity &gt;= 0, conc_mol_m3 &gt; 0. lambda_m = kappa / c.</p>
+  </div>
+</div>
+
+<div class="card" id="kohlrausch_conductivity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kohlrausch_conductivity</span><span class="paren">(</span><span class="param-name">lambda_inf</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k_const</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">kohlrausch_conductivity: molar conductivity from Kohlrausch law (S·m²/mol). Requires lambda_inf &gt;= 0, k_const &gt;= 0, conc &gt;= 0. lambda_m = lambda_inf - k_const * sqrt(c).</p>
+  </div>
+</div>
+
+<div class="card" id="decay_constant">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">decay_constant</span><span class="paren">(</span><span class="param-name">t_half</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">decay_constant: lambda = ln(2) / t_half. Requires t_half &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="activity">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">activity</span><span class="paren">(</span><span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_nuclei</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">activity: decays per unit time (same unit as lambda). A = lambda * n_nuclei. Requires lamb_da &gt;= 0, n_nuclei &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="nuclei_remaining">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">nuclei_remaining</span><span class="paren">(</span><span class="param-name">n0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">nuclei_remaining: N(t) = N0 * exp(-lambda * t). Requires n0 &gt;= 0, lamb_da &gt;= 0, t &gt;= 0. Uses unsafe_mul: N0 can be astronomically large (atom counts).</p>
+  </div>
+</div>
+
+<div class="card" id="activity_remaining">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">activity_remaining</span><span class="paren">(</span><span class="param-name">a0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">activity_remaining: A(t) = A0 * exp(-lambda * t). Requires a0 &gt;= 0, lamb_da &gt;= 0, t &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="radiometric_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">radiometric_age</span><span class="paren">(</span><span class="param-name">n0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">lamb_da</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">radiometric_age: t = ln(n0/n) / lambda. Requires n0 &gt; 0, n &gt; 0, lamb_da &gt; 0. Errors if n &gt; n0 (would give negative age — physically impossible in decay).</p>
+  </div>
+</div>
+
+<div class="card" id="carbon14_age">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">carbon14_age</span><span class="paren">(</span><span class="param-name">a0</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">a</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">carbon14_age: age from specific activity ratio (years). Requires a0 &gt; 0, a &gt; 0, a &lt;= a0. Errors if a &gt; a0 (would give negative C-14 age). t = ln(a0/a) / lambda_c14.</p>
+  </div>
+</div>
+
+<div class="card" id="mass_defect">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mass_defect</span><span class="paren">(</span><span class="param-name">z</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_neutrons</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_proton</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_neutron</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_atom</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mass_defect: difference between constituent masses and atomic mass (u). No constraints. delta_m = Z*m_proton + N*m_neutron - m_atom.</p>
+  </div>
+</div>
+
+<div class="card" id="binding_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">binding_energy</span><span class="paren">(</span><span class="param-name">mass_defect_u</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">binding_energy: nuclear binding energy (MeV). Requires mass_defect_u &gt;= 0. E = mass_defect * 931.494 MeV/u.</p>
+  </div>
+</div>
+
+<div class="card" id="binding_energy_per_nucleon">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">binding_energy_per_nucleon</span><span class="paren">(</span><span class="param-name">binding_energy_mev</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_number</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">binding_energy_per_nucleon: binding energy per nucleon (MeV/nucleon). Requires binding_energy_mev &gt;= 0, mass_number &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="q_value_decay">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">q_value_decay</span><span class="paren">(</span><span class="param-name">m_parent</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_daughter</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_emitted</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">q_value_decay: energy released in nuclear decay (MeV). No constraints. Positive Q means spontaneous decay; negative Q means energetically forbidden. Q = (m_parent - m_daughter - m_emitted) * 931.494.</p>
+  </div>
+</div>
+
+<div class="card" id="becquerel_to_curie">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">becquerel_to_curie</span><span class="paren">(</span><span class="param-name">bq</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">becquerel_to_curie: convert activity units (1 Ci = 3.7e10 Bq). Requires bq &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="curie_to_becquerel">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">curie_to_becquerel</span><span class="paren">(</span><span class="param-name">ci</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">curie_to_becquerel: convert activity units. Requires ci &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="bohr_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bohr_energy</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">bohr_energy: electron energy at quantum level n (eV). En = -13.6 / n^2. Requires n &gt; 0 (quantum number, positive).</p>
+  </div>
+</div>
+
+<div class="card" id="bohr_radius_n">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">bohr_radius_n</span><span class="paren">(</span><span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">bohr_radius_n: orbital radius at quantum level n (m). rn = n^2 * a0. Requires n &gt; 0 (quantum number, positive).</p>
+  </div>
+</div>
+
+<div class="card" id="rydberg_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">rydberg_wavelength</span><span class="paren">(</span><span class="param-name">n1</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n2</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">rydberg_wavelength: photon wavelength for electronic transition (m). 1/lambda = R_inf * (1/n1^2 - 1/n2^2). Requires n1 &gt; 0, n2 &gt; 0, n2 &gt; n1 (emission).</p>
+  </div>
+</div>
+
+<div class="card" id="photon_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">photon_energy</span><span class="paren">(</span><span class="param-name">freq_hz</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">photon_energy: energy of a photon given frequency (J). E = h * f. Requires freq_hz &gt; 0 (photon energy must be positive).</p>
+  </div>
+</div>
+
+<div class="card" id="photon_energy_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">photon_energy_wavelength</span><span class="paren">(</span><span class="param-name">wavelength_m</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">photon_energy_wavelength: energy of a photon given wavelength (J). E = hc / lambda. Requires wavelength_m &gt; 0 (photon energy must be positive).</p>
+  </div>
+</div>
+
+<div class="card" id="de_broglie_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">de_broglie_wavelength</span><span class="paren">(</span><span class="param-name">mass_kg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">velocity_ms</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">de_broglie_wavelength: matter wave wavelength (m). lambda = h / (m * v). Requires mass_kg &gt; 0, velocity_ms &gt; 0. Uses unsafe_mul/div: quantum-scale values outside fixed-point safe range.</p>
+  </div>
+</div>
+
+<div class="card" id="heisenberg_uncertainty_x">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heisenberg_uncertainty_x</span><span class="paren">(</span><span class="param-name">delta_p</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">heisenberg_uncertainty_x: minimum position uncertainty (m). delta_x = hbar / (2 * delta_p). Requires delta_p &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="heisenberg_uncertainty_e">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">heisenberg_uncertainty_e</span><span class="paren">(</span><span class="param-name">delta_t</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">heisenberg_uncertainty_e: minimum energy uncertainty (J). delta_E = hbar / (2 * delta_t). Requires delta_t &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="effective_nuclear_charge">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">effective_nuclear_charge</span><span class="paren">(</span><span class="param-name">z</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">sigma</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">effective_nuclear_charge: Z_eff = Z - sigma (Slater screening). Requires z &gt;= 0, sigma &gt;= 0, sigma &lt; z (result must be positive).</p>
+  </div>
+</div>
+
+<div class="card" id="ionization_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ionization_energy</span><span class="paren">(</span><span class="param-name">z_eff</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ionization_energy: energy to remove electron (eV). IE = 13.6 * Z_eff^2 / n^2. Requires z_eff &gt; 0, n &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="boiling_point_elevation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">boiling_point_elevation</span><span class="paren">(</span><span class="param-name">kb</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molality</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">boiling_point_elevation: delta_Tb = Kb * molality * i (°C). Requires kb &gt; 0, molality &gt;= 0, i &gt;= 1 (van&#x27;t Hoff factor for dissociation; use i = 1 for non-electrolytes).</p>
+  </div>
+</div>
+
+<div class="card" id="freezing_point_depression">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">freezing_point_depression</span><span class="paren">(</span><span class="param-name">kf</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molality</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">freezing_point_depression: delta_Tf = Kf * molality * i (°C). Requires kf &gt; 0, molality &gt;= 0, i &gt;= 1.</p>
+  </div>
+</div>
+
+<div class="card" id="osmotic_pressure">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">osmotic_pressure</span><span class="paren">(</span><span class="param-name">molarity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">t_k</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">i</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">osmotic_pressure: pi = M * R * T * i (atm). Requires molarity &gt;= 0, t_k &gt; 0, i &gt;= 1.</p>
+  </div>
+</div>
+
+<div class="card" id="raoult_law_ideal">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">raoult_law_ideal</span><span class="paren">(</span><span class="param-name">x_solvent</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p_pure</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">raoult_law_ideal: vapour pressure of ideal solution. P_solution = x_solvent * P_pure. Requires x_solvent in [0, 1], p_pure &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="raoult_law_pressure_lowering">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">raoult_law_pressure_lowering</span><span class="paren">(</span><span class="param-name">x_solute</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">p_pure</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">raoult_law_pressure_lowering: delta_P = x_solute * P_pure. Requires x_solute in [0, 1], p_pure &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="henry_law">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">henry_law</span><span class="paren">(</span><span class="param-name">k_h</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">partial_pressure</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">henry_law: dissolved gas concentration from partial pressure (mol/L). C = k_H * P. Requires k_h &gt;= 0, partial_pressure &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="molarity_to_molality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">molarity_to_molality</span><span class="paren">(</span><span class="param-name">molarity</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">rho_g_per_l</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molar_mass</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">molarity_to_molality: convert molarity to molality (mol/kg). m = (M * 1000) / (rho - M * molar_mass). Requires molarity &gt;= 0, rho_g_per_l &gt; 0, molar_mass &gt; 0. Errors if denominator (rho - M*molar_mass) &lt;= 0 (impossible solution density).</p>
+  </div>
+</div>
+
+<div class="card" id="mole_fraction_to_molality">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mole_fraction_to_molality</span><span class="paren">(</span><span class="param-name">x_solute</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">x_solvent</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">m_solvent_kg</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mole_fraction_to_molality: convert mole fraction to molality (mol/kg). m = x_solute / (x_solvent * M_solvent). Requires x_solute &gt;= 0, x_solvent &gt; 0, m_solvent_kg &gt; 0. Errors if x_solute + x_solvent != 1 (within tolerance).</p>
+  </div>
+</div>
+
+<div class="card" id="van_t_hoff_factor_apparent">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">van_t_hoff_factor_apparent</span><span class="paren">(</span><span class="param-name">delta_t</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">k_const</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">molality</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">van_t_hoff_factor_apparent: observed i from colligative property measurement. i = delta_T / (K * molality). Requires delta_t &gt;= 0, k_const &gt; 0, molality &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="degree_of_dissociation_vant">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degree_of_dissociation_vant</span><span class="paren">(</span><span class="param-name">i</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">degree_of_dissociation_vant: fraction dissociated from van&#x27;t Hoff factor. alpha = (i - 1) / (n - 1). Requires i &gt;= 1, n &gt; 1 (use only for electrolytes), i &lt;= n (alpha must be &lt;= 1).</p>
+  </div>
+</div>
+
+<div class="card" id="born_lande_lattice_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">born_lande_lattice_energy</span><span class="paren">(</span><span class="param-name">m_const</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z_plus</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z_minus</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r0_m</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_born</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">born_lande_lattice_energy: lattice energy via Born-Landé equation (J/mol). Requires m_const &gt; 0, r0_m &gt; 0, n_born &gt; 1. Uses unsafe_mul: elementary charge is quantum-scale, underflows fixed-point.</p>
+  </div>
+</div>
+
+<div class="card" id="born_haber_lattice_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">born_haber_lattice_energy</span><span class="paren">(</span><span class="param-name">delta_hf</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_hsub</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_hdiss</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ie</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">ea</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">born_haber_lattice_energy: lattice energy from Born-Haber cycle (kJ/mol). No constraints. U = dHf - dHsub - dHdiss - IE - EA (Hess&#x27;s law arrangement).</p>
+  </div>
+</div>
+
+<div class="card" id="kapustinskii_lattice_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">kapustinskii_lattice_energy</span><span class="paren">(</span><span class="param-name">nu_ions</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z_plus</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">z_minus</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r0_pm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">kapustinskii_lattice_energy: lattice energy without crystal structure (kJ/mol). Requires nu_ions &gt;= 2, r0_pm &gt; 0. U = (1.2025e5 * nu * |z+z-| / r0) * (1 - 0.345/r0) | r0_pm in picometres.</p>
+  </div>
+</div>
+
+<div class="card" id="crystal_field_stabilization_energy">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">crystal_field_stabilization_energy</span><span class="paren">(</span><span class="param-name">n_t2g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_eg</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">delta_o</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">crystal_field_stabilization_energy: CFSE for octahedral complex (cm^-1). Requires n_t2g in [0, 6], n_eg in [0, 4], delta_o &gt;= 0. CFSE = (-0.4*n_t2g + 0.6*n_eg) * delta_o.</p>
+  </div>
+</div>
+
+<div class="card" id="ionic_radius_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">ionic_radius_ratio</span><span class="paren">(</span><span class="param-name">r_cation</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r_anion</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">ionic_radius_ratio: rho = r_cation / r_anion (dimensionless). Requires r_cation &gt; 0, r_anion &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="pauling_ionic_character">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">pauling_ionic_character</span><span class="paren">(</span><span class="param-name">delta_chi</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">pauling_ionic_character: percent ionic character of a bond (%). %ionic = (1 - exp(-0.25*(delta_chi)^2)) * 100. No constraints (Δχ sign doesn&#x27;t matter).</p>
+  </div>
+</div>
+
+<div class="card" id="madelung_energy_per_ion">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">madelung_energy_per_ion</span><span class="paren">(</span><span class="param-name">m_const</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">r0_m</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">madelung_energy_per_ion: electrostatic energy per ion pair (J). Requires m_const &gt; 0, r0_m &gt; 0. Uses unsafe_mul: elementary charge is quantum-scale, underflows fixed-point.</p>
+  </div>
+</div>
+
+<div class="card" id="degree_of_unsaturation">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">degree_of_unsaturation</span><span class="paren">(</span><span class="param-name">c_count</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">h_count</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">n_count</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">degree_of_unsaturation: DoU = (2C + 2 + N - H) / 2. Halogens count as H. C &gt;= 0, H &gt;= 0, N &gt;= 0. Errors if the result is non-integer (invalid formula) or negative (impossible composition).</p>
+  </div>
+</div>
+
+<div class="card" id="empirical_ratio">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">empirical_ratio</span><span class="paren">(</span><span class="param-name">moles_element</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">moles_smallest</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">empirical_ratio: ratio of an element&#x27;s moles to the smallest mole count in the sample. moles_element &gt;= 0, moles_smallest &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="molecular_formula_multiplier">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">molecular_formula_multiplier</span><span class="paren">(</span><span class="param-name">molar_mass_actual</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">empirical_formula_mass</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">molecular_formula_multiplier: n = molar_mass_actual / empirical_formula_mass. Requires molar_mass_actual &gt; 0, empirical_formula_mass &gt; 0. Errors if result is non-integer (empirical and molecular masses are inconsistent).</p>
+  </div>
+</div>
+
+<div class="card" id="moles_from_combustion_co2">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">moles_from_combustion_co2</span><span class="paren">(</span><span class="param-name">mass_co2_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">moles_from_combustion_co2: moles of carbon in sample from CO2 produced (mol). Requires mass_co2_g &gt;= 0. moles_C = mass_CO2 / 44.01.</p>
+  </div>
+</div>
+
+<div class="card" id="moles_from_combustion_h2o">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">moles_from_combustion_h2o</span><span class="paren">(</span><span class="param-name">mass_h2o_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">moles_from_combustion_h2o: moles of hydrogen in sample from H2O produced (mol). Requires mass_h2o_g &gt;= 0. moles_H = 2 * (mass_H2O / 18.015).</p>
+  </div>
+</div>
+
+<div class="card" id="mass_oxygen_by_difference">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">mass_oxygen_by_difference</span><span class="paren">(</span><span class="param-name">mass_sample_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_c_g</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">mass_h_g</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">mass_oxygen_by_difference: mass of oxygen in CHO sample (g). mass_O = mass_sample - mass_C - mass_H. Requires all masses &gt;= 0 and mass_C + mass_H &lt;= mass_sample.</p>
+  </div>
+</div>
+
+<div class="card" id="beer_lambert_absorbance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">beer_lambert_absorbance</span><span class="paren">(</span><span class="param-name">epsilon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">conc</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">path_length_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">beer_lambert_absorbance: A = epsilon * c * l. Requires epsilon &gt;= 0, conc &gt;= 0, path_length_cm &gt;= 0.</p>
+  </div>
+</div>
+
+<div class="card" id="beer_lambert_concentration">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">beer_lambert_concentration</span><span class="paren">(</span><span class="param-name">absorbance</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">epsilon</span><span class="colon">:</span> <span class="param-type">float</span>, <span class="param-name">path_length_cm</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">beer_lambert_concentration: solve for concentration from absorbance (mol/L). c = A / (epsilon * l). Requires absorbance &gt;= 0, epsilon &gt; 0, path_length_cm &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="transmittance_from_absorbance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">transmittance_from_absorbance</span><span class="paren">(</span><span class="param-name">absorbance</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">transmittance_from_absorbance: T = 10^(-A) (fraction, 0-1). Requires absorbance &gt;= 0. Errors if result would overflow/underflow.</p>
+  </div>
+</div>
+
+<div class="card" id="absorbance_from_transmittance">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">absorbance_from_transmittance</span><span class="paren">(</span><span class="param-name">transmittance</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">absorbance_from_transmittance: A = -log10(T). Requires transmittance in (0, 1].</p>
+  </div>
+</div>
+
+<div class="card" id="wavelength_to_frequency">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wavelength_to_frequency</span><span class="paren">(</span><span class="param-name">wavelength_m</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">wavelength_to_frequency: f = c / lambda (Hz). Requires wavelength_m &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="frequency_to_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">frequency_to_wavelength</span><span class="paren">(</span><span class="param-name">freq_hz</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">frequency_to_wavelength: lambda = c / f (m). Requires freq_hz &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="wavenumber_to_wavelength">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wavenumber_to_wavelength</span><span class="paren">(</span><span class="param-name">wavenumber</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">wavenumber_to_wavelength: lambda = 1 / wavenumber. Requires wavenumber &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="wavelength_to_wavenumber">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">wavelength_to_wavenumber</span><span class="paren">(</span><span class="param-name">wavelength</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">wavelength_to_wavenumber: wavenumber = 1 / lambda. Requires wavelength &gt; 0.</p>
+  </div>
+</div>
+
+<div class="card" id="energy_per_mole_photons">
+  
+<div class="sig">
+  <span class="kw">function</span>
+  <span class="fn-name">energy_per_mole_photons</span><span class="paren">(</span><span class="param-name">freq_hz</span><span class="colon">:</span> <span class="param-type">float</span><span class="paren">)</span>
+  <span class="arrow">→</span>
+  <span class="ret-type">float</span>
+  
+</div>
+  <div class="doc-body">
+    <p class="doc-desc">energy_per_mole_photons: energy of one mole of photons at given frequency (J/mol). Requires freq_hz &gt; 0. E_mol = N_A * h * f. Uses unsafe_mul: N_A is astronomically large.</p>
+  </div>
+</div>
+</main>
+</body>
+</html>

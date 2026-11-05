@@ -1139,7 +1139,7 @@ function nuclei_remaining(n0: float, lamb_da: float, t: float) -> float {
         c_print_err("MochaLibError (mocha-chem): Time cannot be negative.");
         c_exit(2);
     };
-    return float(unsafe_mul(n0, float(c_exp(-(lamb_da * t)))));
+    return float(n0 * float(c_exp(-(lamb_da * t))));
 };
 
 ~~ activity_remaining: A(t) = A0 * exp(-lambda * t). Requires a0 >= 0, lamb_da >= 0, t >= 0.

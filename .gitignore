@@ -31,10 +31,9 @@ node_modules/
 # ─── Debug / Trace Output ─────────────────────────────────────────────────────
 *.log
 *.map
-trace_output.txt
+*.txt
 test_*.js
 test_*.wasm
-wasm_out.txt
 
 # ─── Scratch / One-off Debug Test Files ──────────────────────────────────────
 avl_change_test.mch
@@ -70,8 +69,7 @@ size_*.wasm
 size_*.wasm.gz
 
 # scratch: new RC tests
-test_c[m-z].mch
-test_[d-g][a-z].mch
+test_[a-z][a-z].mch
 lib_sigs.py
 type_survey2.py
 wasm_regress.ps1
@@ -99,3 +97,9 @@ check_*.py
 gru_seq_train.mch
 *_leak.mch
 build_*.py
+*_check.mch
+idx_*.mch
+tiny_*.mch
+leak_*.mch
+
+!lua_*.mch

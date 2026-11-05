@@ -1,7 +1,7 @@
 /*
  * mocha_cuda_runtime.cu
  * Low-level CUDA + cuBLAS backend for mocha-neuron.
- * Compiled with: nvcc -O3 -arch=sm_60 -shared -o mocha_cuda_runtime.lib mocha_cuda_runtime.cu -lcublas
+ * Compiled with: nvcc -O2 -arch=sm_86 -c -o mocha_cuda_runtime.obj mocha_cuda_runtime.cu
  *
  * sm_60 = Pascal baseline — JIT-compiles to native on any CUDA GPU at first run
  * 
@@ -986,7 +986,14 @@ extern "C" void mocha_lsm_scale_reservoir(MochaTensor* W, double target_sr) {
 
     float eigenvalue = 1.0f;
 
-    for (int iter = 0; iter < 50; iter++) {
+    // one step's growth is a noisy estimate of the spectral radius, so run
+    // longer and use the geometric mean of the growth over the last 100 steps
+    const int total_iters = 300;
+    const int avg_from    = 200;
+    double log_sum = 0.0;
+    int log_count  = 0;
+
+    for (int iter = 0; iter < total_iters; iter++) {
         kernel_matvec<<<blocks(n, 256), 256>>>(W->dev_data, d_v, d_vnew, n, n);
 
         // FIX 1: use ||v_new|| as eigenvalue estimate
@@ -997,12 +1004,18 @@ extern "C" void mocha_lsm_scale_reservoir(MochaTensor* W, double target_sr) {
         eigenvalue = sqrtf(eigenvalue);
         if (eigenvalue < 1e-10f) eigenvalue = 1e-10f;
 
+        if (iter >= avg_from) {
+            log_sum += log((double)eigenvalue);
+            log_count++;
+        }
+
         kernel_scale_vec<<<blocks(n, 256), 256>>>(d_vnew, eigenvalue, n);
 
         float* tmp = d_v; d_v = d_vnew; d_vnew = tmp;
     }
 
-    float scale = (float)target_sr / eigenvalue;
+    double estimate = exp(log_sum / log_count);
+    float scale = (float)(target_sr / estimate);
     kernel_scale<<<blocks(n * n, 256), 256>>>(W->dev_data, scale, n * n);
 
     cudaFree(d_v);
