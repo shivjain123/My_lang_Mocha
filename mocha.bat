@@ -26,6 +26,8 @@ echo.
 echo Usage:
 echo   mocha ^<file.mch^>                 Compile a file
 echo   mocha ^<file.mch^> --debug         Compile with debug output
+echo   mocha ^<file.mch^> --portable      Compile without -march=native, so it runs on older CPUs
+echo   mocha execute ^<file.mch^> --portable   Same, then run it
 echo   mocha execute ^<file.mch^>         Compile and run immediately
 echo   mocha --lib ^<libfile.mch^>        Compile a library
 echo   mocha doc ^<file.mch^>             Generate documentation
@@ -36,6 +38,7 @@ echo   mocha serve [page.html] [port]   Open a wasm page in the browser
 echo   mocha web ^<file.mch^> [fn ...]    Build as WebAssembly and open it in the browser
 echo   mocha update                     Pull the latest compiler + libraries
 echo   mocha libs [name ...]            Rebuild all libraries (or just the named ones)
+echo   mocha libs --portable            Rebuild the libraries without -march=native
 exit /b
 
 :after_help
@@ -63,7 +66,9 @@ if "%1"=="doc" (
 )
 
 if "%1"=="execute" (
-    python "%COMPILER%" "%~f2" "%CD%\%~n2"
+    set EXECFLAGS=
+    if "%3"=="--portable" set EXECFLAGS=--portable
+    python "%COMPILER%" "%~f2" "%CD%\%~n2" !EXECFLAGS!
     if !errorlevel!==0 (
         "%CD%\%~n2.exe"
         set EXECEXIT=!errorlevel!
@@ -117,12 +122,12 @@ if /i not "%~x1"==".mch" (
 )
 
 set INPUT=%~f1
-
-set INPUT=%~f1
 set OUTPUT=%~dpn1
 set EXTRA_FLAGS=
 
-if "%2"=="--debug" set EXTRA_FLAGS=--debug
-if "%3"=="--debug" set EXTRA_FLAGS=--debug
+if "%2"=="--debug" set EXTRA_FLAGS=!EXTRA_FLAGS! --debug
+if "%3"=="--debug" set EXTRA_FLAGS=!EXTRA_FLAGS! --debug
+if "%2"=="--portable" set EXTRA_FLAGS=!EXTRA_FLAGS! --portable
+if "%3"=="--portable" set EXTRA_FLAGS=!EXTRA_FLAGS! --portable
 
-python "%COMPILER%" "%INPUT%" "%OUTPUT%" %EXTRA_FLAGS%
+python "%COMPILER%" "%INPUT%" "%OUTPUT%" !EXTRA_FLAGS!

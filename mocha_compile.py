@@ -196,6 +196,14 @@ if not MINGW_GCC:
 assert CLANG_PATH is not None
 assert MINGW_GCC is not None
 
+PORTABLE_BUILD = False   # becomes True when the user passes --portable
+
+def native_flags() -> list:
+    """-march=native tunes the program to THIS machine's CPU (fast, but it can crash with
+    'illegal instruction' on an older CPU). A portable build leaves it out, so the program
+    runs on any CPU of the target type."""
+    return [] if PORTABLE_BUILD else ["-march=native"]
+
 def get_clang_flags() -> tuple[str, str | None]:
     if IS_WINDOWS:
         mingw_sysroot = os.path.dirname(os.path.dirname(MINGW_GCC)) if MINGW_GCC else None
@@ -225,10 +233,6 @@ def sign_executable(exe_path: str) -> str:
     return result.stdout.strip()
 
 # ============================================================
-# MANIFEST HELPERS
-# ============================================================
-
-# ============================================================
 # load_lib_manifest
 #
 # Twin of register_lib_in_codegen but for the TYPE CHECKER
@@ -240,13 +244,15 @@ def sign_executable(exe_path: str) -> str:
 #   alias  — import alias, registers as alias.fn if set
 #   seen   — circular dep guard, always pass None from outside
 #
-# HANDLES FOUR LINE TYPES:
+# HANDLES THESE LINE TYPES:
 #   // mocha-lib-deps: → recursively load deps first
 #   function           → declare return type in TC symbols
 #   const              → declare as const in TC symbols  
 #   extend type_name   → declare as "type_name.func" in TC symbols
 #                        so e.g. float[].mean() type-checks correctly
-#   class              → declare class name as a type in TC symbols
+#   local function     → declared with "local" visibility (file-restricted)
+#   class              → declare class name, its fields, and its methods
+#   tag                → declare the tag type and each member
 #
 # NOTE: All declares are wrapped in try/except — if a symbol
 #   is already declared (e.g. dep loaded twice via different
@@ -400,7 +406,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
 #   is_native — skips global init registration if True
 #   seen      — circular dep guard, always pass None from outside
 #
-# HANDLES FIVE LINE TYPES IN .mchi:
+# HANDLES THESE LINE TYPES IN .mchi:
 #   // mocha-lib-deps:  → recursively register deps first
 #   function            → register in lib_functions + emit declare
 #   const               → register in lib_constants
@@ -408,7 +414,7 @@ def load_lib_manifest(lib_name: str, lib_dir: str, type_checker: TypeChecker, al
 #   class ... function  → register class method + emit declare
 #                         (added for clang — without it, calls to
 #                          lib class methods produce unknown symbol errors)
-#   tag
+#   tag                 → register members as external i32 globals
 #
 # FINALLY: if lib has top-level globals, registers its
 #   __mocha_globals_init_* so main() calls it at startup
@@ -512,7 +518,7 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
                 codegen.lib_functions[func_name] = (actual_name, llvm_ret, llvm_params, param_names)
                 codegen.lib_functions[f"{lib_name}.{func_name}"] = (actual_name, llvm_ret, llvm_params, param_names)
 
-            # Name mangling: eclare the function so codegen uses it instead of C stdlib
+            # Name mangling: declare the function so codegen uses it instead of C stdlib
             param_str = ", ".join(llvm_params)
             declare_str = f"declare {llvm_ret} @{actual_name}({param_str})"
             if declare_str not in codegen.extra_declares:
@@ -792,7 +798,7 @@ def resolve_imports(ast, lib_dir: str, current_file: str = "", seen_files: Optio
             print(f"  ✅ Imported: {node.source}")
             continue
 
-        # ── existing library logic, completely unchanged ──
+        # ── library import: find .mchi/.o/.ll in lib_dir ──
         mchi_path = os.path.join(lib_dir, f"{node.source}.mchi")
         obj_path  = os.path.join(lib_dir, f"{node.source}.o")
         ll_path   = os.path.join(lib_dir, f"{node.source}.ll")
@@ -838,9 +844,12 @@ def resolve_imports(ast, lib_dir: str, current_file: str = "", seen_files: Optio
                     print(f"  📦 Linking lib: {node.source}")
                 elif os.path.exists(ll_path):
                     print(f"  🔧 Compiling lib from .ll: {node.source}...")
+                    lib_target, lib_sysroot = get_clang_flags()
+                    lib_cmd = [str(CLANG_PATH), "-c", ll_path, "-o", obj_path, "-target", lib_target]
+                    if lib_sysroot:
+                        lib_cmd += ["--sysroot", lib_sysroot]
                     result = subprocess.run(
-                        [str(CLANG_PATH), "-c", ll_path, "-o", obj_path, 
-                         "-target", "x86_64-w64-mingw32"],
+                        lib_cmd,
                         capture_output=True, text=True, encoding='utf-8'
                     )
                     if result.returncode != 0:
@@ -990,7 +999,7 @@ def compile_lib(source_file: str) -> bool:
     generate_manifest(ast, mchi_file, source_file)
 
     clang_target, mingw_sysroot = get_clang_flags()
-    clang_flags = ["-O2", "-march=native", "-flto", "-target", clang_target]
+    clang_flags = ["-O2"] + native_flags() + ["-flto", "-target", clang_target]
     if mingw_sysroot:
         clang_flags += ["--sysroot", mingw_sysroot]
 
@@ -1092,13 +1101,25 @@ def compile_lib_with_deps(source_file: str) -> bool:
         # Recompile if: source newer than obj, OR any dep was recompiled this run
         deps = get_lib_deps(lib_path)
         dep_was_recompiled = any(d in recompiled for d in deps)
-        if needs_recompile(lib_path, obj_file) or dep_was_recompiled:
+        # A native and a portable build must never share objects: remember which one made this .o
+        mode_file = obj_file + ".mode"
+        mode_now = "portable" if PORTABLE_BUILD else "native"
+        old_mode = "native"      # objects made before this check existed were built native
+        if os.path.exists(mode_file):
+            with open(mode_file) as f:
+                old_mode = f.read().strip()
+        mode_changed = old_mode != mode_now
+        if mode_changed:
+            print(f"  Recompiling {lib_name} ({mode_now} build)")
+        if needs_recompile(lib_path, obj_file) or dep_was_recompiled or mode_changed:
             if dep_was_recompiled and not needs_recompile(lib_path, obj_file):
                 print(f"  ↻ Recompiling {lib_name} (dependency changed)")
             success = compile_lib(lib_path)
             if not success:
                 print(f"  ❌ Failed at {lib_name}, stopping.")
                 return False
+            with open(mode_file, 'w') as f:
+                f.write(mode_now)
             recompiled.add(lib_name)
         else:
             print(f"  ⚡ {lib_name} cached")
@@ -1123,7 +1144,7 @@ def compile_lib_with_deps(source_file: str) -> bool:
 #   class StandardScaler;
 #   class StandardScaler function transform(...) -> float[];
 #
-# HANDLES FIVE NODE TYPES:
+# HANDLES THESE NODE TYPES:
 #
 #   FunctionDecl — three sub-cases:
 #     is_native     → emit as-is with native c_name
@@ -1133,6 +1154,7 @@ def compile_lib_with_deps(source_file: str) -> bool:
 #     normal        → mangle the name, emit as native if mangled
 #                     (mangling = name differs from original),
 #                     plain emit if no mangling needed
+#     local         → emit "local function ..."
 #
 #   ConstDecl — only primitive literals supported
 #               (int, float, bool, str). Array consts skipped.
@@ -1145,7 +1167,9 @@ def compile_lib_with_deps(source_file: str) -> bool:
 #               then one line per non-constructor method as
 #               "class Name function method(...) -> type;"
 #               constructor skipped — never called by name externally
-#   TagDecl - ...
+#
+#   TagDecl - emits "tag Name { A, B, C };"
+#
 #
 # DEP PRESERVATION:
 #   Copies // mocha-lib-deps: line from source file verbatim
@@ -1178,7 +1202,6 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
     if deps:
         lines.append(f"// mocha-lib-deps: {','.join(deps)}\n")
 
-    # ← ADD THIS: preserve mocha-extern-class directives
     with open(source_file, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
@@ -1261,11 +1284,8 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
     with open(mchi_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
 
-# ============================================================
-# MAIN COMPILER
-# ============================================================
 
-#Incremental Compilation
+# INCREMENTAL BUILD CHECK
 def needs_recompile(src: str, obj: str) -> bool:
     if not os.path.exists(src):
         raise FileNotFoundError(f"Source file not found: {src}")
@@ -1281,8 +1301,13 @@ def needs_recompile(src: str, obj: str) -> bool:
         os.path.join(SCRIPT_DIR, "mocha_compile.py"),
         os.path.join(SCRIPT_DIR, "mocha_parser.py"),
         os.path.join(SCRIPT_DIR, "mocha_lexer.py"),
+        os.path.join(SCRIPT_DIR, "mocha_ast.py"),
     ]
     return any(os.path.getmtime(cf) > obj_mtime for cf in compiler_files)
+
+# ============================================================
+# MAIN COMPILER
+# ============================================================
 
 def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = False, check_only: bool = False, wasm_exports=None) -> bool:
     import time
@@ -1475,7 +1500,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     
     clang_target, mingw_sysroot = get_clang_flags()
     def base_clang_flags():
-        flags = ["-O2", "-march=native", "-flto", "-target", clang_target, "-g"]
+        flags = ["-O2"] + native_flags() + ["-flto", "-target", clang_target, "-g"]
         if mingw_sysroot:
             flags += ["--sysroot", mingw_sysroot]
         return flags
@@ -1487,6 +1512,20 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
         with open(flag_file) as f:
             if f.read().strip() != expected_sig and os.path.exists(RUNTIME_OBJ):
                 os.remove(RUNTIME_OBJ)  # flags changed — force recompile
+
+    # A portable build and a native build must never share objects: if the mode changed, rebuild everything
+    mode_file = RUNTIME_OBJ + ".mode"
+    mode_now = "portable" if PORTABLE_BUILD else "native"
+    old_mode = "native"      # objects made before this check existed were built native
+    if os.path.exists(mode_file):
+        with open(mode_file) as f:
+            old_mode = f.read().strip()
+    if old_mode != mode_now:
+        for obj in (RUNTIME_OBJ, CPP_OBJ, SQLITE3_OBJ, WREN_OBJ):
+            if os.path.exists(obj):
+                os.remove(obj)
+    with open(mode_file, 'w') as f:
+        f.write(mode_now)
 
     if needs_recompile(RUNTIME_C, RUNTIME_OBJ):
         runtime_compile_cmd = [CLANG_PATH] + base_clang_flags() + ["-c", RUNTIME_C, "-o", RUNTIME_OBJ]
@@ -1738,7 +1777,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
 
     else:
         link_cmd = [
-            CLANG_PATH, "-O2", "-march=native", "-flto", "-fexceptions",
+            CLANG_PATH, "-O2", *native_flags(), "-flto", "-fexceptions",
             obj_file, RUNTIME_OBJ, SQLITE3_OBJ,
         ]
 
@@ -1836,18 +1875,21 @@ if __name__ == "__main__":
         ok = compile_mocha(sys.argv[2], sys.argv[3], wasm_exports=sys.argv[4:])
         sys.exit(0 if ok else 1)
         
-    # Remove --debug, --check-only, --wasm and --export <name> from argv 
+    # Pull the option flags out of argv so the rest are file names 
     # for cleaner processing
     debug_mode  = "--debug"      in sys.argv
     check_only  = "--check-only" in sys.argv
     wasm_mode   = "--wasm"       in sys.argv     # --- wasm ---
+    PORTABLE_BUILD = "--portable" in sys.argv    # leaves out -march=native, so the program runs on older CPUs
+    if PORTABLE_BUILD:
+        print("  🧳 Portable build: -march=native left out, the program will run on older CPUs too")
     wasm_exports = []                            # --- wasm ---
     argv = list(sys.argv)
     while "--export" in argv:                    # --- wasm ---
         j = argv.index("--export")
         wasm_exports.append(argv[j + 1])
         del argv[j:j + 2]
-    args = [a for a in argv if a not in ("--debug", "--check-only", "--wasm")]
+    args = [a for a in argv if a not in ("--debug", "--check-only", "--wasm", "--portable")]
     if wasm_mode and not wasm_exports:           # --- wasm ---
         print("Usage: mocha --wasm <file.mch> --export <function> [--export <function> ...]")
         sys.exit(1)

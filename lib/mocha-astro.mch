@@ -203,9 +203,6 @@ function sidereal_to_tropical(sidereal_longitude: float, ayanamsa: float) -> flo
 // constant eccentricity/perihelion (only mean longitude varies with T).
 // Rahu/Ketu: mean lunar node (ignores 18.6-year oscillation terms).
 
-const DEG_TO_RAD: float = 0.01745329251994;
-const RAD_TO_DEG: float = 57.29577951308232;
-
 ~~ Julian centuries elapsed since epoch J2000.0 (JD 2451545.0). The universal time variable T for all formulas below.
 ~~ Requires jd > 0 (positive Julian Day). Recommended valid range: JD 2305447.5-2488070.0 (1600-2200 CE).
 function centuries_since_j2000(jd: float) -> float {

@@ -1,7 +1,7 @@
 from "mocha-space" import *;
 
 function assert_close(label: str, got: float, expected: float, tol: float, counts: int[]) -> null {
-    var rel: float = unsafe_div(abs(got - expected), abs(expected));
+    var rel: float = abs(got - expected)/abs(expected);
     if (rel < tol) {
         print("  PASS: " + label, newLine=true);
         counts[0] = counts[0] + 1;
@@ -75,8 +75,9 @@ function main(didLoad) -> null {
     assert_close("Unix-JD roundtrip", roundtrip_unix, 1000000000.0, 0.0000001, tracking);
 
     // ── UTC <-> TT ───────────────────────────────────────────────────────
-    // TT should be 69.184 seconds ahead of UTC, i.e. 69.184/86400 days ahead
-    var jd_utc: float = 2451545.0;
+    // From 2017 onward TT is 69.184 seconds ahead of UTC (37 leap seconds + 32.184), i.e. 69.184/86400 days ahead
+    // 2020-01-01 00:00 UTC = JD 2458849.5
+    var jd_utc: float = 2458849.5;
     var jd_tt: float = utc_to_tt(jd_utc);
     assert_close("UTC to TT offset", (jd_tt - jd_utc) * 86400.0, 69.184, 0.0001, tracking);
 

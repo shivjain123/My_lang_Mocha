@@ -67,6 +67,7 @@ class Tensor function at(row: int, col: int) -> float;
 class Tensor function show() -> null;
 class Tensor function dispose() -> null;
 class Tensor function finalize() -> null;
+class Tensor function check_alive() -> null;
 class Tensor function matmul(other: Tensor) -> Tensor;
 class Tensor function transpose() -> Tensor;
 class Tensor function add(other: Tensor) -> Tensor;

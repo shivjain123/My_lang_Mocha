@@ -6,9 +6,12 @@ import glob, os, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPILER = os.path.join(HERE, "mocha_compile.py")
 
+PORTABLE = False        # set by `mocha libs --portable`: build the libs without -march=native
+
 def build(path):
     env = dict(os.environ, PYTHONIOENCODING="utf-8")      # the compiler prints emojis; a pipe would choke on them
-    r = subprocess.run([sys.executable, COMPILER, "--lib", path], capture_output=True, text=True,
+    extra = ["--portable"] if PORTABLE else []
+    r = subprocess.run([sys.executable, COMPILER, "--lib", path] + extra, capture_output=True, text=True,
                        encoding="utf-8", errors="replace", env=env, cwd=HERE)
     return r.returncode == 0, (r.stdout + r.stderr)
 
@@ -48,4 +51,8 @@ def rebuild(names=None):
     return 1 if failed else 0
 
 if __name__ == "__main__":
-    sys.exit(rebuild(sys.argv[1:]))
+    names = [a for a in sys.argv[1:] if a != "--portable"]
+    if "--portable" in sys.argv[1:]:
+        PORTABLE = True
+        print("  🧳 Portable build: libraries built without -march=native")
+    sys.exit(rebuild(names))

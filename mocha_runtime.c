@@ -1,7 +1,7 @@
 /*
  * ============================================================
  * Mocha Language Runtime
- * mocha_runtime.c                      (Mocha v1.5 — 1st November 2026)
+ * mocha_runtime.c                      (Mocha v1.5 — 7th November 2026)
  * ============================================================
  *
  * PLATFORM SUPPORT
@@ -34,6 +34,9 @@
  *     corrupt pointer, smashed back canary
  *   - mocha_rc_stats() prints live object count and bytes;
  *     mocha_rc_shutdown() frees every remaining node
+ *   - From the MACROS section onward, malloc, strdup and
+ *     calloc are macros that print an out-of-memory box and
+ *     exit instead of returning NULL
  *   RC-managed:     strings, complex, 1D arrays, 2D arrays,
  *                   tuples, dicts, sets, StringBuilder output,
  *                   classes (including extend and tag), CUDA
@@ -48,9 +51,13 @@
  *
  * ── CRASH DIAGNOSTICS ──────────────────────────────────────
  *   - mocha_signal_handlers_init(): SIGSEGV / SIGILL handler
- *     prints a readable "Mocha Runtime Error" box with likely
- *     causes instead of a bare crash (Windows, macOS, Linux)
- *   - Windows: vectored SEH handler prints the faulting
+ *     prints a readable "Mocha Runtime Error" box that explains
+ *     the fault (null object, garbage pointer, bad index,
+ *     corrupted function pointer) plus a compact traceback
+ *   - Stack overflow gets its own box (likely infinite
+ *     recursion). Windows keeps 64 KB of stack free for it;
+ *     macOS/Linux run the handler on a 64 KB spare stack
+ *   - Windows: vectored SEH handler also prints the faulting
  *     address as exe+offset plus a 16-frame backtrace
  *   - macOS / Linux: backtrace via execinfo
  *
@@ -82,7 +89,8 @@
  *   - Type conversions (int↔float↔str↔vast↔bool)
  *   - Fixed-point arithmetic (scaled by 10^12, __int128
  *     overflow guard — add, sub, mul, div, mod). Used by
- *     a + b and by +=, -=, *=, /= on floats
+ *     a + b and by +=, -=, *=, /= on floats. Falls back to raw
+ *     IEEE 754 for huge (>1e25), tiny (<1e-9), inf and nan values
  *   - mocha_unsafe_add/sub/mul/div/mod: raw double operations
  *     with a range check, behind the unsafe_* functions
  *
@@ -94,9 +102,13 @@
  *     occs with range variants, resize-grow, drop_row/drop_col)
  *   - Tuple runtime (MochaTuple — RC'd)
  *   - Dict runtime (MochaDict — RC'd; string keys, typed
- *     values, Levenshtein fuzzy key suggestions, merge with
- *     override, allkeys/allvalues, typed getter with mismatch
- *     error)
+ *     values: int, float, str, bool, vast, nested dict, object,
+ *     and 1D arrays of int/float/str/bool/vast (the dict holds
+ *     one reference to the array). Levenshtein fuzzy key
+ *     suggestions, merge/copy, allkeys/allvalues, typed getter
+ *     with mismatch error. jsonify() writes JSON text;
+ *     str.dictify() parses it back: no null in arrays, empty
+ *     or mixed arrays are errors, null becomes the string "null")
  *   - Set runtime (MochaSet — RC'd; unique ordered values,
  *     union/intersect/xor/rel_diff, negate, retype, min/max,
  *     similarity metrics)
@@ -161,12 +173,15 @@
  *     WEBASSEMBLY BUILD section)
  *
  * ── RUNTIME STACK TRACKING ─────────────────────────────────
- *   - Call stack of 256 frames (func name, file, line)
+ *   - Call stack of 256 frames (func name, file, line);
+ *     deeper frames are only counted, not stored
  *   - mocha_stack_push/pop/update_line/print
+ *   - mocha_stack_print_short: used by the crash boxes, folds
+ *     repeated frames into "[repeated N times]"
  *   - exit() macro overridden to print traceback before _Exit
  *
  * ── FFI WRAPPERS ───────────────────────────────────────────
- *   - SQLite3 (open/exec/query/close; query prints rows to
+ *   - SQLite3 (open/exec/query/close/is_null; query prints rows to
  *     stdout; result cache API — query_run, query_rows/cols/
  *     cell/colname; table_exists, last_rowid, changes, errmsg;
  *     the result cache is a single global)
@@ -200,6 +215,10 @@
  *   - mocha_malloc_safe / mocha_strdup_safe / mocha_calloc_safe:
  *     allocation helpers with an out-of-memory check
  *   - mocha_rc_stats_if_enabled(): prints the RC stats at exit
+ *   - mocha_int_div/int_mod/vast_div/vast_mod: checked integer
+ *     division; a zero divisor is a runtime error
+ *   - Open-handle list shared by Lua, Wren and sqlite3, so
+ *     closing a handle twice prints a warning and is ignored
  *     when the MOCHA_RC_STATS environment variable is set
  *
  * ── STRAGGLER LIB WRAPPERS ─────────────────────────────────
@@ -313,7 +332,69 @@ void* mocha_malloc64(uint64_t n) { return malloc((size_t)n); }
 #endif
 
 // ── Crash handler — replaces SIGSEGV with a readable error ────────────────
+
+void mocha_stack_print_short(void);  /* defined below, next to mocha_stack_print */
+
+/* Fault details saved by the Windows exception handler below,
+ * so the crash box can say what exactly was touched */
+static volatile int mocha_fault_valid = 0;
+static volatile int mocha_fault_kind = 0;   /* 0 = read, 1 = write, 8 = run code */
+static volatile unsigned long long mocha_fault_addr = 0;
+
 #ifndef MOCHA_WASM
+/* One line inside the crash box (text is cut at 52 characters) */
+static void mocha_box_line(const char* text) {
+    fprintf(stderr, "║  %-52.52s║\n", text);
+}
+
+/* Explains what the faulting address most likely means */
+static void mocha_explain_fault(void) {
+    char line[160];
+    unsigned long long a = mocha_fault_addr;
+    const char* what = "read from";
+    if (mocha_fault_kind == 1) what = "write to";
+    if (mocha_fault_kind == 8) what = "run code at";
+    if (mocha_fault_kind == 2) what = "access";   /* Mac/Linux do not say read or write */
+    snprintf(line, sizeof(line), "It tried to %s address 0x%llx.", what, a);
+    mocha_box_line(line);
+    if (mocha_fault_kind == 8) {
+        mocha_box_line("Likely a corrupted function pointer.");
+    } else if (a < 0x10000ULL) {
+        mocha_box_line("This is a NULL object being used.");
+        if (a == 0) {
+            mocha_box_line("The null object itself was read or written.");
+        } else {
+            snprintf(line, sizeof(line), "The field used sits %llu bytes into the object.", a);
+            mocha_box_line(line);
+        }
+    } else if (a > 0x00007FFFFFFFFFFFULL) {
+        mocha_box_line("This is not a real address: a garbage pointer.");
+        mocha_box_line("Likely a corrupted or uninitialised pointer.");
+    } else {
+        mocha_box_line("A real-looking address, but not usable memory.");
+        mocha_box_line("Likely an index far out of range, or an object");
+        mocha_box_line("used after dispose().");
+    }
+}
+
+/* The box printed for a stack overflow (used by the Windows and Mac/Linux handlers) */
+static void mocha_stack_overflow_box(void) {
+    fflush(stdout);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "╔══════════════════════════════════════════════════════╗\n");
+    fprintf(stderr, "║        Mocha Runtime Error (STACK OVERFLOW)          ║\n");
+    fprintf(stderr, "╠══════════════════════════════════════════════════════╣\n");
+    mocha_box_line("The program ran out of stack space.");
+    mocha_box_line("Almost always caused by infinite recursion:");
+    mocha_box_line("a function that calls itself and never stops.");
+    mocha_box_line("Check that every recursive function has a base case");
+    mocha_box_line("that is actually reached.");
+    mocha_box_line("It can also be a very deep, but finite, recursion.");
+    fprintf(stderr, "╚══════════════════════════════════════════════════════╝\n");
+    mocha_stack_print_short();
+    fflush(stderr);
+}
+
 static void mocha_crash_handler(int sig) {
     const char* sig_name;
     switch (sig) {
@@ -330,19 +411,25 @@ static void mocha_crash_handler(int sig) {
 
     if (sig == SIGSEGV) {
         fprintf(stderr, "║  The program crashed due to invalid memory access.   ║\n");
-        fprintf(stderr, "║  Possible causes:                                    ║\n");
-        fprintf(stderr, "║   • Accessing a null object                          ║\n");
-        fprintf(stderr, "║   • Array index out of bounds                        ║\n");
-        fprintf(stderr, "║   • Using an object after dispose()                  ║\n");
+        if (mocha_fault_valid) {
+            mocha_explain_fault();
+        } else {
+            fprintf(stderr, "║  Possible causes:                                    ║\n");
+            fprintf(stderr, "║   • Accessing a null object                          ║\n");
+            fprintf(stderr, "║   • Array index out of bounds                        ║\n");
+            fprintf(stderr, "║   • Using an object after dispose()                  ║\n");
+        }
     } else if (sig == SIGILL) {
         fprintf(stderr, "║  The program hit an illegal instruction.             ║\n");
         fprintf(stderr, "║  Possible causes:                                    ║\n");
         fprintf(stderr, "║   • Compiler-generated bad machine code               ║\n");
         fprintf(stderr, "║   • Corrupted function pointer / jump target          ║\n");
         fprintf(stderr, "║   • Memory corruption overwriting executable code      ║\n");
+        fprintf(stderr, "  Hint: your CPU could be too old. Rebuild with: mocha file.mch --portable (or time to upgrade this machine :)\n");
     }
 
     fprintf(stderr, "╚══════════════════════════════════════════════════════╝\n");
+    mocha_stack_print_short();
     fflush(stderr);
     exit(128 + sig);
 }
@@ -351,7 +438,18 @@ static void mocha_crash_handler(int sig) {
 #ifdef _WIN32
 static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
     EXCEPTION_RECORD* er = info->ExceptionRecord;
+
+    if (er->ExceptionCode == EXCEPTION_STACK_OVERFLOW) {
+        mocha_stack_overflow_box();
+        _exit(128 + SIGSEGV);
+    }
+
     if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        /* Save what was touched, so the crash box can explain it */
+        mocha_fault_kind  = (int)er->ExceptionInformation[0];
+        mocha_fault_addr  = (unsigned long long)er->ExceptionInformation[1];
+        mocha_fault_valid = 1;
+
         uintptr_t base = (uintptr_t)GetModuleHandle(NULL);
         fprintf(stderr, "[SEH] AV at exe+0x%llx, fault addr %p\n",
                 (unsigned long long)((uintptr_t)er->ExceptionAddress - base),
@@ -364,6 +462,33 @@ static LONG WINAPI mocha_seh_crash_handler(EXCEPTION_POINTERS* info) {
         fflush(stderr);
     }
     return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
+#if !defined(_WIN32) && !defined(MOCHA_WASM)
+#include <sys/resource.h>
+
+static uintptr_t mocha_stack_top  = 0;   /* roughly where the main stack starts */
+static uintptr_t mocha_stack_size = 0;   /* the stack size limit in bytes */
+
+/* Runs on a spare stack, so it still works when the real stack is full */
+static void mocha_posix_crash_handler(int sig, siginfo_t* si, void* ctx) {
+    (void)ctx;
+    unsigned long long a = si ? (unsigned long long)(uintptr_t)si->si_addr : 0;
+
+    /* A fault just past the end of the stack limit is a stack overflow */
+    if (sig == SIGSEGV && mocha_stack_size > 0) {
+        unsigned long long lo = (unsigned long long)(mocha_stack_top - mocha_stack_size);
+        if (a + 1048576ULL >= lo && a <= lo + 65536ULL) {
+            mocha_stack_overflow_box();
+            _exit(128 + sig);
+        }
+    }
+
+    mocha_fault_kind  = 2;
+    mocha_fault_addr  = a;
+    mocha_fault_valid = (sig == SIGSEGV);
+    mocha_crash_handler(sig);
 }
 #endif
 
@@ -485,13 +610,44 @@ char* mocha_ffi_str_copy(const char* s) {
 
 void mocha_signal_handlers_init() {
 #ifdef _WIN32
+    /* Keep 64 KB of stack free for the crash handler, so it can still
+     * print its message when the program has used up all its stack */
+    ULONG guarantee = 64 * 1024;
+    SetThreadStackGuarantee(&guarantee);
     AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
 #endif
 #ifndef MOCHA_WASM
+#ifdef _WIN32
     signal(SIGSEGV, mocha_crash_handler);
     signal(SIGILL,  mocha_crash_handler);
+#else
+    /* A spare stack for the crash handler (main thread) */
+    static char altstack[65536];
+    stack_t ss;
+    ss.ss_sp    = altstack;
+    ss.ss_size  = sizeof(altstack);
+    ss.ss_flags = 0;
+    sigaltstack(&ss, NULL);
+
+    /* Remember where the stack starts and how big it may grow */
+    int marker = 0;
+    mocha_stack_top = (uintptr_t)&marker;
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_STACK, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
+        mocha_stack_size = (uintptr_t)rl.rlim_cur;
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sa.sa_sigaction = mocha_posix_crash_handler;
+    sigaction(SIGSEGV, &sa, NULL);
+
+    signal(SIGILL, mocha_crash_handler);
+#endif
 #endif
 }
+
 void mocha_rc_shutdown() {
     MochaRCNode *node = rc_head;
     while (node) {
@@ -670,7 +826,9 @@ double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
 /* ---- Math ---- */
 #define MOCHA_MATH_PI 3.14159265358979323846
 
-/* ---- Dict Type Tags ---- */
+/* ---- Dict Type Tags ----
+ * 7..11 are 1D arrays. MochaArray does not store its element type,
+ * so the tag says what is inside (needed to free, print, jsonify). */
 #define MOCHA_DICT_INT    0
 #define MOCHA_DICT_FLOAT  1
 #define MOCHA_DICT_STR    2
@@ -678,6 +836,11 @@ double mocha_call_lambda_float(MochaClosureBundle *b, void *a, void *c);
 #define MOCHA_DICT_DICT   4
 #define MOCHA_DICT_OBJECT 5
 #define MOCHA_DICT_VAST   6
+#define MOCHA_DICT_ARR_INT   7
+#define MOCHA_DICT_ARR_FLOAT 8
+#define MOCHA_DICT_ARR_STR   9
+#define MOCHA_DICT_ARR_BOOL  10
+#define MOCHA_DICT_ARR_VAST  11
 
 /* ---- Set Type Tags ---- */
 #define MOCHA_SET_INT    0
@@ -1232,19 +1395,19 @@ void mocha_output_finalize(void) {
     }
 }
 
- void mocha_print_str(char *s, int8_t newline) {
+void mocha_print_str(char *s, int8_t newline) {
     if (!s) s = "";
     if (newline) printf("\n");
     printf("%s", s);
     fflush(stdout);
-    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
+    mocha_has_printed = 1;    
 }
 
 void mocha_print_int(int32_t n, int8_t newline) {
     if (newline) printf("\n");
     printf("%d", n);
     fflush(stdout);
-    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
+    mocha_has_printed = 1;    
 }
 
 void mocha_print_float(double f, int8_t newline) {
@@ -1259,21 +1422,21 @@ void mocha_print_float(double f, int8_t newline) {
         printf("%g", f);
     }
     fflush(stdout);
-    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
+    mocha_has_printed = 1;    
 }
 
 void mocha_print_bool(int8_t b, int8_t newline) {
     if (newline) printf("\n");
     printf("%s", b ? "true" : "false");
     fflush(stdout);
-    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
+    mocha_has_printed = 1;    
 }
 
 void mocha_print_vast(int64_t n, int8_t newline) {
     if (newline) printf("\n");
     printf("%lld", (long long)n);
     fflush(stdout);
-    mocha_has_printed = 1;   // ← ADD THIS ONE LINE
+    mocha_has_printed = 1;    
 }
 
 void mocha_print_complex(MochaComplex *c, int8_t newline) {
@@ -1402,10 +1565,11 @@ void mocha_tuple_print(MochaTuple *t, int64_t kinds, int8_t newline) {
  * Scaled by 10^12 to avoid IEEE 754 errors like
  * 0.1 + 0.2 = 0.30000000000000004.
  * 
- * Upgraded with __int128 for add/sub to prevent overflow
+ * Uses __int128 for add, sub, mul, div and mod. Falls back to
+ * raw IEEE 754 for values above 1e25, below 1e-9, and inf/nan.
  * ============================================================ */
 
- /* ---- Fixed-Point Arithmetic ---- */
+/* ---- Fixed-Point Arithmetic ---- */
 #define MOCHA_DECIMAL_SCALE 1000000000000LL
 
 typedef __int128 mocha_decimal;
@@ -1467,8 +1631,8 @@ double mocha_float_mul(double a, double b) {
 
 double mocha_float_div(double a, double b) {
     if (b == 0.0) { fprintf(stderr, "MochaRuntimeError: Division by zero!\n"); exit(2); }
-    if (!isfinite(a) || !isfinite(b) || fabs(a) > 1e14 || fabs(b) < 1e-12) {
-        return a / b;  // raw IEEE 754 fallback — inf/nan, huge numerator, or divisor below fixed-point resolution
+    if (!isfinite(a) || !isfinite(b) || fabs(a) > 1e14 || fabs(b) < 1e-12 || fabs(b) > 1e25) {
+        return a / b;  // raw IEEE 754 fallback — inf/nan, huge numerator, divisor below fixed-point resolution, or divisor too large to scale into __int128
     }
     // raw IEEE 754 fallback for tiny non-zero numerator or result: below ~1e-9 the
     // 1e-12 fixed-point grid keeps too few digits (anything below 1e-12 truncates to 0)
@@ -1504,8 +1668,7 @@ double mocha_float_mod(double a, double b) {
 
 /* ============================================================
  * 1D ARRAY RUNTIME
- * ============================================================ 
-*/
+ * ============================================================ */
 /* ---- Internal helpers ---- */
 
 static void bounds_check(MochaArray *arr, int32_t index) {
@@ -1762,8 +1925,7 @@ MochaArray* mocha_map_float(MochaArray *arr, MochaClosureBundle *bundle) {
 
 /* ============================================================
  * 2D ARRAY RUNTIME
- * ============================================================
-*/
+ * ============================================================ */
 
 /* ---- Internal helpers ---- */
 //Allocate and zero-initialise a single row of `cols` elements
@@ -2069,7 +2231,15 @@ void mocha_tuple_release(MochaTuple *t) {
     if (!t) return;
     if (rc_count(t) == 1) {
         for (int32_t i = 0; i < t->count; i++) {
-            if (t->is_ptr_elem) {
+            if (t->is_ptr_elem == 2) {
+                MochaArray2D **box = (MochaArray2D**)t->slots[i];
+                mocha_array2d_release(*box);
+                free(box);
+            } else if (t->is_ptr_elem == 3 || t->is_ptr_elem == 4) {
+                MochaArray **box = (MochaArray**)t->slots[i];
+                mocha_array_release(*box, t->is_ptr_elem == 4);
+                free(box);
+            } else if (t->is_ptr_elem) {
                 rc_release((char*)t->slots[i]);
             } else {
                 free(t->slots[i]);
@@ -2154,6 +2324,66 @@ static void merge_sort_int(int32_t *a, int32_t l, int32_t r) {
 void mocha_sort_int(MochaArray *arr) {
     if (arr->length > 1)
         merge_sort_int((int32_t *)arr->data, 0, arr->length - 1);
+}
+
+/* ---- VAST ---- */
+
+static void selection_sort_vast(int64_t *a, int32_t n) {
+    for (int32_t i = 0; i < n - 1; i++) {
+        int32_t min = i;
+        for (int32_t j = i + 1; j < n; j++)
+            if (a[j] < a[min]) min = j;
+        if (min != i) {
+            int64_t tmp = a[i]; a[i] = a[min]; a[min] = tmp;
+        }
+    }
+}
+
+static void merge_vast(int64_t *a, int32_t l, int32_t m, int32_t r) {
+    int32_t n1 = m - l + 1, n2 = r - m;
+    int64_t *L = malloc(n1 * sizeof(int64_t));
+    int64_t *R = malloc(n2 * sizeof(int64_t));
+
+    for (int32_t i = 0; i < n1; i++) L[i] = a[l + i];
+    for (int32_t i = 0; i < n2; i++) R[i] = a[m + 1 + i];
+
+    int32_t i = 0, j = 0, k = l;
+    while (i < n1 && j < n2)
+        a[k++] = L[i] <= R[j] ? L[i++] : R[j++];
+    while (i < n1) a[k++] = L[i++];
+    while (j < n2) a[k++] = R[j++];
+
+    free(L); free(R);
+}
+
+static void merge_sort_vast(int64_t *a, int32_t l, int32_t r) {
+    if (r - l + 1 <= MOCHA_SORT_THRESHOLD) {
+        selection_sort_vast(a + l, r - l + 1);
+        return;
+    }
+    int32_t m = l + (r - l) / 2;
+    merge_sort_vast(a, l, m);
+    merge_sort_vast(a, m + 1, r);
+    merge_vast(a, l, m, r);
+}
+
+void mocha_sort_vast(MochaArray *arr) {
+    if (arr->length > 1)
+        merge_sort_vast((int64_t *)arr->data, 0, arr->length - 1);
+}
+
+/* ---- BOOL (false < true): counting sort, one byte per slot at elem_size strides ---- */
+
+void mocha_sort_bool(MochaArray *arr) {
+    int32_t n = arr->length;
+    if (n < 2) return;
+    int32_t es = arr->elem_size;
+    char *base = (char *)arr->data;
+    int32_t trues = 0;
+    for (int32_t i = 0; i < n; i++)
+        if (base[(size_t)i * es]) trues++;
+    for (int32_t i = 0; i < n; i++)
+        base[(size_t)i * es] = (i >= n - trues) ? 1 : 0;
 }
 
 /* ---- FLOAT ---- */
@@ -2451,7 +2681,8 @@ void mocha_sort_str_cmp_env  (MochaArray *arr, MochaClosureBundle *b) { sort_gen
  *
  * Float extension methods: sin, cos, tan, inv_sin, inv_cos,
  * inv_tan, sqrt, cubrot, log, log2, log10.
- * Standalone: pow, derivative, integral, limit, limit_inf.
+ * Standalone: fast_pow, c_pow, complex_pow, derivative,
+ * integral, limit, limit_inf.
  *
  * Return type policy:
  *   sqrt, log, log2, log10  → MochaComplex* (imaginary when domain requires)
@@ -2885,7 +3116,10 @@ int mocha_bcrypt_rand_seed() {
  *
  * Hash map (not so real one LoL because HashTable is the actual one if you need) 
  * with string keys and typed values.
- * Supports int, float, str, bool, nested dict, and opaque objects.
+ * Supports int, float, str, bool, vast, nested dict, opaque objects,
+ * and 1D arrays of int/float/str/bool/vast.
+ * Also: jsonify (dict to JSON text) and, in the JSON PARSER
+ * section below, str.dictify (JSON text to dict).
  * Fuzzy key suggestions via Levenshtein distance on key errors.
  * ============================================================ */
 
@@ -2952,6 +3186,11 @@ static const char* mocha_dict_type_name(int type) {
         case MOCHA_DICT_DICT:   return "dict";
         case MOCHA_DICT_OBJECT: return "object";
         case MOCHA_DICT_VAST:   return "vast";
+        case MOCHA_DICT_ARR_INT:   return "int[]";
+        case MOCHA_DICT_ARR_FLOAT: return "float[]";
+        case MOCHA_DICT_ARR_STR:   return "str[]";
+        case MOCHA_DICT_ARR_BOOL:  return "bool[]";
+        case MOCHA_DICT_ARR_VAST:  return "vast[]";
         default:                return "unknown";
     }
 }
@@ -2978,6 +3217,17 @@ static void mocha_dict_release_value(void *value, int value_type) {
         case MOCHA_DICT_OBJECT:
             /* the dict owns one reference (taken in mocha_dict_set_object), same as sets */
             rc_release(value);
+            break;
+        case MOCHA_DICT_ARR_STR:
+            /* the dict owns one reference to the array; str elements get released too */
+            mocha_array_release((MochaArray*)value, 1);
+            break;
+        case MOCHA_DICT_ARR_INT:
+        case MOCHA_DICT_ARR_FLOAT:
+        case MOCHA_DICT_ARR_BOOL:
+        case MOCHA_DICT_ARR_VAST:
+            /* plain elements: only the data buffer and the array itself need freeing */
+            mocha_array_release((MochaArray*)value, 0);
             break;
     }
 }
@@ -3043,6 +3293,19 @@ void mocha_dict_set_object(MochaDict *d, char *key, void *val) {
     if (val) rc_retain(val);
     dict_set_entry(d, key, val, MOCHA_DICT_OBJECT);
 }
+
+/* Arrays: the dict co-owns one reference. Retain BEFORE dict_set_entry (which
+ * releases an overwritten old value) so re-storing the same array can't free it. */
+static void dict_set_array(MochaDict *d, char *key, MochaArray *val, int tag) {
+    if (val) mocha_array_retain(val);
+    dict_set_entry(d, key, val, tag);
+}
+
+void mocha_dict_set_arr_int(MochaDict *d, char *key, MochaArray *val)   { dict_set_array(d, key, val, MOCHA_DICT_ARR_INT); }
+void mocha_dict_set_arr_float(MochaDict *d, char *key, MochaArray *val) { dict_set_array(d, key, val, MOCHA_DICT_ARR_FLOAT); }
+void mocha_dict_set_arr_str(MochaDict *d, char *key, MochaArray *val)   { dict_set_array(d, key, val, MOCHA_DICT_ARR_STR); }
+void mocha_dict_set_arr_bool(MochaDict *d, char *key, MochaArray *val)  { dict_set_array(d, key, val, MOCHA_DICT_ARR_BOOL); }
+void mocha_dict_set_arr_vast(MochaDict *d, char *key, MochaArray *val)  { dict_set_array(d, key, val, MOCHA_DICT_ARR_VAST); }
 
 /* ---- Getters ---- */
 void* mocha_dict_get(MochaDict *d, char *key) {
@@ -3146,6 +3409,10 @@ MochaArray* mocha_dict_allkeys(MochaDict *d) {
 }
 
 char* mocha_dict_to_display_str(MochaDict *d); // forward declare
+char* mocha_dict_array_to_display_str(MochaArray *arr, int tag); // forward declare
+typedef struct { char *data; int32_t len, cap; } MochaJsonBuf;
+static void dict_render_array(MochaJsonBuf *b, MochaArray *arr, int tag); // forward
+
 MochaArray* mocha_dict_allvalues(MochaDict *d) {
     MochaArray *arr = mocha_array_new(d->size, 8, 1);
     for (int32_t i=0; i<d->size; i++) {
@@ -3169,6 +3436,22 @@ MochaArray* mocha_dict_allvalues(MochaDict *d) {
             }
             case MOCHA_DICT_OBJECT: snprintf(buf,64,"[object]"); break;
             case MOCHA_DICT_VAST:   snprintf(buf, 64, "%lld", *(int64_t*)d->entries[i].value); break;
+            case MOCHA_DICT_ARR_INT:
+            case MOCHA_DICT_ARR_FLOAT:
+            case MOCHA_DICT_ARR_STR:
+            case MOCHA_DICT_ARR_BOOL:
+            case MOCHA_DICT_ARR_VAST: {
+                MochaJsonBuf ab;
+                ab.cap = 256; ab.len = 0; ab.data = malloc(ab.cap);
+                MOCHA_OOM_CHECK(ab.data);
+                ab.data[0] = '\0';
+                dict_render_array(&ab, (MochaArray*)d->entries[i].value, d->entries[i].value_type);
+                rc_release(buf);   /* the fixed 64-byte buffer is replaced */
+                buf = rc_alloc_string(ab.len);
+                memcpy(buf, ab.data, ab.len + 1);
+                free(ab.data);
+                break;
+            }
         }
         mocha_array_init_set(arr,i,(void*)&buf);
     }
@@ -3203,7 +3486,9 @@ static void* mocha_dict_dup_value(void *val, int vt) {
         case MOCHA_DICT_DICT:
             return mocha_dict_copy((MochaDict*)val);
         default:
-            rc_retain(val); //for OBJECT
+            /* OBJECT and the five array tags: shared, not deep-copied.
+             * The copy takes its own reference. */
+            rc_retain(val);
             return val;
     }
 }
@@ -3242,6 +3527,8 @@ MochaDict* mocha_dict_merge(MochaDict *a, MochaDict *b, int8_t override) {
 /* ---- Output ---- */
 
 void mocha_dict_print(MochaDict *d, int8_t newline); // forward
+void mocha_dict_print_array_value(MochaArray *arr, int tag); // forward (defined after dict_render_array)
+
 void mocha_dict_print_value(MochaDict *d, char *key, int8_t newline) {
     int idx = mocha_dict_find(d, key);
     if (idx < 0) { fprintf(stderr, "MochaRuntimeError: Key '%s' not found.\n", key); exit(2); }
@@ -3260,6 +3547,13 @@ void mocha_dict_print_value(MochaDict *d, char *key, int8_t newline) {
         case MOCHA_DICT_DICT:   mocha_dict_print((MochaDict*)d->entries[idx].value, 0); break;
         case MOCHA_DICT_OBJECT: printf("[object]"); break;
         case MOCHA_DICT_VAST: printf("%lld", *(int64_t*)d->entries[idx].value); break;
+        case MOCHA_DICT_ARR_INT:
+        case MOCHA_DICT_ARR_FLOAT:
+        case MOCHA_DICT_ARR_STR:
+        case MOCHA_DICT_ARR_BOOL:
+        case MOCHA_DICT_ARR_VAST:
+            mocha_dict_print_array_value((MochaArray*)d->entries[idx].value, d->entries[idx].value_type);
+            break;
     }
 }
 
@@ -3273,7 +3567,6 @@ MochaDict* mocha_dict_copy(MochaDict *src) {
 }
 
 /* ---- JSON output ---- */
-typedef struct { char *data; int32_t len, cap; } MochaJsonBuf;
 
 static void json_put(MochaJsonBuf *b, const char *s, int32_t n) {
     while (b->len + n + 1 > b->cap) {
@@ -3310,6 +3603,55 @@ static void json_put_string(MochaJsonBuf *b, const char *s) {
         }
     }
     json_put(b, "\"", 1);
+}
+
+/* One array as a JSON list. The dict tag tells us what the elements are,
+ * because MochaArray itself only stores elem_size. */
+static void json_put_array(MochaJsonBuf *b, MochaArray *arr, int tag, const char *key) {
+    json_put(b, "[", 1);
+    int32_t n = arr ? arr->length : 0;
+    for (int32_t i = 0; i < n; i++) {
+        if (i > 0) json_put(b, ",", 1);
+        switch (tag) {
+            case MOCHA_DICT_ARR_INT: {
+                char t[16];
+                snprintf(t, sizeof t, "%d", ((int32_t*)arr->data)[i]);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_ARR_VAST: {
+                char t[32];
+                snprintf(t, sizeof t, "%lld", (long long)((int64_t*)arr->data)[i]);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_ARR_FLOAT: {
+                double f = ((double*)arr->data)[i];
+                if (!isfinite(f)) {
+                    fprintf(stderr, "MochaRuntimeError: jsonify() cannot write key '%s': element %d is infinite or undefined, which JSON cannot represent.\n", key, (int)i);
+                    exit(2);
+                }
+                char t[40];
+                if (fabs(f) <= 1e15 && f == (double)(int64_t)f) snprintf(t, sizeof t, "%.1f", f);
+                else snprintf(t, sizeof t, "%.15g", f);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_ARR_STR: {
+                char *s = ((char**)arr->data)[i];
+                json_put_string(b, s ? s : "");
+                break;
+            }
+            case MOCHA_DICT_ARR_BOOL: {
+                /* bool[] is 1 byte per element; the 4-byte branch is a safety net */
+                int truth = (arr->elem_size == 1) ? (((int8_t*)arr->data)[i] != 0)
+                                                  : (((int32_t*)arr->data)[i] != 0);
+                json_puts(b, truth ? "true" : "false");
+                break;
+            }
+        }
+    }
+    json_put(b, "]", 1);
 }
 
 static void json_put_dict(MochaJsonBuf *b, MochaDict *d) {
@@ -3354,8 +3696,15 @@ static void json_put_dict(MochaJsonBuf *b, MochaDict *d) {
             case MOCHA_DICT_DICT:
                 json_put_dict(b, (MochaDict*)v);
                 break;
+            case MOCHA_DICT_ARR_INT:
+            case MOCHA_DICT_ARR_FLOAT:
+            case MOCHA_DICT_ARR_STR:
+            case MOCHA_DICT_ARR_BOOL:
+            case MOCHA_DICT_ARR_VAST:
+                json_put_array(b, (MochaArray*)v, d->entries[i].value_type, key);
+                break;
             default:
-                fprintf(stderr, "MochaRuntimeError: jsonify() cannot write key '%s': values of this kind (objects and arrays) are not supported yet.\n", key);
+                fprintf(stderr, "MochaRuntimeError: jsonify() cannot write key '%s': values of this kind (objects) are not supported yet.\n", key);
                 exit(2);
         }
     }
@@ -3384,7 +3733,81 @@ static void dict_put_raw_string(MochaJsonBuf *b, const char *s) {
     json_put(b, "\"", 1);
 }
 
-/* ---- Human-readable dict output (used by print and allValues) ---- */
+/* One array for print(d). Same element rules as json_put_array, human style. */
+static void dict_render_array(MochaJsonBuf *b, MochaArray *arr, int tag) {
+    json_put(b, "[", 1);
+    int32_t n = arr ? arr->length : 0;
+    for (int32_t i = 0; i < n; i++) {
+        if (i > 0) json_puts(b, ", ");
+        switch (tag) {
+            case MOCHA_DICT_ARR_INT: {
+                char t[16];
+                snprintf(t, sizeof t, "%d", ((int32_t*)arr->data)[i]);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_ARR_VAST: {
+                char t[32];
+                snprintf(t, sizeof t, "%lld", (long long)((int64_t*)arr->data)[i]);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_ARR_FLOAT: {
+                double f = ((double*)arr->data)[i];
+                const char *sp = mocha_float_special(f);
+                char t[40];
+                if (sp) snprintf(t, sizeof t, "%s", sp);
+                else if (f >= -1e15 && f <= 1e15 && f == (double)(int64_t)f) snprintf(t, sizeof t, "%.1f", f);
+                else snprintf(t, sizeof t, "%g", f);
+                json_puts(b, t);
+                break;
+            }
+            case MOCHA_DICT_ARR_STR: {
+                char *s = ((char**)arr->data)[i];
+                dict_put_raw_string(b, s ? s : "");
+                break;
+            }
+            case MOCHA_DICT_ARR_BOOL: {
+                int truth = (arr->elem_size == 1) ? (((int8_t*)arr->data)[i] != 0)
+                                                  : (((int32_t*)arr->data)[i] != 0);
+                json_puts(b, truth ? "true" : "false");
+                break;
+            }
+        }
+    }
+    json_put(b, "]", 1);
+}
+
+/* print(d["xs"]): one array value, printed with the same style as print(d) */
+void mocha_dict_print_array_value(MochaArray *arr, int tag) {
+    MochaJsonBuf b;
+    b.cap  = 256;
+    b.len  = 0;
+    b.data = malloc(b.cap);
+    MOCHA_OOM_CHECK(b.data);
+    b.data[0] = '\0';
+    dict_render_array(&b, arr, tag);
+    printf("%s", b.data);
+    free(b.data);
+}
+
+/* Array as an RC string (for allValues) */
+char* mocha_dict_array_to_display_str(MochaArray *arr, int tag) {
+    MochaJsonBuf b;
+    b.cap  = 256;
+    b.len  = 0;
+    b.data = malloc(b.cap);
+    MOCHA_OOM_CHECK(b.data);
+    b.data[0] = '\0';
+    dict_render_array(&b, arr, tag);
+    char *result = rc_alloc_string(b.len);
+    memcpy(result, b.data, b.len);
+    result[b.len] = '\0';
+    free(b.data);
+    return result;
+}
+
+/* ---- Human-readable dict output (used by print(d), and by allValues for nested dicts) ---- */
 static void dict_render(MochaJsonBuf *b, MochaDict *d) {
     json_put(b, "{", 1);
     for (int32_t i = 0; i < d->size; i++) {
@@ -3423,6 +3846,13 @@ static void dict_render(MochaJsonBuf *b, MochaDict *d) {
                 break;
             case MOCHA_DICT_DICT:
                 dict_render(b, (MochaDict*)v);
+                break;
+            case MOCHA_DICT_ARR_INT:
+            case MOCHA_DICT_ARR_FLOAT:
+            case MOCHA_DICT_ARR_STR:
+            case MOCHA_DICT_ARR_BOOL:
+            case MOCHA_DICT_ARR_VAST:
+                dict_render_array(b, (MochaArray*)v, d->entries[i].value_type);
                 break;
             default:
                 json_puts(b, "[object]");
@@ -3464,11 +3894,311 @@ char* mocha_dict_to_display_str(MochaDict *d) {
 }
 
 /* ============================================================
+ * JSON PARSER (str.dictify())
+ *
+ * Reads JSON text into a dict (nested objects and typed arrays).
+ * Numbers: no dot/exponent gives int, or vast if it needs 64 bits;
+ * otherwise float. null becomes the string "null".
+ * Arrays must hold one kind of scalar, with at least one element.
+ * Errors: MochaRuntimeError with the character position.
+ * ============================================================ */
+
+typedef struct { const char *s; const char *p; } MochaJsonParser;
+
+static void jp_fail(MochaJsonParser *j, const char *msg) {
+    fprintf(stderr, "MochaRuntimeError: dictify() %s at position %d.\n", msg, (int)(j->p - j->s));
+    exit(2);
+}
+
+static void jp_skip_ws(MochaJsonParser *j) {
+    while (*j->p == ' ' || *j->p == '\t' || *j->p == '\n' || *j->p == '\r') j->p++;
+}
+
+static int jp_hex4(MochaJsonParser *j) {
+    int v = 0;
+    for (int i = 0; i < 4; i++) {
+        char c = *j->p;
+        int d;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+        else { jp_fail(j, "bad \\u escape in string"); return 0; }
+        v = v * 16 + d;
+        j->p++;
+    }
+    return v;
+}
+
+static char *jp_put_utf8(char *o, unsigned cp) {
+    if (cp < 0x80) *o++ = (char)cp;
+    else if (cp < 0x800) { *o++ = (char)(0xC0 | (cp >> 6)); *o++ = (char)(0x80 | (cp & 0x3F)); }
+    else if (cp < 0x10000) { *o++ = (char)(0xE0 | (cp >> 12)); *o++ = (char)(0x80 | ((cp >> 6) & 0x3F)); *o++ = (char)(0x80 | (cp & 0x3F)); }
+    else { *o++ = (char)(0xF0 | (cp >> 18)); *o++ = (char)(0x80 | ((cp >> 12) & 0x3F)); *o++ = (char)(0x80 | ((cp >> 6) & 0x3F)); *o++ = (char)(0x80 | (cp & 0x3F)); }
+    return o;
+}
+
+/* Returns a plain malloc'd C string. The caller frees it. */
+static char *jp_string(MochaJsonParser *j) {
+    if (*j->p != '"') { jp_fail(j, "expected a string"); return NULL; }
+    j->p++;
+    /* the decoded text is never longer than the raw text, so size the buffer by scanning ahead */
+    const char *q = j->p;
+    while (*q && *q != '"') { if (*q == '\\' && q[1]) q++; q++; }
+    if (*q != '"') { j->p = q; jp_fail(j, "unterminated string"); return NULL; }
+    char *out = malloc((size_t)(q - j->p) + 1);
+    MOCHA_OOM_CHECK(out);
+    char *o = out;
+    while (*j->p != '"') {
+        unsigned char c = (unsigned char)*j->p;
+        if (c < 0x20) { jp_fail(j, "control character inside string"); return out; }
+        if (c != '\\') { *o++ = (char)c; j->p++; continue; }
+        j->p++;
+        switch (*j->p) {
+            case '"':  *o++ = '"';  j->p++; break;
+            case '\\': *o++ = '\\'; j->p++; break;
+            case '/':  *o++ = '/';  j->p++; break;
+            case 'b':  *o++ = '\b'; j->p++; break;
+            case 'f':  *o++ = '\f'; j->p++; break;
+            case 'n':  *o++ = '\n'; j->p++; break;
+            case 'r':  *o++ = '\r'; j->p++; break;
+            case 't':  *o++ = '\t'; j->p++; break;
+            case 'u': {
+                j->p++;
+                unsigned cp = (unsigned)jp_hex4(j);
+                if (cp >= 0xD800 && cp <= 0xDBFF && j->p[0] == '\\' && j->p[1] == 'u') {
+                    j->p += 2;
+                    unsigned lo = (unsigned)jp_hex4(j);
+                    if (lo >= 0xDC00 && lo <= 0xDFFF) cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                }
+                o = jp_put_utf8(o, cp);
+                break;
+            }
+            default: jp_fail(j, "unknown escape in string"); return out;
+        }
+    }
+    *o = '\0';
+    j->p++;  /* closing quote */
+    return out;
+}
+
+static void jp_number(MochaJsonParser *j, MochaDict *d, char *key) {
+    char buf[64];
+    int n = 0, is_float = 0;
+    const char *q = j->p;
+    while ((*q >= '0' && *q <= '9') || *q == '-' || *q == '+' || *q == '.' || *q == 'e' || *q == 'E') {
+        if (*q == '.' || *q == 'e' || *q == 'E') is_float = 1;
+        if (n >= 63) { jp_fail(j, "number is too long"); return; }
+        buf[n++] = *q++;
+    }
+    buf[n] = '\0';
+    char *end = NULL;
+    if (is_float) {
+        double f = strtod(buf, &end);
+        if (end == buf || *end != '\0') { jp_fail(j, "bad number"); return; }
+        mocha_dict_set_float(d, key, f);
+    } else {
+        errno = 0;
+        long long v = strtoll(buf, &end, 10);
+        if (end == buf || *end != '\0') { jp_fail(j, "bad number"); return; }
+        if (errno == ERANGE) { jp_fail(j, "integer is too large"); return; }
+        if (v >= INT32_MIN && v <= INT32_MAX) mocha_dict_set_int(d, key, (int32_t)v);
+        else mocha_dict_set_vast(d, key, (int64_t)v);
+    }
+    j->p = q;
+}
+
+/* kinds seen while scanning an array */
+#define JP_K_NONE  0
+#define JP_K_STR   1
+#define JP_K_BOOL  2
+#define JP_K_INT   3
+#define JP_K_FLOAT 4
+
+/* Classify the value at j->p without consuming it. Returns a JP_K_* kind;
+ * *wide is set to 1 when an integer does not fit in 32 bits. */
+static int jp_peek_kind(MochaJsonParser *j, int *wide) {
+    char c = *j->p;
+    *wide = 0;
+    if (c == '"') return JP_K_STR;
+    if (c == 't' || c == 'f') return JP_K_BOOL;
+    if (c == '-' || (c >= '0' && c <= '9')) {
+        const char *q = j->p;
+        int is_float = 0;
+        char buf[64];
+        int n = 0;
+        while ((*q >= '0' && *q <= '9') || *q == '-' || *q == '+' || *q == '.' || *q == 'e' || *q == 'E') {
+            if (*q == '.' || *q == 'e' || *q == 'E') is_float = 1;
+            if (n < 63) buf[n++] = *q;
+            q++;
+        }
+        buf[n] = '\0';
+        if (is_float) return JP_K_FLOAT;
+        errno = 0;
+        long long v = strtoll(buf, NULL, 10);
+        if (errno == ERANGE) { jp_fail(j, "integer is too large"); return JP_K_NONE; }
+        if (v < INT32_MIN || v > INT32_MAX) *wide = 1;
+        return JP_K_INT;
+    }
+    if (c == 'n') { jp_fail(j, "null is not supported yet"); return JP_K_NONE; }
+    if (c == '{' || c == '[') { jp_fail(j, "arrays of objects or arrays are not supported"); return JP_K_NONE; }
+    jp_fail(j, c ? "unexpected character in array" : "unexpected end of text");
+    return JP_K_NONE;
+}
+
+/* Skip one scalar value (used by the scan pass). */
+static void jp_skip_scalar(MochaJsonParser *j) {
+    char c = *j->p;
+    if (c == '"') { char *s = jp_string(j); free(s); }
+    else if (c == 't') { if (strncmp(j->p, "true", 4) != 0) { jp_fail(j, "unexpected text"); return; } j->p += 4; }
+    else if (c == 'f') { if (strncmp(j->p, "false", 5) != 0) { jp_fail(j, "unexpected text"); return; } j->p += 5; }
+    else { while ((*j->p >= '0' && *j->p <= '9') || *j->p == '-' || *j->p == '+' || *j->p == '.' || *j->p == 'e' || *j->p == 'E') j->p++; }
+}
+
+/* Parses '[' ... ']' and stores a typed array under key. */
+static void jp_array(MochaJsonParser *j, MochaDict *d, char *key) {
+    const char *start = j->p;
+    j->p++;                       /* '[' */
+    jp_skip_ws(j);
+    if (*j->p == ']') { jp_fail(j, "cannot tell the element type of an empty array"); return; }
+
+    /* ---- scan pass ---- */
+    int kind = JP_K_NONE, any_wide = 0, count = 0;
+    for (;;) {
+        jp_skip_ws(j);
+        int wide;
+        int k = jp_peek_kind(j, &wide);
+        if (wide) any_wide = 1;
+        if (kind == JP_K_NONE) kind = k;
+        else if (k != kind) { jp_fail(j, "arrays must hold one kind of value (mixed kinds found)"); return; }
+        jp_skip_ws(j);
+        jp_skip_scalar(j);
+        count++;
+        jp_skip_ws(j);
+        if (*j->p == ',') { j->p++; continue; }
+        if (*j->p == ']') break;
+        jp_fail(j, "expected ',' or ']'");
+        return;
+    }
+
+    /* ---- build pass: rewind to just after '[' ---- */
+    j->p = start + 1;
+    int32_t elem_size = (kind == JP_K_STR) ? 8 : (kind == JP_K_BOOL) ? 1 :
+                        (kind == JP_K_FLOAT) ? 8 : (any_wide ? 8 : 4);
+    MochaArray *arr = mocha_array_new(count, elem_size, 0);
+    for (int i = 0; i < count; i++) {
+        jp_skip_ws(j);
+        if (kind == JP_K_STR) {
+            char *s = jp_string(j);
+            char *rc = rc_strdup(s);
+            free(s);
+            ((char**)arr->data)[i] = rc;
+        } else if (kind == JP_K_BOOL) {
+            int truth = (*j->p == 't');
+            j->p += truth ? 4 : 5;
+            ((int8_t*)arr->data)[i] = (int8_t)truth;
+        } else if (kind == JP_K_FLOAT) {
+            char *end = NULL;
+            ((double*)arr->data)[i] = strtod(j->p, &end);
+            if (end == j->p) { jp_fail(j, "bad number"); return; }
+            j->p = end;
+        } else {
+            char *end = NULL;
+            long long v = strtoll(j->p, &end, 10);
+            if (end == j->p) { jp_fail(j, "bad number"); return; }
+            j->p = end;
+            if (any_wide) ((int64_t*)arr->data)[i] = (int64_t)v;
+            else ((int32_t*)arr->data)[i] = (int32_t)v;
+        }
+        arr->length = i + 1;
+        jp_skip_ws(j);
+        if (*j->p == ',') j->p++;
+    }
+    j->p++;                       /* ']' */
+
+    if (kind == JP_K_STR) { mocha_dict_set_arr_str(d, key, arr);  mocha_array_release(arr, 1); }
+    else if (kind == JP_K_BOOL)  { mocha_dict_set_arr_bool(d, key, arr);  mocha_array_release(arr, 0); }
+    else if (kind == JP_K_FLOAT) { mocha_dict_set_arr_float(d, key, arr); mocha_array_release(arr, 0); }
+    else if (any_wide)           { mocha_dict_set_arr_vast(d, key, arr);  mocha_array_release(arr, 0); }
+    else                         { mocha_dict_set_arr_int(d, key, arr);   mocha_array_release(arr, 0); }
+}
+
+static MochaDict *jp_object(MochaJsonParser *j);
+
+static void jp_value(MochaJsonParser *j, MochaDict *d, char *key) {
+    char c = *j->p;
+    if (c == '"') {
+        char *s = jp_string(j);
+        mocha_dict_set_str(d, key, s);   /* set_str makes its own RC copy */
+        free(s);
+    } else if (c == 't') {
+        if (strncmp(j->p, "true", 4) != 0) { jp_fail(j, "unexpected text"); return; }
+        j->p += 4;
+        mocha_dict_set_bool(d, key, 1);
+    } else if (c == 'f') {
+        if (strncmp(j->p, "false", 5) != 0) { jp_fail(j, "unexpected text"); return; }
+        j->p += 5;
+        mocha_dict_set_bool(d, key, 0);
+    } else if (c == 'n') {
+        if (strncmp(j->p, "null", 4) != 0) { jp_fail(j, "unexpected text"); return; }
+        j->p += 4;
+        mocha_dict_set_str(d, key, "null");
+    } else if (c == '{') {
+        /* the fresh dict already holds one reference; the parent takes it over,
+         * so no retain here and no release after (set_dict does not retain) */
+        MochaDict *child = jp_object(j);
+        mocha_dict_set_dict(d, key, child);
+    } else if (c == '[') {
+        jp_array(j, d, key);
+    } else if (c == '-' || (c >= '0' && c <= '9')) {
+        jp_number(j, d, key);
+    } else {
+        jp_fail(j, c ? "unexpected character" : "unexpected end of text");
+    }
+}
+
+/* Parses one object starting at '{' and returns a fresh dict (one reference). */
+static MochaDict *jp_object(MochaJsonParser *j) {
+    MochaDict *d = mocha_dict_new();
+    if (*j->p != '{') { jp_fail(j, "expected '{'"); return d; }
+    j->p++;
+    jp_skip_ws(j);
+    if (*j->p == '}') { j->p++; return d; }
+    for (;;) {
+        jp_skip_ws(j);
+        char *key = jp_string(j);
+        jp_skip_ws(j);
+        if (*j->p != ':') { jp_fail(j, "expected ':' after key"); return d; }
+        j->p++;
+        jp_skip_ws(j);
+        jp_value(j, d, key);
+        free(key);
+        jp_skip_ws(j);
+        if (*j->p == ',') { j->p++; continue; }
+        if (*j->p == '}') { j->p++; return d; }
+        jp_fail(j, "expected ',' or '}'");
+        return d;
+    }
+}
+
+MochaDict *mocha_str_dictify(char *text) {
+    MochaJsonParser j;
+    j.s = j.p = text ? text : "";
+    jp_skip_ws(&j);
+    if (*j.p != '{') { jp_fail(&j, "expected '{' at the start"); return mocha_dict_new(); }
+    MochaDict *d = jp_object(&j);
+    jp_skip_ws(&j);
+    if (*j.p != '\0') jp_fail(&j, "extra text after the closing '}'");
+    return d;
+}
+
+/* ============================================================
  * SET RUNTIME
  *
- * Ordered set of unique values. Supports int, float, str, bool.
- * Operations: insert, delete, has, union, intersect, xor, 
- *  subset, superset, rel_diff, min and max.
+ * Ordered set of unique values. Supports int, float, str, bool,
+ * vast and class objects.
+ * Operations: insert, delete, has, clean, union, intersect, xor,
+ * rel_diff, proper subset, negate, retype, min and max, plus
+ * similarity metrics (jaccard, dice, overlap).
  * ============================================================ */
 
 /* ---- Internal helpers ---- */
@@ -3944,7 +4674,8 @@ int mocha_wrap_system(const char *cmd) {
 /* ---- RUNTIME Exception ---- */
 
 //Flush stdout before writing — prevents interleaved output on error
-void* mocha_print_stderr(const char *msg) { //this is called c_print_error in Mocha-side
+//this is called c_print_error on Mocha side
+void* mocha_print_stderr(const char *msg) {
     fflush(stdout);
     fprintf(stderr, "\n%s\n", msg);  // \n before AND after
     fflush(stderr);
@@ -3957,6 +4688,43 @@ void* mocha_exit(int code) {
     fflush(stderr);
     _Exit(code); //not exit because handlers are a headache
     return NULL; // unreachable but satisfies type
+}
+
+/* ============================================================
+ * OPEN HANDLES (shared by Lua, Wren and sqlite3)
+ * Remembers which handles are open, so closing one twice
+ * can be caught and ignored instead of crashing.
+ * ============================================================ */
+
+static void **mocha_open_handles = NULL;
+static size_t mocha_open_handles_count = 0;
+static size_t mocha_open_handles_cap = 0;
+
+/* Remember a newly opened handle */
+static void mocha_open_handles_add(void *h) {
+    if (!h) return;
+    if (mocha_open_handles_count == mocha_open_handles_cap) {
+        size_t new_cap = mocha_open_handles_cap ? mocha_open_handles_cap * 2 : 16;
+        void **grown = (void**)realloc(mocha_open_handles, new_cap * sizeof(void*));
+        if (!grown) {
+            fprintf(stderr, "MochaRuntimeError: out of memory while tracking open handles\n");
+            mocha_exit(1);
+        }
+        mocha_open_handles = grown;
+        mocha_open_handles_cap = new_cap;
+    }
+    mocha_open_handles[mocha_open_handles_count++] = h;
+}
+
+/* Forget a handle. Returns 1 if it was open (now removed), 0 if it was not open (already closed) */
+static int mocha_open_handles_remove(void *h) {
+    for (size_t i = 0; i < mocha_open_handles_count; i++) {
+        if (mocha_open_handles[i] == h) {
+            mocha_open_handles[i] = mocha_open_handles[--mocha_open_handles_count];
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /* ============================================================
@@ -3975,6 +4743,7 @@ void* mocha_sqlite3_open(const char *path) {
         sqlite3_close(db);  // must close even on failure!
         return NULL;
     }
+    mocha_open_handles_add((void*)db);
     return (void*)db;
 }
 
@@ -3990,9 +4759,15 @@ int mocha_sqlite3_exec(void *db, const char *sql) {
     return rc;
 }
 
-/* Close the database handle */
+/* Close the database handle. Safe to call twice:
+ * a second close of the same handle prints a warning and is ignored */
 void* mocha_sqlite3_close(void *db) {
-    if (db) sqlite3_close((sqlite3*)db);
+    if (!db) return NULL;
+    if (!mocha_open_handles_remove(db)) {
+        fprintf(stderr, "MochaSQLiteWarning: sqlite3_close called on a database that is already closed, ignored\n");
+        return NULL;
+    }
+    sqlite3_close((sqlite3*)db);
     return NULL;
 }
 
@@ -4054,45 +4829,82 @@ static void mocha_sqlite3_free_results() {
     mocha_sqlite3_result_ncols = 0;
 }
 
-/* Callback — collects rows into cache */
+/* Callback — collects rows into cache.
+ * A SQL NULL is stored as a real NULL pointer, so it can be told apart from the text "NULL".
+ * Aborts with an error if the column count changes between statements */
 static int mocha_sqlite3_collect_callback(void *unused, int argc,
                                            char **argv, char **col_names) {
+    (void)unused;
+    if (argc <= 0) return 0;
+
     /* first row — allocate column names */
     if (mocha_sqlite3_result_ncols == 0) {
-        mocha_sqlite3_result_ncols = argc;
-        mocha_sqlite3_result_colnames = malloc(argc * sizeof(char*));
-        for (int j = 0; j < argc; j++) {
-            mocha_sqlite3_result_colnames[j] = col_names[j]
-                ? strdup(col_names[j]) : strdup("");
+        char **names = (char**)calloc((size_t)argc, sizeof(char*));
+        if (!names) {
+            fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+            return 1;
         }
+        for (int j = 0; j < argc; j++) {
+            names[j] = strdup(col_names[j] ? col_names[j] : "");
+            if (!names[j]) {
+                for (int k = 0; k < j; k++) free(names[k]);
+                free(names);
+                fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+                return 1;
+            }
+        }
+        mocha_sqlite3_result_colnames = names;
+        mocha_sqlite3_result_ncols = argc;
+    } else if (argc != mocha_sqlite3_result_ncols) {
+        fprintf(stderr, "MochaSQLiteError (query_run): all statements in one query must return the same "
+                        "number of columns (got %d, then %d)\n",
+                mocha_sqlite3_result_ncols, argc);
+        return 1;
     }
+
     /* grow rows array */
-    char*** tmp_rows = realloc(mocha_sqlite3_result_rows,
-        (mocha_sqlite3_result_nrows + 1) * sizeof(char**));
+    char*** tmp_rows = (char***)realloc(mocha_sqlite3_result_rows,
+        (size_t)(mocha_sqlite3_result_nrows + 1) * sizeof(char**));
     if (!tmp_rows) {
         fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
-        return 1;  /* tells sqlite3_exec to abort — mocha_sqlite3_result_rows still valid, untouched */
+        return 1;  /* tells sqlite3_exec to abort — the old rows array is still valid */
     }
     mocha_sqlite3_result_rows = tmp_rows;
 
-    mocha_sqlite3_result_rows[mocha_sqlite3_result_nrows] = malloc(argc * sizeof(char*));
-    for (int j = 0; j < argc; j++) {
-        mocha_sqlite3_result_rows[mocha_sqlite3_result_nrows][j] =
-            argv[j] ? strdup(argv[j]) : strdup("NULL");
+    char **row = (char**)calloc((size_t)argc, sizeof(char*));
+    if (!row) {
+        fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+        return 1;
     }
+    for (int j = 0; j < argc; j++) {
+        if (argv[j]) {
+            row[j] = strdup(argv[j]);
+            if (!row[j]) {
+                for (int k = 0; k < j; k++) free(row[k]);
+                free(row);
+                fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+                return 1;
+            }
+        }
+    }
+    mocha_sqlite3_result_rows[mocha_sqlite3_result_nrows] = row;
     mocha_sqlite3_result_nrows++;
     return 0;
 }
 
-/* Run a SELECT query and cache results — call this first */
+/* Run a SELECT query and cache results — call this first.
+ * If the query fails, the cache is left empty (no half-filled results) */
 int mocha_sqlite3_query_run(void *db, const char *sql) {
     if (!db) return -1;
     mocha_sqlite3_free_results();
     char *errmsg = NULL;
     int rc = sqlite3_exec((sqlite3*)db, sql, mocha_sqlite3_collect_callback, 0, &errmsg);
-    if (rc != SQLITE_OK && errmsg) {
-        fprintf(stderr, "MochaSQLiteError (query_run): %s\n", errmsg);
-        sqlite3_free(errmsg);
+    if (rc != SQLITE_OK) {
+        if (errmsg) {
+            fprintf(stderr, "MochaSQLiteError (query_run): %s\n", errmsg);
+            sqlite3_free(errmsg);
+        }
+        mocha_sqlite3_free_results();
     }
     return rc;
 }
@@ -4107,11 +4919,20 @@ int mocha_sqlite3_query_cols(void *db) {
     return mocha_sqlite3_result_ncols;
 }
 
-/* Get cell value at row i, col j */
+/* Get cell value at row i, col j. A SQL NULL gives the text "NULL"
+ * (use mocha_sqlite3_query_is_null to tell it from a real "NULL" string) */
 const char* mocha_sqlite3_query_cell(void *db, int row, int col) {
     if (row < 0 || row >= mocha_sqlite3_result_nrows) return rc_strdup("");
     if (col < 0 || col >= mocha_sqlite3_result_ncols) return rc_strdup("");
-    return rc_strdup(mocha_sqlite3_result_rows[row][col]);
+    const char *v = mocha_sqlite3_result_rows[row][col];
+    return rc_strdup(v ? v : "NULL");
+}
+
+/* Is the cell a SQL NULL? 1 = yes, 0 = no (also 0 for an out-of-range index) */
+int mocha_sqlite3_query_is_null(void *db, int row, int col) {
+    if (row < 0 || row >= mocha_sqlite3_result_nrows) return 0;
+    if (col < 0 || col >= mocha_sqlite3_result_ncols) return 0;
+    return mocha_sqlite3_result_rows[row][col] == NULL;
 }
 
 /* Get column name at index j */
@@ -4193,6 +5014,7 @@ void* mocha_lua_new() {
     lua_State *L = luaL_newstate();
     if (!L) return NULL;
     luaL_openlibs(L);
+    mocha_open_handles_add((void*)L);
     return (void*)L;
 }
 
@@ -4218,10 +5040,14 @@ int mocha_lua_dofile(void *L, const char *filename) {
     return r;
 }
 
-/* Close and free the Lua state. Close each state only once:
- * a second close of the same handle is undefined behaviour */
+/* Close and free the Lua state. Safe to call twice:
+ * a second close of the same handle prints a warning and is ignored */
 void* mocha_lua_close(void *L) {
     MOCHA_LUA_NULL_CHECK(L, "lua_close", NULL);
+    if (!mocha_open_handles_remove(L)) {
+        fprintf(stderr, "MochaLuaWarning: lua_close called on a state that is already closed, ignored\n");
+        return NULL;
+    }
     lua_close((lua_State*)L);
     return NULL;
 }
@@ -4338,294 +5164,254 @@ void* mocha_lua_clear_stack(void *L) {
 
 /* ── Call Lua functions from Mocha ── */
 
+/* Remembers whether the last call failed, and why.
+ * Stored inside the Lua state itself, so every state has its own status */
+static void mocha_lua_set_status(lua_State *S, int failed, const char *msg) {
+    lua_pushboolean(S, failed);
+    lua_setfield(S, LUA_REGISTRYINDEX, "mocha_call_failed");
+    lua_pushstring(S, msg ? msg : "");
+    lua_setfield(S, LUA_REGISTRYINDEX, "mocha_call_error");
+}
+
+/* Runs a call that is already set up (function and arguments are on the stack).
+ * Returns 1 with the result on the stack, or 0 on failure (stack cleaned up).
+ * On failure it prints the Mocha function name and the Lua function name, and records the status */
+static int mocha_lua_run_call(lua_State *S, int nargs, const char *mochaname, const char *funcname) {
+    if (lua_pcall(S, nargs, 1, 0) != LUA_OK) {
+        const char *err = lua_tostring(S, -1);
+        const char *msg = err ? err : "unknown error";
+        fprintf(stderr, "MochaLuaError: %s('%s') failed: %s\n", mochaname, funcname, msg);
+        mocha_lua_set_status(S, 1, msg);
+        lua_pop(S, 1);
+        return 0;
+    }
+    mocha_lua_set_status(S, 0, "");
+    return 1;
+}
+
+/* Did the last lua_call_* fail? 1 = yes, 0 = no (1 for a null state) */
+int mocha_lua_call_failed(void *L) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_failed", 1);
+    lua_State *S = (lua_State*)L;
+    lua_getfield(S, LUA_REGISTRYINDEX, "mocha_call_failed");
+    int r = lua_toboolean(S, -1);
+    lua_pop(S, 1);
+    return r;
+}
+
+/* The error message of the last failed lua_call_*, or an empty string */
+const char* mocha_lua_call_error(void *L) {
+    MOCHA_LUA_NULL_CHECK(L, "lua_call_error", mocha_rc_copy("MochaLuaError: null Lua state"));
+    lua_State *S = (lua_State*)L;
+    lua_getfield(S, LUA_REGISTRYINDEX, "mocha_call_error");
+    char *out = mocha_rc_copy(lua_tostring(S, -1));
+    lua_pop(S, 1);
+    return out;
+}
+
 // call func() → number
 double mocha_lua_call_number(void *L, const char *funcname) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_number", 0.0);
-    lua_getglobal((lua_State*)L, funcname);
-    if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call_number('%s') failed: %s\n", 
-                funcname, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0.0;
-    }
-    double r = lua_tonumber((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    if (!mocha_lua_run_call(S, 0, "lua_call_number", funcname)) return 0.0;
+    double r = lua_tonumber(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func() → string
 const char* mocha_lua_call_string(void *L, const char *funcname) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_string", mocha_rc_copy(""));
-    lua_getglobal((lua_State*)L, funcname);
-    if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call_string('%s') failed: %s\n",
-                funcname, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return mocha_rc_copy("");
-    }
-    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    if (!mocha_lua_run_call(S, 0, "lua_call_string", funcname)) return mocha_rc_copy("");
+    char *out = mocha_rc_copy(lua_tostring(S, -1));
+    lua_pop(S, 1);
     return out;
 }
 
 // call func() → int
 int mocha_lua_call_int(void *L, const char *funcname) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_int", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call_int('%s') failed: %s\n", 
-                funcname, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = mocha_lua_toint((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    if (!mocha_lua_run_call(S, 0, "lua_call_int", funcname)) return 0;
+    int r = mocha_lua_toint(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(number) → number
 double mocha_lua_call1n_number(void *L, const char *funcname, double arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_number_1n", 0.0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1n_number('%s', %f) failed: %s\n", 
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0.0;
-    }
-    double r = lua_tonumber((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_number_1n", funcname)) return 0.0;
+    double r = lua_tonumber(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(string) → string
 const char* mocha_lua_call1s_string(void *L, const char *funcname, const char *arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_string_1s", mocha_rc_copy(""));
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushstring((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1s_string('%s', '%s') failed: %s\n",
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return mocha_rc_copy("");
-    }
-    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushstring(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_string_1s", funcname)) return mocha_rc_copy("");
+    char *out = mocha_rc_copy(lua_tostring(S, -1));
+    lua_pop(S, 1);
     return out;
 }
 
 // call func(number, number) → number
 double mocha_lua_call2n_number(void *L, const char *funcname, double a, double b) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_number_2n", 0.0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, a);
-    lua_pushnumber((lua_State*)L, b);
-    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2n_number('%s', %f, %f) failed: %s\n", 
-                funcname, a, b, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0.0;
-    }
-    double r = lua_tonumber((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, a);
+    lua_pushnumber(S, b);
+    if (!mocha_lua_run_call(S, 2, "lua_call_number_2n", funcname)) return 0.0;
+    double r = lua_tonumber(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(string, string) → string
 const char* mocha_lua_call2s_string(void *L, const char *funcname, const char *a, const char *b) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_string_2s", mocha_rc_copy(""));
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushstring((lua_State*)L, a);
-    lua_pushstring((lua_State*)L, b);
-    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2s_string('%s', '%s', '%s') failed: %s\n",
-                funcname, a, b, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return mocha_rc_copy("");
-    }
-    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushstring(S, a);
+    lua_pushstring(S, b);
+    if (!mocha_lua_run_call(S, 2, "lua_call_string_2s", funcname)) return mocha_rc_copy("");
+    char *out = mocha_rc_copy(lua_tostring(S, -1));
+    lua_pop(S, 1);
     return out;
 }
 
 // call func(number) → string
 const char* mocha_lua_call1n_string(void *L, const char *funcname, double arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_string_1n", mocha_rc_copy(""));
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1n_string('%s', %f) failed: %s\n",
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return mocha_rc_copy("");
-    }
-    char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_string_1n", funcname)) return mocha_rc_copy("");
+    char *out = mocha_rc_copy(lua_tostring(S, -1));
+    lua_pop(S, 1);
     return out;
 }
 
 // call func() → bool
 int mocha_lua_call_bool(void *L, const char *funcname) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_bool", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    if (lua_pcall((lua_State*)L, 0, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call_bool('%s') failed: %s\n",
-                funcname, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = lua_toboolean((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    if (!mocha_lua_run_call(S, 0, "lua_call_bool", funcname)) return 0;
+    int r = lua_toboolean(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(number) → bool
 int mocha_lua_call1n_bool(void *L, const char *funcname, double arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_1n", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1n_bool('%s', %f) failed: %s\n",
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = lua_toboolean((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_bool_1n", funcname)) return 0;
+    int r = lua_toboolean(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(string) → bool
 int mocha_lua_call1s_bool(void *L, const char *funcname, const char *arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_1s", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushstring((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1s_bool('%s', '%s') failed: %s\n",
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = lua_toboolean((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushstring(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_bool_1s", funcname)) return 0;
+    int r = lua_toboolean(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(number, number) → bool
 int mocha_lua_call2n_bool(void *L, const char *funcname, double a, double b) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_2n", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, a);
-    lua_pushnumber((lua_State*)L, b);
-    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2n_bool('%s', %f, %f) failed: %s\n",
-                funcname, a, b, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = lua_toboolean((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, a);
+    lua_pushnumber(S, b);
+    if (!mocha_lua_run_call(S, 2, "lua_call_bool_2n", funcname)) return 0;
+    int r = lua_toboolean(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(string, string) → bool
 int mocha_lua_call2s_bool(void *L, const char *funcname, const char *a, const char *b) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_bool_2s", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushstring((lua_State*)L, a);
-    lua_pushstring((lua_State*)L, b);
-    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2s_bool('%s', '%s', '%s') failed: %s\n",
-                funcname, a, b, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = lua_toboolean((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushstring(S, a);
+    lua_pushstring(S, b);
+    if (!mocha_lua_run_call(S, 2, "lua_call_bool_2s", funcname)) return 0;
+    int r = lua_toboolean(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(number) → int
 int mocha_lua_call1n_int(void *L, const char *funcname, double arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_int_1n", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1n_int('%s', %f) failed: %s\n",
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = mocha_lua_toint((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_int_1n", funcname)) return 0;
+    int r = mocha_lua_toint(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(string) → int
 int mocha_lua_call1s_int(void *L, const char *funcname, const char *arg) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_int_1s", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushstring((lua_State*)L, arg);
-    if (lua_pcall((lua_State*)L, 1, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call1s_int('%s', '%s') failed: %s\n",
-                funcname, arg, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = mocha_lua_toint((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushstring(S, arg);
+    if (!mocha_lua_run_call(S, 1, "lua_call_int_1s", funcname)) return 0;
+    int r = mocha_lua_toint(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(number, number) → int
 int mocha_lua_call2n_int(void *L, const char *funcname, double a, double b) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_int_2n", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushnumber((lua_State*)L, a);
-    lua_pushnumber((lua_State*)L, b);
-    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2n_int('%s', %f, %f) failed: %s\n",
-                funcname, a, b, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = mocha_lua_toint((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushnumber(S, a);
+    lua_pushnumber(S, b);
+    if (!mocha_lua_run_call(S, 2, "lua_call_int_2n", funcname)) return 0;
+    int r = mocha_lua_toint(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
 // call func(string, string) → int
 int mocha_lua_call2s_int(void *L, const char *funcname, const char *a, const char *b) {
     MOCHA_LUA_NULL_CHECK(L, "lua_call_int_2s", 0);
-    lua_getglobal((lua_State*)L, funcname);
-    lua_pushstring((lua_State*)L, a);
-    lua_pushstring((lua_State*)L, b);
-    if (lua_pcall((lua_State*)L, 2, 1, 0) != LUA_OK) {
-        const char *err = lua_tostring((lua_State*)L, -1);
-        fprintf(stderr, "MochaLuaError: call2s_int('%s', '%s', '%s') failed: %s\n",
-                funcname, a, b, err ? err : "unknown error");
-        lua_pop((lua_State*)L, 1);
-        return 0;
-    }
-    int r = mocha_lua_toint((lua_State*)L, -1);
-    lua_pop((lua_State*)L, 1);
+    lua_State *S = (lua_State*)L;
+    lua_getglobal(S, funcname);
+    lua_pushstring(S, a);
+    lua_pushstring(S, b);
+    if (!mocha_lua_run_call(S, 2, "lua_call_int_2s", funcname)) return 0;
+    int r = mocha_lua_toint(S, -1);
+    lua_pop(S, 1);
     return r;
 }
 
@@ -4662,26 +5448,31 @@ void* mocha_lua_push_bool(void *L, int val) {
     return NULL;
 }
 
-/* Runs the pending call. Returns 1 if a result is on the stack, 0 on error */
+/* Runs the pending call. Returns 1 if a result is on the stack, 0 on error.
+ * Records the status, and prints the Mocha function name on failure */
 static int mocha_lua_finish_call(void *L, int nargs, const char *what) {
     lua_State *S = (lua_State*)L;
     if (nargs < 0 || lua_gettop(S) < nargs + 1) {
         fprintf(stderr, "MochaLuaError: %s: expected %d pushed args plus the function, but the stack is too small (did you call lua_begin_call first?)\n",
                 what, nargs);
+        mocha_lua_set_status(S, 1, "stack too small: lua_begin_call missing or wrong argument count");
         return 0;
     }
     if (lua_pcall(S, nargs, 1, 0) != LUA_OK) {
         const char *err = lua_tostring(S, -1);
-        fprintf(stderr, "MochaLuaError: %s failed: %s\n", what, err ? err : "unknown error");
+        const char *msg = err ? err : "unknown error";
+        fprintf(stderr, "MochaLuaError: %s failed: %s\n", what, msg);
+        mocha_lua_set_status(S, 1, msg);
         lua_pop(S, 1);
         return 0;
     }
+    mocha_lua_set_status(S, 0, "");
     return 1;
 }
 
 double mocha_lua_end_call_number(void *L, int nargs) {
     MOCHA_LUA_NULL_CHECK(L, "lua_end_call_number", 0.0);
-    if (!mocha_lua_finish_call(L, nargs, "end_call_number")) return 0.0;
+    if (!mocha_lua_finish_call(L, nargs, "lua_end_call_number")) return 0.0;
     double r = lua_tonumber((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
@@ -4689,7 +5480,7 @@ double mocha_lua_end_call_number(void *L, int nargs) {
 
 const char* mocha_lua_end_call_string(void *L, int nargs) {
     MOCHA_LUA_NULL_CHECK(L, "lua_end_call_string", mocha_rc_copy(""));
-    if (!mocha_lua_finish_call(L, nargs, "end_call_string")) return mocha_rc_copy("");
+    if (!mocha_lua_finish_call(L, nargs, "lua_end_call_string")) return mocha_rc_copy("");
     char *out = mocha_rc_copy(lua_tostring((lua_State*)L, -1));
     lua_pop((lua_State*)L, 1);
     return out;
@@ -4697,7 +5488,7 @@ const char* mocha_lua_end_call_string(void *L, int nargs) {
 
 int mocha_lua_end_call_int(void *L, int nargs) {
     MOCHA_LUA_NULL_CHECK(L, "lua_end_call_int", 0);
-    if (!mocha_lua_finish_call(L, nargs, "end_call_int")) return 0;
+    if (!mocha_lua_finish_call(L, nargs, "lua_end_call_int")) return 0;
     int r = mocha_lua_toint((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
@@ -4705,7 +5496,7 @@ int mocha_lua_end_call_int(void *L, int nargs) {
 
 int mocha_lua_end_call_bool(void *L, int nargs) {
     MOCHA_LUA_NULL_CHECK(L, "lua_end_call_bool", 0);
-    if (!mocha_lua_finish_call(L, nargs, "end_call_bool")) return 0;
+    if (!mocha_lua_finish_call(L, nargs, "lua_end_call_bool")) return 0;
     int r = lua_toboolean((lua_State*)L, -1);
     lua_pop((lua_State*)L, 1);
     return r;
@@ -4720,14 +5511,62 @@ int mocha_lua_end_call_bool(void *L, int nargs) {
 #ifdef MOCHA_WITH_WREN
 #include "wren/include/wren.h"
 
+/* Per-VM data: remembers the first error of the last run (for wren_try)
+ * and the module that wren_eval_* runs in */
+typedef struct {
+    char last_error[512];
+    char eval_module[256];
+} MochaWrenState;
+
+/* Remember the module of the last wren_run / wren_run_file / wren_try call */
+static void mocha_wren_remember_module(WrenVM* vm, const char* module) {
+    MochaWrenState* st = (MochaWrenState*)wrenGetUserData(vm);
+    if (st && module) snprintf(st->eval_module, sizeof(st->eval_module), "%s", module);
+}
+
 /* ============================================================
  * INTERNAL: Callback functions (required by Wren config)
  * ============================================================ */
 
+/* Called by Wren when it is done with a loaded module: frees the source we allocated */
+static void mocha_wren_load_done(WrenVM* vm, const char* name, WrenLoadModuleResult result) {
+    (void)vm; (void)name;
+    free((void*)result.source);
+}
+
+/* import "name" in Wren code loads the file name.wren from the current folder.
+ * Returning an empty result lets Wren use its own built-in modules (meta, random) */
 static WrenLoadModuleResult mocha_wren_load_module(WrenVM* vm, const char* name) {
-    (void)vm; (void)name;  /* Silence unused warnings */
+    (void)vm;
     WrenLoadModuleResult result = {0};
-    return result;  /* No external module loading for now */
+    if (!name || strcmp(name, "meta") == 0 || strcmp(name, "random") == 0) return result;
+    if (strstr(name, "..")) return result;   /* no walking up folders */
+
+    size_t n = strlen(name);
+    int has_ext = (n >= 5 && strcmp(name + n - 5, ".wren") == 0);
+    size_t plen = n + 6;
+    char* path = (char*)malloc(plen);
+    if (!path) return result;
+    snprintf(path, plen, "%s%s", name, has_ext ? "" : ".wren");
+
+    FILE* f = fopen(path, "rb");
+    free(path);
+    if (!f) return result;
+
+    long len = -1;
+    if (fseek(f, 0, SEEK_END) == 0) len = ftell(f);
+    if (len < 0) { fclose(f); return result; }
+    rewind(f);
+
+    char* src = (char*)malloc((size_t)len + 1);
+    if (!src) { fclose(f); return result; }
+    size_t got = fread(src, 1, (size_t)len, f);
+    src[got] = '\0';
+    fclose(f);
+
+    result.source = src;
+    result.onComplete = mocha_wren_load_done;
+    return result;
 }
 
 static void mocha_wren_write(WrenVM* vm, const char* text) {
@@ -4737,13 +5576,19 @@ static void mocha_wren_write(WrenVM* vm, const char* text) {
 
 static void mocha_wren_error(WrenVM* vm, WrenErrorType type,
                               const char* module, int line, const char* msg) {
-    (void)vm;
+    MochaWrenState* st = (MochaWrenState*)wrenGetUserData(vm);
     switch (type) {
         case WREN_ERROR_COMPILE:
             fprintf(stderr, "WrenCompileError [%s line %d]: %s\n", module, line, msg);
+            if (st && st->last_error[0] == '\0')
+                snprintf(st->last_error, sizeof(st->last_error),
+                         "WrenCompileError [%s line %d]: %s", module, line, msg);
             break;
         case WREN_ERROR_RUNTIME:
             fprintf(stderr, "WrenRuntimeError: %s\n", msg);
+            if (st && st->last_error[0] == '\0')
+                snprintf(st->last_error, sizeof(st->last_error),
+                         "WrenRuntimeError: %s", msg);
             break;
         default:
             fprintf(stderr, "WrenStackTrace [%s line %d]: %s\n", module, line, msg);
@@ -4770,16 +5615,58 @@ typedef enum {
     WREN_ARG_BOOL
 } WrenArgType;
 
+/* What a call gives back: ok = 1 if a result was read, 0 if the call failed
+ * (the error message has already been printed). On failure num is 0 and str is "" */
+typedef struct {
+    int ok;
+    double num;
+    const char* str;
+} WrenResult;
+
+static const char* mocha_wren_type_name(WrenType t) {
+    switch (t) {
+        case WREN_TYPE_BOOL:    return "bool";
+        case WREN_TYPE_NUM:     return "number";
+        case WREN_TYPE_FOREIGN: return "foreign object";
+        case WREN_TYPE_LIST:    return "list";
+        case WREN_TYPE_MAP:     return "map";
+        case WREN_TYPE_NULL:    return "null";
+        case WREN_TYPE_STRING:  return "string";
+        default:                return "object";
+    }
+}
+
+/* Cuts off decimals (3.7 -> 3), clamps to the int range, NaN gives 0 */
+static int mocha_wren_toint(double d) {
+    if (d != d) return 0;
+    if (d >= 2147483647.0) return 2147483647;
+    if (d <= -2147483648.0) return (-2147483647 - 1);
+    return (int)d;
+}
+
 /* Call a static Wren method with any number/type of arguments.
- * Returns a void* that must be cast to the appropriate type.
- */
-static void* mocha_wren_call_generic(WrenVM* vm,
-                                     const char* module,
-                                     const char* classname,
-                                     const char* signature,
-                                     WrenReturnType ret_type,
-                                     int arg_count,
-                                     ...) {
+ * mochaname is the Mocha function name, used in error messages.
+ * Never reads the result slot unless the call worked and the type matches. */
+static WrenResult mocha_wren_call_generic(WrenVM* vm,
+                                          const char* module,
+                                          const char* classname,
+                                          const char* signature,
+                                          WrenReturnType ret_type,
+                                          const char* mochaname,
+                                          int arg_count,
+                                          ...) {
+    WrenResult res = {0, 0.0, ""};
+
+    if (!vm) {
+        fprintf(stderr, "MochaWrenError: %s called with a null Wren VM\n", mochaname);
+        return res;
+    }
+    if (!wrenHasModule(vm, module) || !wrenHasVariable(vm, module, classname)) {
+        fprintf(stderr, "MochaWrenError: %s: cannot find class '%s' in module '%s'\n",
+                mochaname, classname, module);
+        return res;
+    }
+
     va_list args;
     va_start(args, arg_count);
 
@@ -4794,11 +5681,10 @@ static void* mocha_wren_call_generic(WrenVM* vm,
     WrenHandle* method = wrenMakeCallHandle(vm, signature);
 
     /* Set up slots with receiver and arguments */
-    wrenEnsureSlots(vm, 1 + arg_count);
     wrenSetSlotHandle(vm, 0, receiver);
 
     for (int i = 0; i < arg_count; i++) {
-        WrenArgType arg_type = va_arg(args, WrenArgType);
+        WrenArgType arg_type = (WrenArgType)va_arg(args, int);
         int slot = i + 1;
         switch (arg_type) {
             case WREN_ARG_DOUBLE:
@@ -4814,58 +5700,112 @@ static void* mocha_wren_call_generic(WrenVM* vm,
                 break;
         }
     }
+    va_end(args);
 
-    /* Call the method */
-    wrenCall(vm, method);
+    /* Call the method. Wren has already printed its own error on failure */
+    if (wrenCall(vm, method) != WREN_RESULT_SUCCESS) {
+        fprintf(stderr, "MochaWrenError: %s: call to %s.%s failed\n",
+                mochaname, classname, signature);
+        wrenReleaseHandle(vm, receiver);
+        wrenReleaseHandle(vm, method);
+        return res;
+    }
 
-    /* Read result */
-    void* result = NULL;
-    switch (ret_type) {
-        case WREN_RET_DOUBLE:
-            result = (void*)(intptr_t)wrenGetSlotDouble(vm, 0);
-            break;
-        case WREN_RET_STRING:
-            result = (void*)wrenGetSlotString(vm, 0);
-            break;
-        case WREN_RET_BOOL:
-            result = (void*)(intptr_t)(wrenGetSlotBool(vm, 0) ? 1 : 0);
-            break;
-        case WREN_RET_INT:
-            result = (void*)(intptr_t)(int)wrenGetSlotDouble(vm, 0);
-            break;
+    /* Check the result type before reading it */
+    WrenType t = wrenGetSlotType(vm, 0);
+    WrenType want = WREN_TYPE_NUM;
+    const char* want_name = "number";
+    if (ret_type == WREN_RET_STRING) { want = WREN_TYPE_STRING; want_name = "string"; }
+    if (ret_type == WREN_RET_BOOL)   { want = WREN_TYPE_BOOL;   want_name = "bool"; }
+
+    if (t != want) {
+        fprintf(stderr, "MochaWrenError: %s: %s.%s returned a %s, expected a %s\n",
+                mochaname, classname, signature, mocha_wren_type_name(t), want_name);
+    } else {
+        res.ok = 1;
+        switch (ret_type) {
+            case WREN_RET_DOUBLE:
+                res.num = wrenGetSlotDouble(vm, 0);
+                break;
+            case WREN_RET_INT:
+                res.num = (double)mocha_wren_toint(wrenGetSlotDouble(vm, 0));
+                break;
+            case WREN_RET_BOOL:
+                res.num = wrenGetSlotBool(vm, 0) ? 1.0 : 0.0;
+                break;
+            case WREN_RET_STRING:
+                res.str = wrenGetSlotString(vm, 0);
+                break;
+        }
     }
 
     /* Clean up */
     wrenReleaseHandle(vm, receiver);
     wrenReleaseHandle(vm, method);
-
-    va_end(args);
-    return result;
+    return res;
 }
 
 /* ============================================================
  * INTERNAL: Generic Wren evaluator
  * ============================================================ */
 
-static int wren_eval_counter = 0;
+static WrenResult mocha_wren_eval_generic(WrenVM* vm, const char* expr,
+                                          WrenReturnType ret_type, const char* mochaname) {
+    WrenResult fail = {0, 0.0, ""};
+    if (!vm) {
+        fprintf(stderr, "MochaWrenError: %s called with a null Wren VM\n", mochaname);
+        return fail;
+    }
 
-static void* mocha_wren_eval_generic(WrenVM* vm, const char* expr, WrenReturnType ret_type) {
-    char module[32];
-    char code[1024];
+    /* Run in the module last used by wren_run / wren_run_file / wren_try, or "main" */
+    MochaWrenState* st = (MochaWrenState*)wrenGetUserData(vm);
+    const char* module = (st && st->eval_module[0]) ? st->eval_module : "main";
 
-    snprintf(module, sizeof(module), "eval_%d", wren_eval_counter++);
-    snprintf(code, sizeof(code),
-        "class MochaEval {\n"
-        "  static run {\n"
-        "    return %s\n"
-        "  }\n"
-        "}", expr);
+    /* The result variable is defined once per module, then reused */
+    if (!wrenHasModule(vm, module) || !wrenHasVariable(vm, module, "MochaEvalResult")) {
+        if (wrenInterpret(vm, module, "var MochaEvalResult = null") != WREN_RESULT_SUCCESS) {
+            fprintf(stderr, "MochaWrenError: %s: could not prepare module '%s'\n", mochaname, module);
+            return fail;
+        }
+    }
 
-    wrenInterpret(vm, module, code);
+    size_t size = strlen(expr) + 32;
+    char* code = (char*)malloc(size);
+    if (!code) {
+        fprintf(stderr, "MochaWrenError: %s: out of memory\n", mochaname);
+        return fail;
+    }
+    snprintf(code, size, "MochaEvalResult = %s", expr);
+    WrenInterpretResult r = wrenInterpret(vm, module, code);
+    free(code);
+    if (r != WREN_RESULT_SUCCESS) {
+        fprintf(stderr, "MochaWrenError: %s: could not evaluate '%s'\n", mochaname, expr);
+        return fail;
+    }
 
-    /* Reuse the generic call helper */
-    return mocha_wren_call_generic(vm, module, "MochaEval",
-                                   "run", ret_type, 0);
+    /* Read the result, checking its type first */
+    wrenEnsureSlots(vm, 1);
+    wrenGetVariable(vm, module, "MochaEvalResult", 0);
+    WrenType t = wrenGetSlotType(vm, 0);
+    WrenType want = WREN_TYPE_NUM;
+    const char* want_name = "number";
+    if (ret_type == WREN_RET_STRING) { want = WREN_TYPE_STRING; want_name = "string"; }
+    if (ret_type == WREN_RET_BOOL)   { want = WREN_TYPE_BOOL;   want_name = "bool"; }
+
+    if (t != want) {
+        fprintf(stderr, "MochaWrenError: %s: '%s' gave a %s, expected a %s\n",
+                mochaname, expr, mocha_wren_type_name(t), want_name);
+        return fail;
+    }
+
+    WrenResult res = {1, 0.0, ""};
+    switch (ret_type) {
+        case WREN_RET_DOUBLE: res.num = wrenGetSlotDouble(vm, 0); break;
+        case WREN_RET_INT:    res.num = (double)mocha_wren_toint(wrenGetSlotDouble(vm, 0)); break;
+        case WREN_RET_BOOL:   res.num = wrenGetSlotBool(vm, 0) ? 1.0 : 0.0; break;
+        case WREN_RET_STRING: res.str = wrenGetSlotString(vm, 0); break;
+    }
+    return res;
 }
 
 /* ============================================================
@@ -4873,15 +5813,33 @@ static void* mocha_wren_eval_generic(WrenVM* vm, const char* expr, WrenReturnTyp
  * ============================================================ */
 
 void* mocha_wren_new(void) {
+    MochaWrenState* st = (MochaWrenState*)calloc(1, sizeof(MochaWrenState));
+    if (!st) return NULL;
     WrenConfiguration config;
     wrenInitConfiguration(&config);
     config.writeFn      = mocha_wren_write;
     config.errorFn      = mocha_wren_error;
     config.loadModuleFn = mocha_wren_load_module;
-    return (void*)wrenNewVM(&config);
+    config.userData     = st;
+    WrenVM* vm = wrenNewVM(&config);
+    if (!vm) {
+        free(st);
+        return NULL;
+    }
+    mocha_open_handles_add((void*)vm);
+    return (void*)vm;
 }
 
 void* mocha_wren_free(void* vm) {
+    if (!vm) {
+        fprintf(stderr, "MochaWrenError: wren_close called with a null Wren VM\n");
+        return NULL;
+    }
+    if (!mocha_open_handles_remove(vm)) {
+        fprintf(stderr, "MochaWrenWarning: wren_close called on a VM that is already closed, ignored\n");
+        return NULL;
+    }
+    free(wrenGetUserData((WrenVM*)vm));
     wrenFreeVM((WrenVM*)vm);
     return NULL;
 }
@@ -4890,16 +5848,26 @@ void* mocha_wren_free(void* vm) {
  * PUBLIC API: Execute Wren code
  * ============================================================ */
 
+/* Returns 0 on success, 1 on a compile error, 2 on a runtime error */
 int mocha_wren_dostring(void* vm, const char* module, const char* code) {
+    if (!vm) {
+        fprintf(stderr, "MochaWrenError: wren_run called with a null Wren VM\n");
+        return 1;
+    }
+    mocha_wren_remember_module((WrenVM*)vm, module);
     WrenInterpretResult r = wrenInterpret((WrenVM*)vm, module, code);
-    return (r == WREN_RESULT_SUCCESS) ? 0 : 1;
+    if (r == WREN_RESULT_SUCCESS) return 0;
+    if (r == WREN_RESULT_COMPILE_ERROR) return 1;
+    return 2;
 }
 
+/* Returns 0 on success, 1 on a compile error, 2 on a runtime error,
+ * 3 if the file could not be read */
 int mocha_wren_dofile(void* vm, const char* filename) {
     FILE* f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "WrenError: cannot open file '%s'\n", filename);
-        return 1;
+        return 3;
     }
 
     long len = -1;
@@ -4908,7 +5876,7 @@ int mocha_wren_dofile(void* vm, const char* filename) {
         fclose(f);
         fprintf(stderr, "WrenError: cannot read '%s': the file is not seekable "
                         "(pipe or device), so its size is unknown\n", filename);
-        return 1;
+        return 3;
     }
     rewind(f);
 
@@ -4916,7 +5884,7 @@ int mocha_wren_dofile(void* vm, const char* filename) {
     if (!src) {
         fclose(f);
         fprintf(stderr, "WrenError: out of memory reading '%s'\n", filename);
-        return 1;
+        return 3;
     }
 
     size_t got = fread(src, 1, (size_t)len, f);
@@ -4928,9 +5896,16 @@ int mocha_wren_dofile(void* vm, const char* filename) {
     return r;
 }
 
+/* Returns the error message of the first error, or an empty string on success */
 const char* mocha_wren_safe_dostring(void* vm, const char* module, const char* code) {
+    if (!vm) return mocha_rc_copy("MochaWrenError: wren_try called with a null Wren VM");
+    mocha_wren_remember_module((WrenVM*)vm, module);
+    MochaWrenState* st = (MochaWrenState*)wrenGetUserData((WrenVM*)vm);
+    if (st) st->last_error[0] = '\0';
     WrenInterpretResult r = wrenInterpret((WrenVM*)vm, module, code);
-    return mocha_rc_copy((r == WREN_RESULT_SUCCESS) ? "" : "WrenError: script failed");
+    if (r == WREN_RESULT_SUCCESS) return mocha_rc_copy("");
+    if (st && st->last_error[0] != '\0') return mocha_rc_copy(st->last_error);
+    return mocha_rc_copy("WrenError: script failed");
 }
 
 /* ============================================================
@@ -4938,97 +5913,102 @@ const char* mocha_wren_safe_dostring(void* vm, const char* module, const char* c
  * ============================================================ */
 
 double mocha_wren_eval_number(void* vm, const char* expr) {
-    return (double)(intptr_t)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_DOUBLE);
+    return mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_DOUBLE, "wren_eval_number").num;
 }
 
 const char* mocha_wren_eval_string(void* vm, const char* expr) {
-    return mocha_rc_copy((const char*)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_STRING));
+    WrenResult r = mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_STRING, "wren_eval_string");
+    return mocha_rc_copy(r.str);
 }
 
 int mocha_wren_eval_bool(void* vm, const char* expr) {
-    return (int)(intptr_t)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_BOOL);
+    return (int)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_BOOL, "wren_eval_bool").num;
 }
 
 int mocha_wren_eval_int(void* vm, const char* expr) {
-    return (int)(intptr_t)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_INT);
+    return (int)mocha_wren_eval_generic((WrenVM*)vm, expr, WREN_RET_INT, "wren_eval_int").num;
 }
-
-/* ============================================================
- * PUBLIC API: Call functions (0 arguments)
- * ============================================================ */
 
 double mocha_wren_call_number(void* vm, const char* module,
                                const char* classname, const char* signature) {
-    return (double)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_DOUBLE, 0);
+    return mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                   WREN_RET_DOUBLE, "wren_call_number", 0).num;
 }
 
 const char* mocha_wren_call_string(void* vm, const char* module,
                                     const char* classname, const char* signature) {
-    return mocha_rc_copy((const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_STRING, 0));
+    WrenResult r = mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                           WREN_RET_STRING, "wren_call_string", 0);
+    return mocha_rc_copy(r.str);
 }
 
 int mocha_wren_call_int(void* vm, const char* module,
                          const char* classname, const char* signature) {
-    return (int)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_INT, 0);
+    return (int)mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                        WREN_RET_INT, "wren_call_int", 0).num;
 }
-
-/* ============================================================
- * PUBLIC API: Call functions (1 argument)
- * ============================================================ */
 
 double mocha_wren_call1n_number(void* vm, const char* module,
                                  const char* classname, const char* signature,
                                  double arg) {
-    return (double)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_DOUBLE, 1,
-                       WREN_ARG_DOUBLE, arg);
+    return mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                   WREN_RET_DOUBLE, "wren_call_number_1n", 1,
+                                   WREN_ARG_DOUBLE, arg).num;
 }
 
 const char* mocha_wren_call1s_string(void* vm, const char* module,
                                       const char* classname, const char* signature,
                                       const char* arg) {
-    return mocha_rc_copy((const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_STRING, 1,
-                       WREN_ARG_STRING, arg));
+    WrenResult r = mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                           WREN_RET_STRING, "wren_call_string_1s", 1,
+                                           WREN_ARG_STRING, arg);
+    return mocha_rc_copy(r.str);
 }
-
-/* ============================================================
- * PUBLIC API: Call functions (2 arguments)
- * ============================================================ */
 
 double mocha_wren_call2n_number(void* vm, const char* module,
                                  const char* classname, const char* signature,
                                  double a, double b) {
-    return (double)(intptr_t)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_DOUBLE, 2,
-                       WREN_ARG_DOUBLE, a,
-                       WREN_ARG_DOUBLE, b);
+    return mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                   WREN_RET_DOUBLE, "wren_call_number_2n", 2,
+                                   WREN_ARG_DOUBLE, a,
+                                   WREN_ARG_DOUBLE, b).num;
 }
 
 const char* mocha_wren_call2s_string(void* vm, const char* module,
                                       const char* classname, const char* signature,
                                       const char* a, const char* b) {
-    return mocha_rc_copy((const char*)mocha_wren_call_generic((WrenVM*)vm, module, classname,
-                       signature, WREN_RET_STRING, 2,
-                       WREN_ARG_STRING, a,
-                       WREN_ARG_STRING, b));
+    WrenResult r = mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                           WREN_RET_STRING, "wren_call_string_2s", 2,
+                                           WREN_ARG_STRING, a,
+                                           WREN_ARG_STRING, b);
+    return mocha_rc_copy(r.str);
 }
 
 /* ============================================================
- * PUBLIC API: Get global variables (deprecated/legacy)
+ * PUBLIC API: Call functions returning bool, and number to string
  * ============================================================ */
 
-double mocha_wren_getnumber(void* vm, const char* module,
-                             const char* classname, const char* field) {
-    /* This function appears unused/broken in original.
-     * Keeping it for API compatibility but using the proper eval approach.
-     */
-    char expr[512];
-    snprintf(expr, sizeof(expr), "%s.%s", classname, field);
-    return mocha_wren_eval_number(vm, expr);
+int mocha_wren_call_bool(void* vm, const char* module,
+                          const char* classname, const char* signature) {
+    return (int)mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                        WREN_RET_BOOL, "wren_call_bool", 0).num;
+}
+
+int mocha_wren_call1n_bool(void* vm, const char* module,
+                            const char* classname, const char* signature,
+                            double arg) {
+    return (int)mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                        WREN_RET_BOOL, "wren_call_bool_1n", 1,
+                                        WREN_ARG_DOUBLE, arg).num;
+}
+
+const char* mocha_wren_call1n_string(void* vm, const char* module,
+                                      const char* classname, const char* signature,
+                                      double arg) {
+    WrenResult r = mocha_wren_call_generic((WrenVM*)vm, module, classname, signature,
+                                           WREN_RET_STRING, "wren_call_string_1n", 1,
+                                           WREN_ARG_DOUBLE, arg);
+    return mocha_rc_copy(r.str);
 }
 
 #endif /* MOCHA_WITH_WREN */
@@ -5125,8 +6105,9 @@ void mocha_sb_free(MochaStringBuilder* sb) {free(sb->data); free(sb); }
 /* ============================================================
  * TELL — built-in user input
  *
- * Reads a line from stdin, returns it as a heap-allocated
- * string with the trailing newline stripped.
+ * Reads a line from stdin and returns it as an RC string with the
+ * trailing newline (and any '\r') stripped. At end of input it
+ * is a runtime error.
  * Optional prompt is printed to stdout before blocking.
  *
  * tell()             — no prompt, just waits
@@ -5219,7 +6200,7 @@ MochaFile* mocha_file_open(char *path, char *mode) {
 }
 
 /* ---- Read operations ---- */
-//Read entire file into a heap string
+//Read entire file into an RC string
 char* mocha_file_read(MochaFile *f) {
     if (!f->is_open) {
         fprintf(stderr, "MochaRuntimeError: Cannot read from closed file '%s'.\n", f->path);
@@ -5309,7 +6290,6 @@ void mocha_file_write(MochaFile *f, char *content) {
         fprintf(stderr, "MochaRuntimeError: Failed to flush '%s' (disk full or IO error).\n", f->path);
         exit(2);
     };
-    fflush(f->handle);
 }
 
 /* ---- Destruction ---- */
@@ -5831,6 +6811,69 @@ void mocha_stack_print(void) {
     }
     if (mocha_call_stack_overflow > 0)
         fprintf(stderr, "  ... and %d deeper frames not shown\n", mocha_call_stack_overflow);
+}
+
+/* Compact traceback for the crash boxes: identical neighbouring frames are
+ * shown once with a count, so infinite recursion fits on a few lines.
+ * Only the first 256 frames are recorded, so for very deep recursion this shows
+ * where the recursion started */
+void mocha_stack_print_short(void) {
+    if (mocha_call_stack_top == 0) return;
+    fprintf(stderr, "Mocha's Traceback (this error resulted from the following calls):\n");
+    int i = 0;
+    while (i < mocha_call_stack_top) {
+        int j = i + 1;
+        while (j < mocha_call_stack_top &&
+               mocha_call_stack[j].line == mocha_call_stack[i].line &&
+               strcmp(mocha_call_stack[j].func_name, mocha_call_stack[i].func_name) == 0 &&
+               strcmp(mocha_call_stack[j].file_name, mocha_call_stack[i].file_name) == 0)
+            j++;
+        int count = j - i;
+        if (count > 1)
+            fprintf(stderr, "  at %s (%s:%d)  [repeated %d times]\n",
+                    mocha_call_stack[i].func_name, mocha_call_stack[i].file_name,
+                    mocha_call_stack[i].line, count);
+        else
+            fprintf(stderr, "  at %s (%s:%d)\n",
+                    mocha_call_stack[i].func_name, mocha_call_stack[i].file_name,
+                    mocha_call_stack[i].line);
+        i = j;
+    }
+    if (mocha_call_stack_overflow > 0)
+        fprintf(stderr, "  ... and %d deeper frames not shown\n", mocha_call_stack_overflow);
+}
+
+/* ── Integer division and modulo: checked, so a zero divisor is an error instead of garbage ── */
+
+static void mocha_div_zero_die(void) {
+    fflush(stdout);
+    fprintf(stderr, "MochaRuntimeError: Division by zero!\n");
+    fflush(stderr);
+    exit(2);
+}
+
+int mocha_int_div(int a, int b) {
+    if (b == 0) mocha_div_zero_die();
+    if (b == -1) return (int)(0u - (unsigned int)a);   /* wraps for the smallest int, no crash */
+    return a / b;
+}
+
+int mocha_int_mod(int a, int b) {
+    if (b == 0) mocha_div_zero_die();
+    if (b == -1) return 0;
+    return a % b;
+}
+
+long long mocha_vast_div(long long a, long long b) {
+    if (b == 0) mocha_div_zero_die();
+    if (b == -1) return (long long)(0ull - (unsigned long long)a);
+    return a / b;
+}
+
+long long mocha_vast_mod(long long a, long long b) {
+    if (b == 0) mocha_div_zero_die();
+    if (b == -1) return 0;
+    return a % b;
 }
 
 /* ============================================================

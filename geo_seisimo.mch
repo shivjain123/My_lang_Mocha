@@ -42,7 +42,7 @@ function main(didLoad) -> null {
 
     // energy_release(5.0) = 1995262314968.88 — relative error check
     var s1_4: float = energy_release(5.0);
-    var diff_s1_4: float = float(unsafe_div(s1_4 - 1995262314968.88, 1995262314968.88));
+    var diff_s1_4: float = float((s1_4 - 1995262314968.88) / 1995262314968.88);
     var abs_s1_4: float = 0.0;
     if (diff_s1_4 < 0.0) { abs_s1_4 = -diff_s1_4; } else { abs_s1_4 = diff_s1_4; };
     if (abs_s1_4 < 0.0001) {
@@ -241,7 +241,7 @@ function main(didLoad) -> null {
     print(s2_9, newLine=true);
 
     // madelung_constant_estimate(6) = 1.7476
-    var s2_10: float = madelung_constant_estimate(19);
+    var s2_10: float = madelung_constant_estimate(6);
     var diff_s2_10: float = s2_10 - 1.7476;
     var abs_s2_10: float = 0.0;
     if (diff_s2_10 < 0.0) { abs_s2_10 = -diff_s2_10; } else { abs_s2_10 = diff_s2_10; };

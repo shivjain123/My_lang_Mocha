@@ -21,8 +21,6 @@ function kp_ayanamsa(year: float) -> float;
 function fagan_bradley_ayanamsa(year: float) -> float;
 function tropical_to_sidereal(tropical_longitude: float, ayanamsa: float) -> float;
 function sidereal_to_tropical(sidereal_longitude: float, ayanamsa: float) -> float;
-const DEG_TO_RAD: float = 0.01745329251994;
-const RAD_TO_DEG: float = 57.29577951308232;
 function centuries_since_j2000(jd: float) -> float;
 function atan2_degrees(y: float, x: float) -> float;
 function solve_kepler_equation(mean_anomaly_deg: float, eccentricity: float) -> float;

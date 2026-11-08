@@ -96,7 +96,6 @@ function becquerel_to_curie(bq: float) -> float;
 function curie_to_becquerel(ci: float) -> float;
 const PLANCK: float = 6.62607e-34;
 const HBAR: float = 1.05457e-34;
-const SPEED_OF_LIGHT: float = 299792458.0;
 const RYDBERG: float = 10973730.0;
 const BOHR_RADIUS: float = 5.29177e-11;
 function bohr_energy(n: float) -> float;
@@ -119,7 +118,6 @@ function molarity_to_molality(molarity: float, rho_g_per_l: float, molar_mass: f
 function mole_fraction_to_molality(x_solute: float, x_solvent: float, m_solvent_kg: float) -> float;
 function van_t_hoff_factor_apparent(delta_t: float, k_const: float, molality: float) -> float;
 function degree_of_dissociation_vant(i: float, n: float) -> float;
-const AVOGADRO: float = 6.02214e+23;
 const COULOMB_K: float = 8987550000.0;
 const ELEM_CHARGE: float = 1.60218e-19;
 function born_lande_lattice_energy(m_const: float, z_plus: float, z_minus: float, r0_m: float, n_born: float) -> float;

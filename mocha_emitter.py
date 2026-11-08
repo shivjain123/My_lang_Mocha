@@ -35,11 +35,11 @@ GLOBAL_LOAD_RE = re.compile(r'^load i32, i32\* @([\w.$]+)$')
 RET_RE = re.compile(r'^ret (\S+) (%[\w.$]+)$')
 RET_VAL_RE = re.compile(r'^ret (?!void)(\S+) (\S+)$')
 BITCAST_RE = re.compile(r'^bitcast (\S+) (%[\w.$]+) to (\S+)$')
-PLUMBING_RE = re.compile(r'^(rc_retain|rc_release|mocha_ex_pop|mocha_ex_push|mocha_ex_env_ptr|mocha_ex_reset_landed|mocha_ex_did_land|RtlCaptureContext|free|mocha_file_free|\w+_release|\w+_release_objs|\w+_retain)$') #refcounting, never in the source
+PLUMBING_RE = re.compile(r'^(rc_retain|rc_release|mocha_ex_pop|mocha_ex_push|mocha_ex_env_ptr|mocha_ex_reset_landed|mocha_ex_did_land|mocha_array_retain_elems|RtlCaptureContext|free|mocha_file_free|\w+_release|\w+_release_objs|\w+_retain)$') #refcounting, never in the source
 SLOT_LOAD_RE = re.compile(r'^load i8, i8\* (%t\d+)$')           # reads the hidden bool slot of an and/or
 SLOT_STORE_RE = re.compile(r'^store i8 (\S+), i8\* (%t\d+)$')
 ZEXT_RE = re.compile(r'^zext i1 (%[\w.$]+) to i8$')
-CAST_RE = re.compile(r'^(?:sitofp i32|sext i32) (%[\w.$]+) to (?:double|i64)$')   # implicit int promotion
+CAST_RE = re.compile(r'^(?:sitofp i32|sitofp i64|sext i32) (%[\w.$]+) to (?:double|i64)$')   # implicit int promotion
 SLOT_ANY_LOAD_RE = re.compile(r'^load \S+, \S+\* (%t\d+)$')                    # reads a temp slot (an array get result)
 SLOT_STORE_GEN_RE = re.compile(r'^store\s+\S+\s+(\S+),\s+\S+\*\s+(%t\d+)$')    # writes a temp slot (an array set/push value)
 GEP_FIELD_RE = re.compile(r'^getelementptr %struct\.(\w+), %struct\.\w+\* (%[\w.$]+), i32 0, i32 (\d+)\s*(?:;.*)?$')
@@ -65,7 +65,8 @@ COMPLEX_OPS = {"mocha_complex_add": ("+", 1), "mocha_complex_sub": ("-", 1),
                "mocha_complex_mul": ("*", 2), "mocha_complex_div": ("/", 2)}
 FCMP_OPS = {"oeq": "==", "one": "!=", "une": "!=", "olt": "<", "ole": "<=", "ogt": ">", "oge": ">="}
 FLOAT_OPS = {"mocha_float_add": ("+", 1), "mocha_float_sub": ("-", 1), "mocha_float_mul": ("*", 2),
-             "mocha_float_div": ("/", 2), "mocha_float_mod": ("%", 2), "mocha_str_concat": ("+", 1)}
+             "mocha_float_div": ("/", 2), "mocha_float_mod": ("%", 2), "mocha_str_concat": ("+", 1),
+             "mocha_int_div": ("/", 2), "mocha_int_mod": ("%", 2)}
 
 WHILE_FMT = "while ({cond}) {{"
 IF_FMT = "if ({cond}) {{"
@@ -97,6 +98,8 @@ BUILTIN_RET = {                     # only entries that agreed everywhere in the
     "mocha_ext_str_regex_split": "str[]",
     "mocha_ext_float_arr_arr_normalize_col": "float[][]",
     "mocha_ext_float_arr_arr_transpose": "float[][]",
+    "mocha_ext_float_arr_arr_svd": "(float[][], 3)",
+    "mocha_ext_int_arr_arr_svd": "(float[][], 3)",
 }
 AMBIG_RET = {"i32", "%MochaArray*", "%MochaArray2D*", "%MochaSet*", "%MochaTuple*"}
 RET_MAP = {}          # callee name -> Mocha return type; refilled per module by infer_returns
@@ -242,6 +245,8 @@ def infer_collections(fn):
         a = [lit(t) for t in toks]
         if callee in ("mocha_array_new", "mocha_array_alloc_filled") and len(a) >= 2 and a[1] == 4:
             return "int[]", f"creation:{callee}"
+        if callee in ("mocha_array_new", "mocha_array_alloc_filled") and len(a) >= 2 and a[1] == 1:
+            return "bool[]", f"creation:{callee}"      # a 1-byte element is an i8, which only bool uses
         if callee == "mocha_array2d_new" and len(a) >= 6:
             if a[2] == 4:
                 return "int[][]", f"creation:{callee}"
@@ -300,7 +305,47 @@ def infer_collections(fn):
                 label = "unknown:param"
                 continue
             m = CALL_RE.match(d.text)
-            if m and m.group(2) in SET_OPS:
+            def chain_ty_(tok_, depth_=0):                       # copy keeps the type, get_row/get_col drop one [], a call gives RET_MAP, a load gives the local's type
+                if depth_ > 6:
+                    return None
+                d2_ = defs.get(tok_)
+                if d2_ is None:
+                    return None
+                lm2_ = LOAD_RE.match(d2_.text)
+                if lm2_:
+                    return out.get(lm2_.group(3), (None, ""))[0]
+                c2_ = CALL_RE.match(d2_.text) if d2_.op == "call" else None
+                if not c2_:
+                    return None
+                a2_ = [a.split()[-1] for a in split_top_level(c2_.group(3))] if c2_.group(3).strip() else []
+                if c2_.group(2) == "mocha_array_copy" and a2_:
+                    return chain_ty_(a2_[0], depth_ + 1)
+                if c2_.group(2) in ("mocha_array2d_get_row", "mocha_array2d_get_col") and a2_:
+                    t2_ = chain_ty_(a2_[0], depth_ + 1)
+                    return t2_[:-2] if t2_ and t2_.endswith("[][]") else None
+                return RET_MAP.get(c2_.group(2))
+            if m and m.group(2) in ("mocha_array_copy", "mocha_array2d_get_row", "mocha_array2d_get_col"):
+                cty3_ = chain_ty_(t)
+                if cty3_ and cty3_.endswith("[]"):
+                    out[ptr] = (cty3_, "inherit")
+                    break
+            if m and m.group(2) in ("mocha_array2d_get_row", "mocha_array2d_get_col"):      # r = sigma[0] / c = g[][1]: the 2D local's type minus one []
+                rad_ = defs.get([a.split()[-1] for a in split_top_level(m.group(3))][0])
+                rlm_ = LOAD_RE.match(rad_.text) if rad_ is not None else None
+                rty_ = out.get(rlm_.group(3), (None, ""))[0] if rlm_ else None
+                if rty_ and rty_.endswith("[][]"):
+                    out[ptr] = (rty_[:-2], "inherit")
+                    break
+            if m and m.group(2) == "mocha_array_copy":      # t = this.items.copy(): the type of the field being copied
+                cad_ = defs.get([a.split()[-1] for a in split_top_level(m.group(3))][0])
+                clm_ = SLOT_ANY_LOAD_RE.match(cad_.text) if cad_ is not None else None
+                cgd_ = defs.get(clm_.group(1)) if clm_ else None
+                cgm_ = GEP_FIELD_RE.match(cgd_.text) if cgd_ is not None and cgd_.op == "getelementptr" else None
+                cfty_ = FIELD_TYPES.get((cgm_.group(1), cgm_.group(3))) if cgm_ else None
+                if cfty_:
+                    out[ptr] = (cfty_, "inherit")
+                    break
+            if m and (m.group(2) in SET_OPS or m.group(2) == "mocha_array_copy"):
                 pending[ptr] = d
                 label = "inherit"
                 break
@@ -356,6 +401,52 @@ def infer_collections(fn):
                 if cty:
                     out[lm.group(3)] = (cty, "inherit")
                     
+    need_ = [p_ for p_, v_ in out.items() if v_[0] is None and v_[1] == "unknown:param"]
+    for cfn in (MODULE_FUNCS.values() if need_ and _FWD_DEPTH[0] == 0 else ()):   # a param whose callers pass a typed local: it has that local's type
+        if cfn is fn or _FWD_DEPTH[0] > 3:
+            continue
+        cinstrs = [x for l in cfn.block_order for x in cfn.blocks[l].instrs]
+        cdefs = {x.result: x for x in cinstrs if x.result}
+        for x in cinstrs:
+            cm = CALL_RE.match(x.text) if x.op == "call" else None
+            if not cm or cm.group(2) != fn.name or not cm.group(3).strip():
+                continue
+            ats = [a.split()[-1] for a in split_top_level(cm.group(3))]
+            if len(ats) != len(fn.params):
+                continue
+            _FWD_DEPTH[0] += 1
+            try:
+                ccolls = infer_collections(cfn)
+            finally:
+                _FWD_DEPTH[0] -= 1
+            for tok, (_, pname) in zip(ats, fn.params):
+                pn = pname.lstrip('%')
+                ld = cdefs.get(tok)
+                lm = LOAD_RE.match(ld.text) if ld is not None else None
+                if lm and pn in out and out[pn][0] is None and out[pn][1] == "unknown:param":
+                    cty = ccolls.get(lm.group(3), (None, ""))[0]
+                    if cty:
+                        out[pn] = (cty, "inherit")
+                uc_ = CALL_RE.match(ld.text) if ld is not None and ld.op == "call" else None
+                if uc_ and uc_.group(2) in RET_MAP and pn in out and out[pn][0] is None and out[pn][1] == "unknown:param":
+                    out[pn] = (RET_MAP[uc_.group(2)], "inherit")      # len_of(mk(3)): the argument is a call whose return type is known
+                cp_ = CALL_RE.match(ld.text) if ld is not None and ld.op == "call" else None
+                if cp_ and cp_.group(2) == "mocha_array_copy" and pn in out and out[pn][0] is None and out[pn][1] == "unknown:param":
+                    ctok_ = [a.split()[-1] for a in split_top_level(cp_.group(3))][0]
+                    cld_ = cdefs.get(ctok_)
+                    clm2_ = LOAD_RE.match(cld_.text) if cld_ is not None else None
+                    cty2_ = ccolls.get(clm2_.group(3), (None, ""))[0] if clm2_ else None
+                    if cty2_:
+                        out[pn] = (cty2_, "inherit")
+                rm_ = CALL_RE.match(ld.text) if ld is not None and ld.op == "call" else None
+                if rm_ and rm_.group(2) == "mocha_array2d_get_row" and pn in out and out[pn][0] is None and out[pn][1] == "unknown:param":
+                    rtok_ = [a.split()[-1] for a in split_top_level(rm_.group(3))][0]
+                    rld_ = cdefs.get(rtok_)
+                    rlm_ = LOAD_RE.match(rld_.text) if rld_ is not None else None
+                    rty_ = ccolls.get(rlm_.group(3), (None, ""))[0] if rlm_ else None
+                    if rty_ and rty_.endswith("[][]"):
+                        out[pn] = (rty_[:-2], "inherit")
+
     for i in instrs:                                  # xs = points#k: the local is stored from a load of a bitcast tuple_get
         sm = STORE_RE.match(i.text) if i.op == "store" else None
         if not sm or sm.group(1).strip() not in COLL_SUFFIX or out.get(sm.group(4), (1, ""))[0] is not None:
@@ -445,6 +536,63 @@ def build_field_types(funcs):
                 ty = f"({'int' if a[1] == 0 else 'str'}, {a[0]})"
                 key = gep[sm.group(2)]
                 out[key] = ty if out.get(key, ty) == ty else None
+    for fn in funcs.values():              # an array in a class field: pushes, gets and sets through the field give its element type
+        instrs = [i for l in fn.block_order for i in fn.blocks[l].instrs]
+        defs = {i.result: i for i in instrs if i.result}
+        gep, emap = {}, {}
+        for i in instrs:
+            gm = GEP_FIELD_RE.match(i.text) if i.op == "getelementptr" else None
+            if gm and i.result:
+                gep[i.result] = (gm.group(1), gm.group(3))
+            bm = BITCAST_RE.match(i.text) if i.op == "bitcast" else None
+            if bm:
+                st, sv, dt = bm.groups()
+                if dt == "i8*" and st.endswith("*") and i.result:
+                    emap[i.result] = st[:-1]
+                elif st == "i8*" and dt.endswith("*"):
+                    emap[sv] = dt[:-1]
+        for i in instrs:
+            cm = CALL_RE.match(i.text) if i.op == "call" else None
+            if not cm or cm.group(2) not in ("mocha_array_get", "mocha_array_set", "mocha_array_push") or not cm.group(3).strip():
+                continue
+            toks = [a.split()[-1] for a in split_top_level(cm.group(3))]
+            if len(toks) < 2 or toks[-1] not in emap:
+                continue
+            fd = defs.get(toks[0])
+            lm = re.match(r'^load %MochaArray\*, %MochaArray\*\* (%t\d+)\s*(?:;.*)?$', fd.text) if fd is not None else None
+            et = _elem_type(emap[toks[-1]])
+            if not lm or lm.group(1) not in gep or et is None:
+                continue
+            key, ty = gep[lm.group(1)], et + "[]"
+            out[key] = ty if out.get(key, ty) == ty else None
+    for fn in funcs.values():              # a 2D array literal stored into a class field: the creation args give its type
+        instrs = [i for l in fn.block_order for i in fn.blocks[l].instrs]
+        defs = {i.result: i for i in instrs if i.result}
+        gep = {}
+        for i in instrs:
+            gm = GEP_FIELD_RE.match(i.text) if i.op == "getelementptr" else None
+            if gm and i.result:
+                gep[i.result] = (gm.group(1), gm.group(3))
+
+        def lit2(tok):
+            if re.fullmatch(r'-?\d+', tok):
+                return int(tok)
+            d_ = defs.get(tok)
+            m_ = LIT_INT_RE.match(d_.text) if d_ is not None else None
+            return int(m_.group(2)) if m_ else None
+        for i in instrs:
+            cm = CALL_RE.match(i.text) if i.op == "call" else None
+            if not cm or cm.group(2) != "mocha_array2d_new" or not i.result:
+                continue
+            a = [lit2(x.split()[-1]) for x in split_top_level(cm.group(3))]
+            if len(a) < 6 or a[2] not in (4, 8):
+                continue
+            ty = "int[][]" if a[2] == 4 else ("str[][]" if a[5] == 1 else "float[][]")
+            for s in instrs:
+                sm = SLOT_STORE_GEN_RE.match(s.text) if s.op == "store" else None
+                if sm and sm.group(1) == i.result and sm.group(2) in gep:
+                    key = gep[sm.group(2)]
+                    out[key] = ty if out.get(key, ty) == ty else None
     return out
 
 def infer_returns(funcs, g):
@@ -532,6 +680,28 @@ def infer_returns(funcs, g):
                         return RET_MAP[callee], "ucall"
                     if callee in BUILTIN_RET:
                         return BUILTIN_RET[callee], "bcall"
+                    if callee == "mocha_array_copy":         # return this.items.copy(): the type of the field it copies
+                        assert m is not None
+                        ad_ = defs.get([a.split()[-1] for a in split_top_level(m.group(3))][0])
+                        lm_ = SLOT_ANY_LOAD_RE.match(ad_.text) if ad_ is not None else None
+                        gd_ = defs.get(lm_.group(1)) if lm_ else None
+                        gm_ = GEP_FIELD_RE.match(gd_.text) if gd_ is not None and gd_.op == "getelementptr" else None
+                        fty_ = FIELD_TYPES.get((gm_.group(1), gm_.group(3))) if gm_ else None
+                        if fty_:
+                            return fty_, "field copy"
+                        pl_ = LOAD_RE.match(ad_.text) if ad_ is not None else None   # return a.copy(): the type of the local or param being copied
+                        lty_ = infer_collections(fn).get(pl_.group(3), (None, ""))[0] if pl_ else None
+                        if lty_:
+                            return lty_, "local copy"
+                    if callee == "mocha_array2d_get_col":    # return this.cells[][k]: a column of the 2D field has the row element type
+                        assert m is not None
+                        ad_ = defs.get([a.split()[-1] for a in split_top_level(m.group(3))][0])
+                        lm_ = SLOT_ANY_LOAD_RE.match(ad_.text) if ad_ is not None else None
+                        gd_ = defs.get(lm_.group(1)) if lm_ else None
+                        gm_ = GEP_FIELD_RE.match(gd_.text) if gd_ is not None and gd_.op == "getelementptr" else None
+                        fty_ = FIELD_TYPES.get((gm_.group(1), gm_.group(3))) if gm_ else None
+                        if fty_ and fty_.endswith("[][]"):
+                            return fty_[:-2], "field col"
                     return None, f"call:{callee}"
                 return None, f"op:{d.op}"
 
@@ -600,6 +770,23 @@ def header(fn) -> str:
                 raise EmitError(f"{fn.name}: can't tell the type of parameter '{pname}' ({ptype}) from how it is used")
         else:
             ty = mocha_type(ptype)
+            if ptype == "i32":                      # an i32 param compared against tags of one enum is that enum
+                all_ = [x_ for l_ in fn.block_order for x_ in fn.blocks[l_].instrs]
+                d_ = {x_.result: x_ for x_ in all_ if x_.result}
+                pl_ = {x_.result for x_ in all_ if x_.op == "load" and x_.text.endswith(f"%{pname}.ptr")}
+                en_set = set()
+                for x_ in all_:
+                    cm_ = CMP_RE.match(x_.text) if x_.op == "icmp" else None
+                    if not cm_ or cm_.group(1) not in ("eq", "ne"):
+                        continue
+                    a_, b_ = cm_.group(3), cm_.group(4)
+                    if a_ in pl_ or b_ in pl_:
+                        o_ = d_.get(b_ if a_ in pl_ else a_)
+                        gm_ = GLOBAL_LOAD_RE.match(o_.text) if o_ is not None else None
+                        if gm_ and "__" in gm_.group(1):
+                            en_set.add(gm_.group(1).split("__")[0])
+                if len(en_set) == 1 and next(iter(en_set)) in TAG_NAMES:
+                    ty = next(iter(en_set))
         parts.append(f"{pname}: {ty}")
     return f"function {name}({', '.join(parts)}) -> {return_type(fn)} {{"
 
@@ -688,6 +875,18 @@ def emit_function(fn, g):
                 lit_tmp.add(i.result)
     defs, uses, var_types = {}, {}, {}
     lc_text, lc_state = {}, {"on": False, "expr": None, "slot": None}   # list comprehensions: finished text per result slot, and the one being read
+    lc_idx_slots, lc_var_name = set(), {}      # new compiler: the comprehension counter and loop variable are anonymous slots
+    for lp_ in loops.values():
+        if lp_["family"] != "lc":
+            continue
+        hi_ = next((i for i in fn.blocks[lp_["header"]].instrs if i.op == "load"), None)
+        lm_ = SLOT_ANY_LOAD_RE.match(hi_.text) if hi_ else None
+        if lm_:
+            lc_idx_slots.add(lm_.group(1))
+        bb_ = fn.blocks.get(f"lc_body_{lp_['id']}")
+        st_ = next((SLOT_STORE_GEN_RE.match(i.text) for i in bb_.instrs if i.op == "store" and SLOT_STORE_GEN_RE.match(i.text)), None) if bb_ else None
+        if st_:
+            lc_var_name[st_.group(2)] = f"lcv{lp_['id']}"
     all_i = [x for l_ in fn.block_order for x in fn.blocks[l_].instrs]
     d0 = {x.result: x for x in all_i if x.result}
     old_rel = set()                    # reading a cell's old value just to release it (a[i][j] = obj): compiler plumbing, not in the source
@@ -712,6 +911,15 @@ def emit_function(fn, g):
             old_rel.add(id(x))
             old_rel.add(id(rd_))
     got, slot_val, lit_elems, bc_from, stored_to = {}, {}, {}, {}, {}
+    dead_slots = set()                             # a %MochaArray* temp slot that only gets one store of a call result and is never read
+    for x_ in all_i:
+        if x_.op == "alloca" and x_.result and x_.result.startswith("%t") and x_.text.strip() == "alloca %MochaArray*":
+            refs_ = [y_ for y_ in all_i if y_ is not x_ and re.search(re.escape(x_.result) + r'(?![\w.$])', y_.text)]
+            if len(refs_) == 1 and refs_[0].op == "store":
+                sm_ = SLOT_STORE_GEN_RE.match(refs_[0].text)
+                sd_ = d0.get(sm_.group(1)) if sm_ else None
+                if sd_ is not None and sd_.op == "call":
+                    dead_slots.add(x_.result)
     pnames = {n for _, n in fn.params}
     colls = infer_collections(fn)
     for label in fn.block_order:
@@ -721,6 +929,9 @@ def emit_function(fn, g):
             cm_ = CALL_RE.match(i.text) if i.op == "call" else None
             if id(i) in old_rel:
                 continue                      # old-value read before an overwrite: not a use
+            dsm_ = SLOT_STORE_GEN_RE.match(i.text) if i.op == "store" else None
+            if dsm_ and dsm_.group(2) in dead_slots:
+                continue                      # a store into a never-read array slot: not a use of the call result
             if cm_ and (PLUMBING_RE.match(cm_.group(2)) or cm_.group(2) == "mocha_array_init_set"):
                 continue                      # releases and array-literal fills are not uses of the value
             if cm_ and cm_.group(2) == "mocha_array2d_set" and cm_.group(3).split()[1].rstrip(",") in lit2_tmp:
@@ -764,6 +975,11 @@ def emit_function(fn, g):
             if bm_ and bm_.group(3) == "i8*" and bm_.group(1).startswith("%struct.") \
                     and i.result and uses.get(i.result, 0) == 0:
                 uses[bm_.group(2)] = uses.get(bm_.group(2), 0) - 1
+    for x in all_i:                    # a closure bundle: the bitcast that fills slot 0 is plumbing, not a use of the bundle
+        bm_ = BITCAST_RE.match(x.text) if x.op == "bitcast" else None
+        sd_ = d0.get(bm_.group(2)) if bm_ else None
+        if bm_ and bm_.group(1) == "i8*" and bm_.group(3) == "i8**" and sd_ is not None and "@malloc(i64 24)" in sd_.text:
+            uses[bm_.group(2)] = uses.get(bm_.group(2), 0) - 1
     try_site = {}
     for tr_ in find_trys(fn):
         try_site[tr_["site"]] = tr_
@@ -808,12 +1024,15 @@ def emit_function(fn, g):
         m = BITCAST_RE.match(d.text)
         if m and m.group(1) == "%MochaArray*" and m.group(3).startswith("%struct."):
             once(t, d)
-            return operand(m.group(2))             # t[0][] gives a row, which the compiler casts to the class: invisible in the source
+            rt_, _ = operand(m.group(2))
+            return rt_ + "[]", 9                   # t[0][] gives a row that the compiler casts to the class: the [] is what marks it in the source
         if m and m.group(1) == m.group(3) == "double":
             once(t, d)
             return operand(m.group(2))             # float(x): an explicit cast to the same type, invisible in the IR
         if m and m.group(3).startswith("%struct.") and (m.group(1).startswith("%struct.") or m.group(1) == "i8*"):
             return operand(m.group(2))             # upcast to a parent class: invisible in the source
+        if m and m.group(1) == "i8*" and m.group(3) == "%MochaClosureBundle*":
+            return operand(m.group(2))             # a closure handed to a runtime call: invisible in the source
         if m and m.group(1) == "i8*" and m.group(3) in COLL_SUFFIX:
             return operand(m.group(2))             # a raw value read back as a collection (nested dict): invisible in the source
         if m and m.group(3) == "i8*" and (m.group(1).startswith("%struct.") or m.group(1) in COLL_SUFFIX):
@@ -849,6 +1068,8 @@ def emit_function(fn, g):
         if m:
             nm_ = var_name(m.group(3))
             lv_ = re.fullmatch(r'lc_(\w+?)_\d+', nm_)      # a comprehension's loop variable: lc_u_31 is 'u' in the source
+            if nm_.startswith("captured_"):
+                nm_ = nm_[len("captured_"):]       # a lambda's captured variable: the body copies it into captured_NAME
             return (lv_.group(1) if lv_ else nm_), 9
         m = SLOT_LOAD_RE.match(d.text)
         if m and m.group(1) in sc:
@@ -862,6 +1083,8 @@ def emit_function(fn, g):
                 lb = f"({lb})"
             return f"{la} {op} {lb}", p
         m = SLOT_ANY_LOAD_RE.match(d.text)
+        if m and m.group(1) in lc_var_name:    # the comprehension's loop variable
+            return lc_var_name[m.group(1)], 9
         if m and m.group(1) in lc_text:        # a finished list comprehension
             once(t, d)
             return lc_text[m.group(1)], 9
@@ -916,6 +1139,19 @@ def emit_function(fn, g):
                 la = f"({la})"
             return f"{la} {CMP_OPS[m.group(1)]} null", 0
         m = CMP_RE.match(d.text)
+        if m and ilit(m.group(4)) == 0:
+            sd = defs.get(m.group(3))
+            sq = CALL_RE.match(sd.text) if sd is not None and sd.op == "call" else None
+            if sq and sq.group(2) == "strcmp":      # a > b on strings compiles to strcmp(a, b) > 0
+                once(t, d)
+                once(m.group(3), sd)
+                sa = [x.split()[-1] for x in split_top_level(sq.group(3))]
+                (la, pa), (lb, pb) = operand(sa[0]), operand(sa[1])
+                if pa <= 0:
+                    la = f"({la})"
+                if pb <= 0:
+                    lb = f"({lb})"
+                return f"{la} {CMP_OPS[m.group(1)]} {lb}", 0
         if m and m.group(4) == "0" and m.group(1) in ("eq", "ne"):
             sd = defs.get(m.group(3))
             sq = CALL_RE.match(sd.text) if sd is not None and sd.op == "call" else None
@@ -1065,12 +1301,16 @@ def emit_function(fn, g):
             if ilit(toks[0]) == 0 and ilit(toks[1]) == 0:
                 return "[[]]"
             return f"alloc {ty[:-4]}[{value(toks[0])}][{value(toks[1])}]"
+        if callee == "mocha_array2d_from_rows":   # [[...] for each y in ys]: the rows array is the outer comprehension, the two ints are bookkeeping
+            return value(toks[0])
         if callee == "mocha_array2d_rows":
             return f"{value(toks[0])}.length"
         if callee == "mocha_array2d_cols":
             return f"{value(toks[0])}.cols"
+        if callee == "mocha_array2d_get_col":   # a[][k]
+            return f"{value(toks[0])}[][{value(toks[1])}]"
         if callee == "mocha_array2d_get_row":
-            return f"{value(toks[0])}[{value(toks[1])}][]"
+            return f"{value(toks[0])}[{value(toks[1])}]"
         if callee == "mocha_array2d_push_col":  # a.push(col_array, col=true)
             return f"{value(toks[0])}.push({value(toks[1])}, col=true)"
         if callee == "mocha_array2d_push_row":
@@ -1094,6 +1334,29 @@ def emit_function(fn, g):
                 rest = [value(t) for t in toks[2:]]
                 extra = f", {om.group(2)}=" + (f"[{', '.join(rest)}]" if om.group(3) else rest[0])
             return f"{value(toks[0])}.occs({value(slot_val[oslot])}{extra})"
+        if callee == "malloc":                 # a closure bundle: slot 0 holds the lambda's function pointer
+            fp_ = None
+            for x in all_i:
+                bm_ = BITCAST_RE.match(x.text) if x.op == "bitcast" else None
+                if bm_ and bm_.group(2) == d.result and bm_.group(3) == "i8**":
+                    for y in all_i:
+                        st_ = re.fullmatch(r'store i8\* (%[\w.$]+), i8\*\* ' + re.escape(x.result), y.text) if y.op == "store" else None
+                        if st_:
+                            fp_ = st_.group(1)
+            fd_ = defs.get(fp_) if fp_ else None
+            lm_ = re.search(r'@(mocha_lambda_\d+) to i8\*', fd_.text) if fd_ is not None else None
+            if not lm_ or lm_.group(1) not in MODULE_FUNCS:
+                raise EmitError(f"{fn.name}: a malloc I can't read as a closure")
+            return lambda_text(MODULE_FUNCS[lm_.group(1)], g)
+        if callee in ("mocha_math_derivative", "mocha_math_limit"):  # (2.0).derivative(lambda ...), (2.0).limit(lambda ...)
+            r_, pr_ = operand(toks[0])
+            if pr_ < 9 or r_[:1] in '"-0123456789':
+                r_ = f"({r_})"
+            return f"{r_}.{callee[len('mocha_math_'):]}({value(toks[1])})"
+        if callee in ("mocha_sort_int", "mocha_sort_float", "mocha_sort_str"):   # a.sort()
+            return f"{value(toks[0])}.sort()"
+        if callee in ("mocha_sort_int_cmp_env", "mocha_sort_float_cmp_env", "mocha_sort_str_cmp_env"): # sort(nums, lambda ...)
+            return f"sort({value(toks[0])}, {value(toks[1])})"
         if callee == "mocha_complex_conjugate":  # z.conjugate()
             return f"{value(toks[0])}.conjugate()"
         if callee == "mocha_file_exists":      # exists("path"): a free function, returns bool
@@ -1128,7 +1391,7 @@ def emit_function(fn, g):
             return f"{value(toks[0])}.xor({value(toks[1])})"
         if callee == "mocha_set_union":        # a.union(b)
             return f"{value(toks[0])}.union({value(toks[1])})"
-        if callee == "mocha_dict_copy":        # a.copy()
+        if callee in ("mocha_dict_copy", "mocha_array_copy"):        # a.copy()
             return f"{value(toks[0])}.copy()"
         if callee == "mocha_dict_merge":       # a.merge(b); the last argument is the override flag
             ov = ", override=true" if toks[2] not in ("0", "false") else ""
@@ -1255,6 +1518,11 @@ def emit_function(fn, g):
             if al.startswith("."):             # a class method: the first argument is the receiver
                 return f"{value(toks[0])}.{al[1:]}({', '.join(value(t) for t in toks[1:])})"
             return f"{al}({', '.join(value(t) for t in toks)})"
+        lm_one = re.fullmatch(r'mocha_lua_call(\d[ns]+)_(\w+)', callee)
+        if lm_one:                             # lua_call_bool_1n(ls, "f", 5.0): the IR says call1n_bool, the source says call_bool_1n
+            return f"lua_call_{lm_one.group(2)}_{lm_one.group(1)}({', '.join(value(t) for t in toks)})"
+        if callee.startswith("mocha_lua_"):    # lua_begin_call(ls, "f"), lua_push_int(ls, 3)...: the source name is the callee without mocha_
+            return f"{callee[len('mocha_'):]}({', '.join(value(t) for t in toks)})"
         if callee.startswith("mocha_"):
             raise EmitError(f"{fn.name}: no rule yet for the call to {callee}")
         ats = arg_types(d)
@@ -1269,6 +1537,10 @@ def emit_function(fn, g):
                 and not callee.startswith(ats[0][len("%struct."):-1] + "_") and "__" not in callee:
             parent, meth = callee.split("_", 1)    # Bird.p.breathe(): a parent's method chosen explicitly on a multiple-inheritance object
             return f"{parent}.{value(toks[0])}.{meth}({', '.join(value(t) for t in toks[1:])})"
+        if CLASSY_RE.match(callee) and "__" not in callee:
+            cls_s, meth_s = callee.split("_", 1)      # shared method: Class.method(args), no this
+            if f"%struct.{cls_s}" in "\n".join(str(x) for x in g.__dict__.values()) or callee in MODULE_FUNCS:
+                return f"{cls_s}.{meth_s}({', '.join(value(t) for t in toks)})"
         if CLASSY_RE.match(callee) or "__" in callee:
             raise EmitError(f"{fn.name}: {callee} looks like a method call (not supported yet)")
         return f"{callee}({', '.join(value(t) for t in toks)})"
@@ -1322,7 +1594,7 @@ def emit_function(fn, g):
         two = "array2d" in callee
         if callee.endswith("_get"):
             ix_ = defs.get(toks[1])
-            if lc_state["on"] and ix_ is not None and "%lc_idx_" in ix_.text:
+            if lc_state["on"] and ix_ is not None and ("%lc_idx_" in ix_.text or any(ix_.text.endswith("* " + s_) for s_ in lc_idx_slots)):
                 return                         # the comprehension reading its loop variable: not a source statement
             idx = f"[{value(toks[1])}][{value(toks[2])}]" if two else f"[{value(toks[1])}]"
             got[slot] = f"{value(toks[0])}{idx}"
@@ -1391,6 +1663,13 @@ def emit_function(fn, g):
                         raise EmitError(f"{fn.name}: a tuple set I can't rebuild")
                     lit_elems.setdefault(toks[0], {})[ilit(toks[1])] = value(slot_val[tslot])
                     continue
+                if callee == "mocha_ex_throw":         # rethrow;: the thrown value is the caught message
+                    thd_ = defs.get(toks[0])
+                    thm_ = SLOT_ANY_LOAD_RE.match(thd_.text) if thd_ is not None else None
+                    thv_ = defs.get(slot_val.get(thm_.group(1))) if thm_ else None
+                    if thv_ is not None and thv_.op == "call" and "@mocha_ex_pop" in thv_.text:
+                        entries.append((cur, "stmt", "rethrow;", ind))
+                        continue
                 if callee == "mocha_ex_throw":         # fail "msg";
                     entries.append((cur, "stmt", f"fail {value(toks[0])};", ind))
                     continue
@@ -1422,7 +1701,9 @@ def emit_function(fn, g):
                     continue
                 if callee == "mocha_dict_print_value":     # print(d["k"]): the compiler prints dict reads through this call
                     entries.append((cur, "print", (f"{value(toks[0])}[{value(toks[1])}]", toks[2]), ind))
-                elif callee == "mocha_dict_print":         # print(d): the whole dict, second argument is the newline flag
+                elif callee in ("mocha_array_print", "mocha_array2d_print"):   # print(a): the second argument is the element type code, the third the newline flag
+                    entries.append((cur, "print", (value(toks[0]), toks[2]), ind))
+                elif callee in ("mocha_dict_print", "mocha_print_complex"):         # print(d): the whole dict, second argument is the newline flag
                     entries.append((cur, "print", (value(toks[0]), toks[1]), ind))
                 elif callee in PRINTS:
                     entries.append((cur, "print", (value(toks[0]), toks[1]), ind))
@@ -1435,6 +1716,9 @@ def emit_function(fn, g):
             if i.op == "store":
                 if "%lc_idx_" in i.text:
                     continue                   # a comprehension's hidden counter
+                sg_ = SLOT_STORE_GEN_RE.match(i.text)
+                if sg_ and (sg_.group(2) in lc_idx_slots or sg_.group(2) in lc_var_name):
+                    continue 
                 sm_ = SLOT_STORE_RE.match(i.text)
                 if sm_ and sm_.group(2) in sc:
                     continue
@@ -1463,6 +1747,13 @@ def emit_function(fn, g):
                 if m.group(2) in pnames:           # a parameter being copied into its own slot
                     declared.add(ptr)
                     continue
+                ld_l = defs.get(m.group(2))
+                lm_l = SLOT_ANY_LOAD_RE.match(ld_l.text) if ld_l is not None and ld_l.op == "load" else None
+                src_l = defs.get(lm_l.group(1)) if lm_l else None
+                if src_l is not None and (re.search(r'bitcast i8\* %\w+_raw to', src_l.text)
+                                          or (src_l.op == "getelementptr" and "%env_" in src_l.text)):
+                    declared.add(ptr)              # lambda plumbing: unboxing a param or copying a captured value into its local
+                    continue
                 name, rhs = var_name(ptr), value(m.group(2))
                 if ptr in declared:
                     entries.append((cur, "stmt", f"{name} = {rhs};", ind))
@@ -1480,6 +1771,8 @@ def emit_function(fn, g):
                     cm = CALL_RE.match(sd.text) if sd is not None and sd.op == "call" else None
                     if ty == "int" and cm and cm.group(2) in RET_MAP:
                         ty = RET_MAP[cm.group(2)]   # an i32 returned by a function declared -> Enum
+                    if ty == "str" and rhs == "null":
+                        ty = "null"                 # a literal null in an i8* local: no str is ever initialised to null in the corpus, so it's the opaque handle type
                     if ty == "str" and cm and (NATIVE_RET.get(cm.group(2)) == "null" or LIB_SIGS.get(cm.group(2)) == "null" or cm.group(2) == "fopen"):
                         ty = "null"                 # an opaque handle: the lib says -> null, the IR only says i8*
                     entries.append((cur, "stmt", f"var {name}: {ty} = {rhs};", ind))
@@ -1550,6 +1843,7 @@ def emit_function(fn, g):
         """[expr for each x in arr] and [expr if cond for each x in arr]: nothing is printed here,
         the finished text waits in lc_text until the store at lc_end uses it."""
         info = describe_lc(fn, lp)
+        info["var"] = info["var"] or lc_var_name.get(f"lcv{lp['id']}") or f"lcv{lp['id']}"
         if info["kind"] not in ("plain", "filtered", "ternary") or not info["var"]:
             raise EmitError(f"{fn.name}: a {info['kind']} list comprehension (not supported yet)")
         roles = info["roles"]
@@ -1606,18 +1900,32 @@ def emit_function(fn, g):
     def emit_dowhile(lp, ind):
         """do { body } while (cond);  body and condition share one block that branches back to itself."""
         hdr = lp["header"]
-        term = fn.blocks[hdr].instrs[-1]
-        m = BR_COND.match(term.text)
-        if not m or m.group(2) != hdr or m.group(3) != lp["end"]:
+        cb_, m = None, None                        # the block holding the loop's conditional branch
+        for l_ in fn.block_order:
+            bm_ = BR_COND.match(fn.blocks[l_].instrs[-1].text)
+            if bm_ and bm_.group(2) == hdr and bm_.group(3) == lp["end"]:
+                cb_, m = l_, bm_
+        if m is None:
             raise EmitError(f"{fn.name}: a do-while whose branch I can't read")
         entries.append((state["cur"], "stmt", "do {", ind))
         loop_stack.append((hdr, lp["end"], hdr))
+        saved_ = loops.pop(hdr, None)              # so emit_from walks the header as a plain block, not as a new loop
         try:
-            process_block(hdr, ind + 1)
+            if cb_ == hdr:
+                process_block(hdr, ind + 1)
+            else:
+                emit_from(hdr, ind + 1, cb_)
+                process_block(cb_, ind + 1)
         finally:
             loop_stack.pop()
+            if saved_ is not None:
+                loops[hdr] = saved_
         cond = value(m.group(1))
-        entries.append((state["cur"] + 1 if state["cur"] is not None else None, "stmt", f"}} while ({cond});", ind))
+        if cb_ == hdr or not any(LINE_RE.search(i_.raw) for i_ in fn.blocks[cb_].instrs):
+            cl_ = state["cur"] + 1 if state["cur"] is not None else None
+        else:
+            cl_ = state["cur"]                     # the condition block has its own line marker
+        entries.append((cl_, "stmt", f"}} while ({cond});", ind))
         return lp["end"]
 
     def emit_loop(lp, ind):
@@ -1772,21 +2080,56 @@ def emit_function(fn, g):
     return out
 
 
-emit_straight = emit_function             # old name, still used by the runner
+def lambda_text(lam, g):
+    """A lambda body as source text: lambda (a: int, b: int) -> bool: expr"""
+    ids = [i for l in lam.block_order for i in lam.blocks[l].instrs]
+    parts = []
+    for ptype, pname in lam.params:
+        pname = pname.lstrip('%')
+        if ptype.startswith("%env_") or pname == "env_unused":
+            continue
+        ty = None
+        for i in ids:
+            m = BITCAST_RE.match(i.text) if i.op == "bitcast" else None
+            if m and m.group(2) == "%" + pname and m.group(3).endswith("*"):
+                ty = mocha_type(m.group(3)[:-1])
+        if ty is None:
+            raise EmitError(f"{lam.name}: can't tell the type of the lambda parameter '{pname}'")
+        parts.append(f"{re.sub(r'_raw$', '', pname)}: {ty}")
+    body = emit_function(lam, g)
+    if len(body) != 1 or not body[0][1].strip().startswith("return "):
+        raise EmitError(f"{lam.name}: a lambda body that isn't a single expression (not supported yet)")
+    expr = body[0][1].strip()[len("return "):-1]
+    return f"lambda ({', '.join(parts)}) -> {mocha_type(lam.ret_type)}: {expr}"
 
+
+emit_straight = emit_function             # old name, still used by the runner
 
 # ---------------------------------------------------------------- checking helpers
 FLOAT_TOKEN = re.compile(r'(?<![\w.])(\d+\.\d*(?:[eE][-+]?\d+)?|\d+[eE][-+]?\d+)(?![\w.])')
 
 def norm(s: str) -> str:
     s = re.sub(r'//.*$', '', s)
+    if '[' in s:                               # comprehension variable names are not in the IR: compare them by position
+        names_ = []
+        for m_ in re.finditer(r'(?<=\s)for each (\w+) in\b', s):
+            if '[' in s[:m_.start()] and m_.group(1) not in names_:
+                names_.append(m_.group(1))
+        for k_, nm_ in enumerate(names_):
+            s = re.sub(r'\b' + nm_ + r'\b', f'_lcv{k_}', s)
     s = re.sub(r'(?<=\d)_(?=\d)', '', s)      # 10_000 -> 10000
     s = re.sub(r'\s+', '', s)
     s = re.sub(r'(\w+)\+\+', r'\1=\1+1', s)   # i++ and i = i + 1 are the same IR
     s = re.sub(r'(\w+)--', r'\1=\1-1', s)
+    s = re.sub(r'([+\-])\(([\w.\[\]]+(?:[*/%][\w.\[\]]+)+)\)(?=[+\-;)]|$)', r'\1\2', s)   # a + (b*c) and a + b*c are the same IR
     s = re.sub(r'\b(\w+)\.superset\((\w+)\)', r'\2.subset(\1)', s)   # the compiler swaps the operands: b.superset(a) is a.subset(b)
     s = re.sub(r'^([\w.\[\]]+)([-+*/%])=(?!=)([\w.]+);$', r'\1=\1\2\3;', s)   # a += b and a = a + b are the same IR (plain right side only)
-    s = s.replace(',newLine=false', '')       # print(x) and print(x, newLine=false) are the same IR
+    s = re.sub(r'\bcase\(([\w.]+)\):', r'case\1:', s)   # case (T.A): and case T.A: are the same IR
+    s = re.sub(r':set<(\w+)>', r':<\1>', s)            # var b: <int> and var b: set<int> are the same IR
+    s = s.replace(',newLine=false', '')  # print(x) and print(x, newLine=false) are the same IR
+    s = re.sub(r'\.(sin|cos|tan)\(mes=', r'.\1(', s)   # mes=RAD and plain RAD are the same IR
+    s = re.sub(r'\b(\d+)\.0im', r'\1im', s)            # 1.0im and 1im are the same IR
+    s = re.sub(r'(?<![\w.])sort\(([\w.]+)\);', r'\1.sort();', s)   # sort(a) and a.sort() are the same IR
     s = re.sub(r'^(?:private|public)function', 'function', s)    # visibility is not in the IR
     s = s.replace(')->null{', '){')           # the source sometimes omits -> null
     s = re.sub(r'\.rows\b', '.length', s)     # 2D arrays: .rows and .length are the same IR
@@ -1804,6 +2147,7 @@ def norm(s: str) -> str:
         if depth:
             break
         s = s[:fm_.start()] + s[fm_.end():j - 1] + s[j:]
+    s = re.sub(r'(?<![\w)\]*/%+\-])\(([\w.\[\]]+(?:[*/%][\w.\[\]]+)*)\)(?=[*/%])', r'\1', s)   # (a % b) / c and a % b / c: same left-to-right IR
     s = s.replace(',}', '}')                  # trailing comma in a multi-line { } literal
     m_ = re.fullmatch(r'return\((.*)\);', s)             # return (x); and return x; are the same IR
     if m_:

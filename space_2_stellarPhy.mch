@@ -2,7 +2,7 @@ from "mocha-space" import *;
 
 // Pass the tracking array by reference to avoid both global IR bugs and stack return bugs
 function assert_close(label: str, got: float, expected: float, tol: float, counts: int[]) -> null {
-    var rel: float = unsafe_div(abs(got - expected), abs(expected));
+    var rel: float = abs(got - expected) / abs(expected);
     if (rel < tol) {
         print("  PASS: " + label, newLine=true);
         counts[0] = counts[0] + 1;
@@ -57,10 +57,10 @@ function main(didLoad) -> null {
     assert_close("Mag diff from flux ratio 100x", magnitude_diff_from_flux_ratio(100.0), -5.0, 0.001, tracking);
 
     // 14. Luminosity to solar units (Sirius A: 24.74 L_sun, using raw watts)
-    assert_close("Luminosity to solar (Sirius A)", luminosity_to_solar(unsafe_mul(24.74, LUMINOSITY_SUN)), 24.74, 0.001, tracking);
+    assert_close("Luminosity to solar (Sirius A)", luminosity_to_solar(24.74 * LUMINOSITY_SUN), 24.74, 0.001, tracking);
 
     // 15. Luminosity from solar units roundtrip
-    assert_close("Luminosity from solar (Sirius A)", luminosity_from_solar(24.74), unsafe_mul(24.74, LUMINOSITY_SUN), 0.001, tracking);
+    assert_close("Luminosity from solar (Sirius A)", luminosity_from_solar(24.74), (24.74 * LUMINOSITY_SUN), 0.001, tracking);
 
     // 16. Main sequence mass-luminosity relation (Sirius A: mass=2.063 M_sun)
     // L/L_sun = 2.063^3.5 = 12.61 (verified via Python; approximation vs real 24.74, wide tolerance expected)

@@ -48,7 +48,8 @@ function main(didLoad) -> null {
     assert_close("Earth Hill sphere", hill_sphere(1.496E11, 0.0167, MASS_EARTH, MASS_SUN), 1.5E9, 0.05, tracking);
 
     // 11. Roche Rigid
-    assert_close("Roche rigid", roche_limit_rigid(RADIUS_EARTH, 5514.0, 3346.0), 1.849E7, 0.02, tracking);
+    // Rigid-body Roche limit: 1.26 * R * (rho_primary / rho_satellite)^(1/3) = 9.4818E6 m (the old 1.849E7 was the fluid-style value)
+    assert_close("Roche rigid", roche_limit_rigid(RADIUS_EARTH, 5514.0, 3346.0), 9.4818E6, 0.001, tracking);
 
     // 12. Synodic Earth-Mars
     assert_close("Synodic Earth-Mars", synodic_period(3.15576E7, 5.93596E7) / 86400.0, 779.9, 0.005, tracking);

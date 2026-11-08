@@ -1,5 +1,5 @@
 """
-   MochaMath v0.6 — Mocha Standard Math Library
+   MochaMath v0.7 — Mocha Standard Math Library
    Save as: lib/mocha-math.mch
    Compile with: mocha --lib lib/mocha-math.mch
 """
@@ -26,6 +26,12 @@ const E: float = 2.71828182845904523536;
 const TAU: float = 6.28318530717958647692;
 const PHI: float = 1.61803398874989484820;
 const INF: float = 99999999999999999.0;
+
+const DEG_TO_RAD: float = 0.017453292519943295;
+const RAD_TO_DEG: float = 57.29577951308232;
+
+const SPEED_OF_LIGHT: float = 2.99792458E8;
+const AVOGADRO: float = 6.02214076E23;        // mol^-1
 
 // Measurement units for trig functions
 const RAD: int = 0;

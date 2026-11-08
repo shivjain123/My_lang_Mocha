@@ -74,14 +74,17 @@ class Tensor {
     };
 
     function put(row: int, col: int, val: float) -> null {
+        this.check_alive();
         mocha_tensor_set(this.ptr, row, col, val);
     };
 
     function at(row: int, col: int) -> float {
+        this.check_alive();
         return mocha_tensor_get(this.ptr, row, col);
     };
 
     function show() -> null {
+        this.check_alive();
         mocha_tensor_print(this.ptr);
     };
 
@@ -97,7 +100,17 @@ class Tensor {
         this.dispose();
     };
 
+    // stops with a clear message if this Tensor was already disposed
+    function check_alive() -> null {
+        if (this.freed == 1) {
+            c_print_err("MochaLibError (mocha-neuron): Tensor used after dispose().");
+            c_exit(2);
+        };
+    };
+
     function matmul(other: Tensor) -> Tensor {
+        this.check_alive();
+        other.check_alive();
         var result: Tensor = Tensor(this.nrows, other.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_matmul(this.ptr, other.ptr);
@@ -105,6 +118,7 @@ class Tensor {
     };
 
     function transpose() -> Tensor {
+        this.check_alive();
         var result: Tensor = Tensor(this.ncols, this.nrows);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_transpose(this.ptr);
@@ -112,6 +126,8 @@ class Tensor {
     };
 
     function add(other: Tensor) -> Tensor {
+        this.check_alive();
+        other.check_alive();
         var result: Tensor = Tensor(this.nrows, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_add(this.ptr, other.ptr);
@@ -119,38 +135,48 @@ class Tensor {
     };
 
     function relu() -> null {
+        this.check_alive();
         mocha_tensor_relu(this.ptr);
     };
 
     function sigmoid() -> null {
+        this.check_alive();
         mocha_tensor_sigmoid(this.ptr);
     };
 
     function tanh() -> null {
+        this.check_alive();
         mocha_tensor_tanh(this.ptr);
     };
 
     function softmax() -> null {
+        this.check_alive();
         mocha_tensor_softmax(this.ptr);
     };
 
     function scale(val: float) -> null {
+        this.check_alive();
         mocha_tensor_scale(this.ptr, val);
     };
 
     function fill(val: float) -> null {
+        this.check_alive();
         mocha_tensor_fill(this.ptr, val);
     };
 
     function zeros() -> null {
+        this.check_alive();
         mocha_tensor_zeros(this.ptr);
     };
 
     function ones() -> null {
+        this.check_alive();
         mocha_tensor_ones(this.ptr);
     };
 
     function concat(other: Tensor) -> Tensor {
+        this.check_alive();
+        other.check_alive();
         var result: Tensor = Tensor(this.nrows, this.ncols + other.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_concat(this.ptr, other.ptr);
@@ -158,6 +184,8 @@ class Tensor {
     };
 
     function one_minus_mul(other: Tensor) -> Tensor {
+        this.check_alive();
+        other.check_alive();
         var result: Tensor = Tensor(this.nrows, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_one_minus_mul(this.ptr, other.ptr);
@@ -165,6 +193,8 @@ class Tensor {
     };
 
     function mul(other: Tensor) -> Tensor {
+        this.check_alive();
+        other.check_alive();
         var result: Tensor = Tensor(this.nrows, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_mul(this.ptr, other.ptr);
@@ -172,6 +202,7 @@ class Tensor {
     };
 
     function clone_tensor() -> Tensor {
+        this.check_alive();
         var result: Tensor = Tensor(this.nrows, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_clone(this.ptr);
@@ -179,6 +210,7 @@ class Tensor {
     };
 
     function sign() -> Tensor {
+        this.check_alive();
         var result: Tensor = Tensor(this.nrows, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_sign(this.ptr);
@@ -186,6 +218,8 @@ class Tensor {
     };
 
     function outer(other: Tensor) -> Tensor {
+        this.check_alive();
+        other.check_alive();
         var result: Tensor = Tensor(this.ncols, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_outer(this.ptr, other.ptr);
@@ -193,18 +227,24 @@ class Tensor {
     };
 
     function zero_diagonal() -> null {
+        this.check_alive();
         mocha_tensor_zero_diagonal(this.ptr);
     };
 
     function add_inplace(other: Tensor) -> null {
+        this.check_alive();
+        other.check_alive();
         mocha_tensor_add_inplace(this.ptr, other.ptr);
     };
 
     function equals(other: Tensor) -> bool {
+        this.check_alive();
+        other.check_alive();
         return mocha_tensor_equal(this.ptr, other.ptr) == 1;
     };
 
     function get_row(row: int) -> Tensor {
+        this.check_alive();
         var result: Tensor = Tensor(1, this.ncols);
         mocha_tensor_free(result.ptr);
         result.ptr = mocha_tensor_get_row(this.ptr, row);

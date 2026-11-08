@@ -1617,38 +1617,12 @@ function prevailing_visibility(vis_readings_km: float[]) -> float {
         c_print_err("MochaLibError (mocha-meteoro): No visibility readings provided.");
         c_exit(2);
     };
-    var n: int = vis_readings_km.length;
-    var need: int = (n + 1) / 2;
-    var best: float = 0.0 - 1.0;
-    var i: int = 0;
-    while (i < n) {
-        var count: int = 0;
-        var j: int = 0;
-        while (j < n) {
-            if (vis_readings_km[j] >= vis_readings_km[i]) {
-                count = count + 1;
-            };
-            j = j + 1;
-        };
-        if (count >= need && vis_readings_km[i] > best) {
-            best = vis_readings_km[i];
-        };
-        i = i + 1;
-    };
-    return best;
+    // sort a copy so the caller's readings keep their order (sort() works in place)
+    var s: float[] = vis_readings_km.copy();
+    sort(s);
+    var n: int = s.length;
+    return s[n - (n + 1) / 2];
 };
-
-"""~~ Prevailing visibility (km): the greatest visibility reached or exceeded over at least
-~~ half of the horizon circle. Assumes the readings come from equal sectors, e.g. 8 compass directions
-function prevailing_visibility(vis_readings_km: float[]) -> float {
-    if (vis_readings_km.length == 0) {
-        c_print_err("MochaLibError (mocha-meteoro): No visibility readings provided.");
-        c_exit(2);
-    };
-    vis_readings_km.sort();
-    var n: int = vis_readings_km.length;
-    return vis_readings_km[n - (n + 1) / 2];
-};"""
 
 ~~ Runway Visual Range (m)
 function runway_visual_range(visibility_m: float, has_runway_lights: bool) -> float {

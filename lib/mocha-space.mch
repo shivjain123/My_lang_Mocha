@@ -23,10 +23,6 @@ local function c_exp(x: float) -> float native mocha_wrap_exp;
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
-//use TAU as is
-const DEG_TO_RAD: float = 0.017453292519943295;
-const RAD_TO_DEG: float = 57.29577951308232;
-
 const G: float = 6.6743E-11;
 const GM_SUN: float = 1.32712440018E20;
 const GM_EARTH: float = 3.986004418E14;
@@ -52,16 +48,15 @@ const LIGHT_YEAR: float = 9.4607304725808E15;     // m
 const AU: float = 1.495978707E11;                 // m
 const LUMINOSITY_SUN: float = 3.828E26;           // W (IAU nominal)
 const TEMP_SUN: float = 5772.0;                   // K (IAU nominal photosphere)
-const SPEED_OF_LIGHT: float = 2.99792458E8;       // m/s
 const PLANCK_H: float = 6.62607015E-34;           // J·s
 const BOLTZMANN_K: float = 1.380649E-23;          // J/K
+const R_GAS: float = 8.314462618;
 
 // ─── PLANETARY ATMOSPHERES & HABITABILITY ───────────────────────────────────
 
 const EARTH_ALBEDO: float = 0.306;           // Bond albedo (fraction of incident sunlight reflected)
 const EARTH_GRAVITY: float = 9.80665;        // m/s^2
 const EARTH_MEAN_MOLAR_MASS: float = 0.02896; // kg/mol, dry air
-const AVOGADRO: float = 6.02214076E23;        // mol^-1
 const SOLAR_CONSTANT: float = 1361.0;         // W/m^2 at 1 AU (TSI)
 
 // ─── CELESTIAL COORDINATES ──────────────────────────────────────────────────
@@ -550,9 +545,9 @@ function luminosity_from_radius_temp(r: float, t: float) -> float {
         c_print_err("MochaLibError (mocha-space): Effective temperature must be positive.");
         c_exit(2);
     };
-    var r2: float = unsafe_mul(r, r);
-    var t2: float = unsafe_mul(t, t);
-    var t4: float = unsafe_mul(t2, t2);
+    var r2: float = r*r;
+    var t2: float = t*t;
+    var t4: float = t2*t2;
     var area_term: float = unsafe_mul(4.0 * PI, r2);
     var flux_term: float = unsafe_mul(STEFAN_BOLTZMANN, t4);
     return unsafe_mul(area_term, flux_term);
@@ -569,9 +564,9 @@ function radius_from_luminosity_temp(l: float, t: float) -> float {
         c_print_err("MochaLibError (mocha-space): Effective temperature must be positive.");
         c_exit(2);
     };
-    var t2: float = unsafe_mul(t, t);
-    var t4: float = unsafe_mul(t2, t2);
-    var denom: float = unsafe_mul(unsafe_mul(4.0 * PI, STEFAN_BOLTZMANN), t4);
+    var t2: float = t*t;
+    var t4: float = t2*t2;
+    var denom: float = unsafe_mul((4.0 * PI * STEFAN_BOLTZMANN), t4);
     var radicand: float = unsafe_div(l, denom);
     return radicand.sqrt().real;
 };
@@ -587,7 +582,7 @@ function temp_from_luminosity_radius(l: float, r: float) -> float {
         c_print_err("MochaLibError (mocha-space): Stellar radius must be positive.");
         c_exit(2);
     };
-    var r2: float = unsafe_mul(r, r);
+    var r2: float = r*r;
     var denom: float = unsafe_mul(unsafe_mul(4.0 * PI, r2), STEFAN_BOLTZMANN);
     var inner: float = unsafe_div(l, denom);
     return c_pow(inner, 0.25);
@@ -727,7 +722,7 @@ function schwarzschild_radius(mass: float) -> float {
         c_exit(2);
     };
     var numerator: float = unsafe_mul(unsafe_mul(2.0, G), mass);
-    var c2: float = unsafe_mul(SPEED_OF_LIGHT, SPEED_OF_LIGHT);
+    var c2: float = SPEED_OF_LIGHT * SPEED_OF_LIGHT;
     return unsafe_div(numerator, c2);
 };
 
@@ -759,8 +754,8 @@ function equilibrium_temp(l: float, d: float, albedo: float) -> float {
         c_print_err("MochaLibError (mocha-space): Bond albedo must be in [0, 1).");
         c_exit(2);
     };
-    var d2: float = unsafe_mul(d, d);
-    var denom: float = unsafe_mul(unsafe_mul(16.0 * PI, STEFAN_BOLTZMANN), d2);
+    var d2: float = d*d;
+    var denom: float = unsafe_mul(16.0 * PI * STEFAN_BOLTZMANN, d2);
     var numer: float = unsafe_mul(l, (1.0 - albedo));
     var inner: float = unsafe_div(numer, denom);
     return c_pow(inner, 0.25);
@@ -785,10 +780,10 @@ function equilibrium_temp_from_star(t_star: float, r_star: float, d: float, albe
         c_print_err("MochaLibError (mocha-space): Bond albedo must be in [0, 1).");
         c_exit(2);
     };
-    var ratio: float = unsafe_div(r_star, unsafe_mul(2.0, d));
+    var ratio: float = r_star / (2.0 * d);
     var sqrt_term: float = ratio.sqrt().real;
     var albedo_term: float = c_pow(1.0 - albedo, 0.25);
-    return unsafe_mul(unsafe_mul(t_star, sqrt_term), albedo_term);
+    return t_star * sqrt_term * albedo_term;
 };
 
 ~~ Stellar flux (insolation) in W/m² received at orbital distance d (m) from luminosity l (W).
@@ -802,7 +797,7 @@ function solar_flux_at_distance(l: float, d: float) -> float {
         c_print_err("MochaLibError (mocha-space): Orbital distance must be positive.");
         c_exit(2);
     };
-    var d2: float = unsafe_mul(d, d);
+    var d2: float = d*d;
     var denom: float = unsafe_mul(4.0 * PI, d2);
     return unsafe_div(l, denom);
 };
@@ -827,7 +822,7 @@ function absorbed_power(l: float, d: float, r_planet: float, albedo: float) -> f
         c_exit(2);
     };
     var flux: float = solar_flux_at_distance(l, d);
-    var cross_section: float = unsafe_mul(PI, unsafe_mul(r_planet, r_planet));
+    var cross_section: float = unsafe_mul(PI, r_planet * r_planet);
     var absorbed_fraction: float = 1.0 - albedo;
     return unsafe_mul(unsafe_mul(flux, cross_section), absorbed_fraction);
 };
@@ -847,10 +842,10 @@ function scale_height(t: float, molar_mass: float, g: float) -> float {
         c_print_err("MochaLibError (mocha-space): Surface gravity must be positive.");
         c_exit(2);
     };
-    const R_GAS: float = 8.314462618;
-    var numer: float = unsafe_mul(R_GAS, t);
-    var denom: float = unsafe_mul(molar_mass, g);
-    return unsafe_div(numer, denom);
+    
+    var numer: float = R_GAS * t;
+    var denom: float = molar_mass * g;
+    return numer / denom;
 };
 
 ~~ Atmospheric pressure in Pa at altitude h (m) from surface pressure p0 (Pa) and scale height scale_h (m).
@@ -880,7 +875,7 @@ function surface_gravity(mass: float, radius: float) -> float {
         c_print_err("MochaLibError (mocha-space): Body radius must be positive.");
         c_exit(2);
     };
-    var r2: float = unsafe_mul(radius, radius);
+    var r2: float = radius*radius;
     var gm: float = unsafe_mul(G, mass);
     return unsafe_div(gm, r2);
 };
@@ -947,8 +942,8 @@ function jeans_escape_parameter(escape_v: float, thermal_v: float) -> float {
         c_print_err("MochaLibError (mocha-space): Thermal velocity must be positive.");
         c_exit(2);
     };
-    var ratio: float = unsafe_div(escape_v, thermal_v);
-    return unsafe_mul(ratio, ratio);
+    var ratio: float = escape_v/thermal_v;
+    return ratio*ratio;
 };
 
 ~~ Most probable thermal speed of gas molecules in m/s from temperature (K) and molar mass (kg/mol).
@@ -962,9 +957,9 @@ function thermal_velocity(temp: float, molar_mass: float) -> float {
         c_print_err("MochaLibError (mocha-space): Molar mass must be positive.");
         c_exit(2);
     };
-    const R_GAS: float = 8.314462618;
-    var numer: float = unsafe_mul(2.0 * R_GAS, temp);
-    var radicand: float = unsafe_div(numer, molar_mass);
+    
+    var numer: float = 2.0 * R_GAS * temp;
+    var radicand: float = numer/molar_mass;
     return radicand.sqrt().real;
 };
 

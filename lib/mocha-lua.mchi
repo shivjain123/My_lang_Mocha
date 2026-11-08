@@ -44,3 +44,5 @@ function lua_end_call_number(lua: null, nargs: int) -> float native mocha_lua_en
 function lua_end_call_string(lua: null, nargs: int) -> str native mocha_lua_end_call_string;
 function lua_end_call_int(lua: null, nargs: int) -> int native mocha_lua_end_call_int;
 function lua_end_call_bool(lua: null, nargs: int) -> bool native mocha_lua_end_call_bool;
+function lua_call_failed(lua: null) -> bool native mocha_lua_call_failed;
+function lua_call_error(lua: null) -> str native mocha_lua_call_error;

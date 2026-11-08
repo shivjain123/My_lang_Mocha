@@ -1,7 +1,14 @@
 """
 mocha-geo — Geoscience Library for Mocha
+
 Section 1: Seismology
 Section 2: Mineralogy & Crystallography
+Section 1: Seismology
+Section 2: Mineralogy & Crystallography
+Section 3: Structural Geology & Plate Tectonics
+Section 4: Hydrology
+Section 5: Volcanology
+Section 6: Geochronology
 
 Part of the Mocha Scientific Library Ecosystem
 License: Polyform Non-Commercial
@@ -12,13 +19,7 @@ License: Polyform Non-Commercial
 local function c_exp(x: float) -> float native mocha_wrap_exp;
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
-local function unsafe_mul(a: float, b: float) -> float native mocha_unsafe_mul;
-local function unsafe_div(a: float, b: float) -> float native mocha_unsafe_div;
-local function unsafe_add(a: float, b: float) -> float native mocha_unsafe_add;
-local function unsafe_sub(a: float, b: float) -> float native mocha_unsafe_sub;
 
-const DEG_TO_RAD: float = 0.01745329251994;
-const RAD_TO_DEG: float = 57.29577951308232;
 const DENSITY_FACTOR: float = 1.6605;
 
 // ================================================================
@@ -43,10 +44,9 @@ function moment_magnitude(m0: float) -> float {
 
 ~~ Computes scalar seismic moment M0 = μ * A * D in N·m.
 ~~ rigidity in Pa, area in m², slip in m.
-~~ Uses unsafe_mul: real fault products far exceed fixed-point range.
 function seismic_moment(rigidity: float, area: float, slip: float) -> float {
-    const STEP1: float = float(unsafe_mul(rigidity, area));
-    const M0: float = float(unsafe_mul(STEP1, slip));
+    const STEP1: float = float(rigidity * area);
+    const M0: float = float(STEP1 * slip);
     return M0;
 };
 

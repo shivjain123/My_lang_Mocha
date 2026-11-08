@@ -1,5 +1,5 @@
 # ============================================================
-# Mocha Type Checker v0.9
+# Mocha Type Checker v1.0
 # mocha_typeChecker.py
 #
 # Walks the AST and verifies:
@@ -14,6 +14,13 @@
 #   - Function overloading prohibited — duplicate top-level
 #     function names raise a compile error showing both sigs
 #   - Exactly one 'didLoad' entry point required
+#   - Too many arguments to a function, method or constructor
+#     is an error (extra arguments would be silently dropped)
+#   - Unreachable code after return/break/continue is an error
+#   - Class instances and File/StringBuilder/HashTable handles
+#     are move-only: aliasing one into another variable is an
+#     error. Arrays of File/StringBuilder/HashTable are rejected
+#   - A dict cannot be stored inside itself
 #
 #   ── Operators ──────────────────────────────────────────────
 #   - Arithmetic (+ - * / %): numeric-only, tag types blocked,
@@ -34,6 +41,8 @@
 #   - Tuple types are homogeneous and fixed-size: (T, N)
 #   - 3D+ arrays rejected (2D max; suggests a class instead)
 #   - str fields/vars can never be null
+#   - Complex(a, b) takes at most 2 numeric arguments, and
+#     Complex is immutable (assigning to .real/.imag is an error)
 #
 #   ── Collections ────────────────────────────────────────────
 #   - Array literals: element type consistency, empty-array
@@ -42,9 +51,13 @@
 #   - Set literals/methods: element type consistency, has/
 #     insert/delete/union/intersect/xor/rel_diff/min/max/retype
 #     (min/max blocked for set<bool> — unordered)
-#   - Dict literals/methods: str-only keys, has/allKeys/
-#     allValues/remove/clean/merge (incl. override= kwarg check)
+#   - Dict literals/methods: str-only keys, length/has/allKeys/
+#     allValues/jsonify/remove/clean/merge (incl. override=
+#     kwarg check)/copy. Values are untyped ("any"); arrays are
+#     allowed as values
 #   - HashTable: put/get/has/size/keys/values/remove/clear/free
+#   - str methods: charAt/substring (str), toInt (int), toFloat
+#     (float), dictify (parses JSON text into a dict)
 #   - 2D array .occs() requires explicit row= or col= kwarg
 #
 #   ── Control Flow ───────────────────────────────────────────
@@ -74,8 +87,9 @@
 #     methods (soft — logged to diamond_conflicts, resolved by
 #     qualified call Class.obj.method() or left to codegen's
 #     parent-precedence fallback)
-#   - Visibility enforcement: private (current class only) and
-#     protected (class or subclass only) field/method access
+#   - Visibility enforcement: private (current class only),
+#     protected (class or subclass only) and local (declaring
+#     file only) field/method access
 #   - Interface conformance: missing methods get a hint with
 #     the exact signature to paste in; mismatched return type,
 #     param count, or param types each get a specific error
@@ -217,7 +231,7 @@ class TypeChecker:
         self.diamond_conflicts = {}
         self.interface_methods = {}
         self.tag_types = set()
-        self.function_nodes = {}   # NEW: function name -> its FunctionDecl (for argument count checks)
+        self.function_nodes = {}   # function name -> its FunctionDecl (for argument count checks)
 
         # Pre-declare built-in functions
         self.symbols.declare("print", "null", is_function=True)
@@ -292,7 +306,7 @@ class TypeChecker:
         if actual == "null" and expected not in self.PRIMITIVE_TYPES:
             return True
         if expected == "null" and actual not in self.PRIMITIVE_TYPES:
-            return True  # ← add this
+            return True
         # Array compatibility: element types must be compatible
         exp_elem = self.extract_element_type(expected)
         act_elem = self.extract_element_type(actual)
@@ -390,7 +404,7 @@ class TypeChecker:
                     f"Use '==' or '!=' for tag comparison.", node
                 )
                 return "bool"
-            if left not in self.COMPARABLE_TYPES:
+            elif left not in self.COMPARABLE_TYPES:
                 self.error(
                     f"Cannot compare type '{left}' with '{op}'", node
                 )
@@ -407,7 +421,7 @@ class TypeChecker:
             if left != right and not (
                 left in self.NUMERIC_TYPES
                 and right in self.NUMERIC_TYPES
-            ) and not (left == "null" or right == "null"):  # ← add this
+            ) and not (left == "null" or right == "null"):
                 self.error(
                     f"Cannot compare '{left}' with '{right}'. "
                     f"Type coercion is prohibited in Mocha", node
@@ -1178,7 +1192,12 @@ class TypeChecker:
                 return "dict"
             if func_name == "copy":
                 return "dict"
-            return "dict"
+            self.error(
+                f"'.{func_name}()' is not a method on dict. "
+                f"Available: .length, .has, .allKeys, .allValues, .jsonify, .remove, .clean, .merge, .copy",
+                node
+            )
+            return "unknown"
             
         # HashTable method return types
         if obj_type == "HashTable":
@@ -1212,7 +1231,7 @@ class TypeChecker:
                     arg.target.name in ("row", "col")
                     for arg in node.args
                 )
-                # actually USE the check
+                # the argument list must carry row= or col=
                 if not has_row_or_col:
                     self.error(
                         "occs() on a 2D array requires a 'row=' or 'col=' argument. "
@@ -1290,6 +1309,10 @@ class TypeChecker:
                         )
                 return "float"
         
+        # Array copy: a new array of the same type as the receiver (a 2D .copy() does not exist)
+        if func_name == "copy" and obj_type and obj_type.endswith("[]") and "[][]" not in obj_type:
+            return obj_type
+
         #String methods
         if obj_type == "str":
             if func_name == "charAt":
@@ -1298,6 +1321,8 @@ class TypeChecker:
                 return "int"
             if func_name == "toFloat":
                 return "float"
+            if func_name == "dictify":
+                return "dict"
             if func_name == "substring":
                 return "str"
 
@@ -1470,8 +1495,6 @@ class TypeChecker:
 
         self.symbols.declare(node.name, node.type)
 
-        #print(f"[ALIAS_DBG] name={node.name!r} type={node.type!r} in_class_nodes={node.type in self.class_nodes!r} value_is_identifier={isinstance(node.value, Identifier)!r} value_node={type(node.value).__name__}", file=sys.stderr)
-
         # Class instances and C-backed handle types are move-only, not aliasable — reject
         # `var p2: SomeClass = p;` where p is an existing variable
         move_only_builtins = ("File", "StringBuilder", "HashTable")
@@ -1516,6 +1539,19 @@ class TypeChecker:
             self.error(
                 f"Type mismatch in constant '{node.name}': "
                 f"declared as '{node.type}' but value is '{value_type}'",
+                node
+            )
+
+        # Class instances and C-backed handle types are move-only, not aliasable — reject
+        # `const P2: SomeClass = p;` where p is an existing variable
+        move_only_builtins = ("File", "StringBuilder", "HashTable")
+        if (node.type in self.class_nodes or node.type in move_only_builtins) and isinstance(node.value, Identifier):
+            kind = "class instance" if node.type in self.class_nodes else f"{node.type} handle"
+            self.error(
+                f"Cannot alias {kind} '{node.value.name}' into '{node.name}': "
+                f"{kind}s in Mocha are move-only, not copyable. "
+                f"This prevents security issues and accidental mutations. "
+                f"Construct a new one instead.",
                 node
             )
 
@@ -1894,11 +1930,22 @@ class TypeChecker:
                 f"'{self.current_return}' but returning '{value_type}'", node
             )
 
+    def check_stmt_list(self, statements: list):
+        """ Type-check statements in order (no scope change) and flag code that can never run """
+        left_block = False      # an earlier statement always leaves this block
+        reported = False        # report unreachable code once per block
+        for stmt in statements:
+            if left_block and not reported:
+                self.error("Unreachable code: this statement can never run, because an earlier statement always leaves the block.", stmt)
+                reported = True
+            self.check_stmt(stmt)
+            if not left_block and (self.has_return([stmt]) or isinstance(stmt, (BreakStmt, ContinueStmt))):
+                left_block = True
+
     def check_block(self, statements: list):
         """ Type-check a list of statements in a new scope """
         self.symbols.push_scope()
-        for stmt in statements:
-            self.check_stmt(stmt)
+        self.check_stmt_list(statements)
         self.symbols.pop_scope()
 
     def check_if(self, node: IfStmt):
@@ -1950,8 +1997,7 @@ class TypeChecker:
             if condition_type != "bool":
                 self.error(f"For loop condition must be bool, got '{condition_type}'", node)
             self.check_expr(node.step)
-            for stmt in node.body:
-                self.check_stmt(stmt)
+            self.check_stmt_list(node.body)
         finally:
             self.symbols.pop_scope()
             self.loop_depth -= 1
@@ -1970,8 +2016,7 @@ class TypeChecker:
             self.symbols.push_scope()
             try:
                 self.symbols.declare(node.var_name, elem_type)
-                for stmt in node.body:
-                    self.check_stmt(stmt)
+                self.check_stmt_list(node.body)
             finally:
                 self.symbols.pop_scope()
                 self.loop_depth -= 1
@@ -1993,8 +2038,7 @@ class TypeChecker:
         self.symbols.push_scope()
         try:
             self.symbols.declare(node.var_name, var_type)
-            for stmt in node.body:
-                self.check_stmt(stmt)
+            self.check_stmt_list(node.body)
         finally:
             self.symbols.pop_scope()
             self.loop_depth -= 1
@@ -2028,32 +2072,50 @@ class TypeChecker:
     # Function and class checking
     # -------------------------------------------------------
 
+    def is_literal_true(self, node):
+        # True only for the literal `true` (so `while true`, not `while x`)
+        return isinstance(node, BoolLiteral) and node.value is True
+    
+    def has_loop_break(self, stmts):
+        # True if a `break` in these statements could leave the CURRENT loop.
+        # Nested loops are skipped: their breaks only leave themselves.
+        for stmt in stmts:
+            if isinstance(stmt, BreakStmt):
+                return True
+            if isinstance(stmt, IfStmt):
+                if self.has_loop_break(stmt.then_body):
+                    return True
+                for _cond, body in stmt.else_ifs:
+                    if self.has_loop_break(body):
+                        return True
+                if stmt.else_body and self.has_loop_break(stmt.else_body):
+                    return True
+            if isinstance(stmt, MatchStmt):
+                for c in stmt.cases:
+                    if self.has_loop_break(c.body):
+                        return True
+        return False
+    
     def has_return(self, stmts):
         for stmt in stmts:
             if isinstance(stmt, ReturnStmt):
                 return True
             if isinstance(stmt, IfStmt):
-                if (self.has_return(stmt.then_body) and 
-                    stmt.else_body and 
+                # every path must return: then, each else-if, and a final else
+                if (self.has_return(stmt.then_body) and
+                    all(self.has_return(body) for _cond, body in stmt.else_ifs) and
+                    stmt.else_body and
                     self.has_return(stmt.else_body)):
                     return True
-            if isinstance(stmt, WhileLoop):
-                pass
+            if isinstance(stmt, (WhileLoop, DoWhileLoop, ForLoop)):
+                # a loop on literal `true` with no break that can leave it never completes
+                if self.is_literal_true(stmt.condition) and not self.has_loop_break(stmt.body):
+                    return True
             if isinstance(stmt, MatchStmt):
+                # needs a default, and every case must really return (a break is not a return)
                 has_default = any(c.is_default for c in stmt.cases)
-                if has_default:
-                    all_return = all(
-                        self.has_return(c.body) or self.has_break(c.body)
-                        for c in stmt.cases
-                    )
-                    if all_return:
-                        return True
-        return False
-
-    def has_break(self, stmts):
-        for stmt in stmts:
-            if isinstance(stmt, BreakStmt):
-                return True
+                if has_default and all(self.has_return(c.body) for c in stmt.cases):
+                    return True
         return False
     
     def check_function(self, node):
@@ -2075,16 +2137,15 @@ class TypeChecker:
         self.symbols.push_scope()
         for param in node.params:
             self.symbols.declare(param.name, param.type)
-        for stmt in node.body:
-            self.check_stmt(stmt)
+        self.check_stmt_list(node.body)
         self.symbols.pop_scope()
 
         self.current_return = prev_return
         self.current_shared = prev_shared
 
         if node.return_type != "null":
-            if getattr(node, 'is_native', False):  # ← add this
-                return #natuve functions have no body
+            if getattr(node, 'is_native', False):
+                return #native functions have no body
             if not self.has_return(node.body):
                 self.error(
                     f"Function '{node.name}' "
@@ -2189,8 +2250,8 @@ class TypeChecker:
         self.symbols.pop_scope()
         self.current_class = prev_class
 
-        # After existing class checks
-        for interface_name in node.interfaces:  # ← node.interfaces not implements
+        # Interface conformance: every required method must exist with matching signature
+        for interface_name in node.interfaces:  # the AST field is named interfaces
             if interface_name not in self.interface_methods:
                 self.error(
                     f"Unknown interface '{interface_name}'", node
@@ -2327,8 +2388,7 @@ class TypeChecker:
         # try body in its own scope
         self.try_depth += 1
         self.symbols.push_scope()
-        for stmt in node.try_body:
-            self.check_stmt(stmt)
+        self.check_stmt_list(node.try_body)
         self.symbols.pop_scope()
         self.try_depth -= 1
 
@@ -2337,8 +2397,7 @@ class TypeChecker:
         self.symbols.push_scope()
         if node.binding:
             self.symbols.declare(node.binding, "str")
-        for stmt in node.rescue_body:
-            self.check_stmt(stmt)
+        self.check_stmt_list(node.rescue_body)
         self.symbols.pop_scope()
         self.rescue_depth -= 1
 

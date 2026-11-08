@@ -10,9 +10,6 @@ local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
 local function c_exp(x: float) -> float native mocha_wrap_exp;
 
-const DEG_TO_RAD: float = 0.01745329251994;
-const RAD_TO_DEG: float = 57.29577951308232;
-
 // ================================================================
 // SECTION 1: DEMOGRAPHY
 // ================================================================

@@ -1,7 +1,7 @@
 from "mocha-space" import *;
 
 function assert_close(label: str, got: float, expected: float, tol: float, counts: int[]) -> null {
-    var rel: float = unsafe_div(abs(got - expected), abs(expected));
+    var rel: float = abs(got - expected) / abs(expected);
     if (rel < tol) {
         print("  PASS: " + label, newLine=true);
         counts[0] = counts[0] + 1;

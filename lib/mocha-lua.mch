@@ -5,7 +5,8 @@
 ~~ Creates a new Lua state. Returns an opaque handle.
 function lua_open() -> null native mocha_lua_new;
 
-~~ Closes and destroys a Lua state.
+~~ Closes and destroys a Lua state. Closing the same handle twice is safe:
+~~ the second close prints a warning and is ignored.
 ~~ @param lua  the Lua state handle
 function lua_close(lua: null) -> null native mocha_lua_close;
 
@@ -25,21 +26,26 @@ function lua_run_file(lua: null, filename: str) -> int native mocha_lua_dofile;
 function lua_try(lua: null, code: str) -> str native mocha_lua_safe_dostring;
 
 ~~ Gets a numeric variable from Lua global scope.
+~~ A missing or non-numeric global gives 0.0.
 ~~ @param lua   the Lua state handle
 ~~ @param name  variable name in Lua
 function lua_get_number(lua: null, name: str) -> float native mocha_lua_getnumber;
 
 ~~ Gets a string variable from Lua global scope.
+~~ A missing or non-string global gives an empty string.
 ~~ @param lua   the Lua state handle
 ~~ @param name  variable name in Lua
 function lua_get_string(lua: null, name: str) -> str native mocha_lua_getstring;
 
 ~~ Gets a boolean variable from Lua global scope.
+~~ Lua rules apply: only nil and false give false, so a missing global gives false,
+~~ while 0 and an empty string give true.
 ~~ @param lua   the Lua state handle
 ~~ @param name  variable name in Lua
 function lua_get_bool(lua: null, name: str) -> bool native mocha_lua_getbool;
 
 ~~ Gets an integer variable from Lua global scope.
+~~ Decimals are cut off (3.7 gives 3). A missing or non-numeric global gives 0.
 ~~ @param lua   the Lua state handle
 ~~ @param name  variable name in Lua
 function lua_get_int(lua: null, name: str) -> int native mocha_lua_getint;
@@ -183,7 +189,8 @@ function lua_call_int_2s(lua: null, func: str, a: str, b: str) -> int native moc
 ~~ ── Generic calls: any number of args, any mix of types ──
 ~~ Usage: lua_begin_call(lua, "name"), then one lua_push_* per argument in order,
 ~~ then lua_end_call_<return>(lua, number_of_args) to run it and get the result.
-~~ Pass the same count you pushed. A wrong count or a missing begin prints a MochaLuaError.
+~~ Pass the same count you pushed. A wrong count or a missing begin prints a MochaLuaError
+~~ and makes the call fail (check it with lua_call_failed, see the end of this file).
 
 ~~ Starts a call: selects the Lua function to call.
 ~~ @param lua   the Lua state handle
@@ -229,3 +236,16 @@ function lua_end_call_int(lua: null, nargs: int) -> int native mocha_lua_end_cal
 ~~ @param lua    the Lua state handle
 ~~ @param nargs  how many arguments were pushed
 function lua_end_call_bool(lua: null, nargs: int) -> bool native mocha_lua_end_call_bool;
+
+~~ ── Checking if a call failed ──
+~~ After any lua_call_* or lua_end_call_* you can ask if it failed.
+~~ A failed call still returns 0, 0.0 or "", so use these to tell it apart from a real zero.
+~~ The status belongs to the Lua state and is updated by every call.
+
+~~ Did the last lua_call_* or lua_end_call_* fail? Returns true if it did.
+~~ @param lua  the Lua state handle
+function lua_call_failed(lua: null) -> bool native mocha_lua_call_failed;
+
+~~ Gets the error message of the last failed call, or an empty string.
+~~ @param lua  the Lua state handle
+function lua_call_error(lua: null) -> str native mocha_lua_call_error;

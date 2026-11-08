@@ -817,6 +817,14 @@ tag GcsSeverity {
     MILD
 };
 
+tag MankoskiLevel {
+    NO_PAIN,
+    MILD,
+    MODERATE,
+    SEVERE,
+    WORST_POSSIBLE
+};
+
 """  ========================
      NEUROLOGY FORMULAE
      ========================  """
@@ -879,6 +887,29 @@ function gcs(eye: GcsEye, verbal: GcsVerbal, motor: GcsMotor) -> GcsSeverity {
 ~~ GCS total score — returns raw int if caller needs the number
 function gcs_score(eye: GcsEye, verbal: GcsVerbal, motor: GcsMotor) -> int {
     return gcs_eye_score(eye) + gcs_verbal_score(verbal) + gcs_motor_score(motor);
+};
+
+~~ Mankoski pain scale
+~~ Patient rates their pain from 0 to 10
+~~ 0 = no pain, 1-3 = mild, 4-6 = moderate, 7-9 = severe, 10 = worst possible
+~~ Scores outside 0-10 are invalid input and stop the program
+function mankoski_pain(score: int) -> MankoskiLevel {
+    if (score < 0 || score > 10) {
+        c_print_err("MochaBioError (mocha-bio): Mankoski pain score must be between 0 and 10.");
+        c_exit(2);
+    };
+    if (score == 0) {
+        return MankoskiLevel.NO_PAIN;
+    } else if (score <= 3) {
+        return MankoskiLevel.MILD;
+    } else if (score <= 6) {
+        return MankoskiLevel.MODERATE;
+    } else if (score <= 9) {
+        c_print_err("MochaBioWarning (mocha-bio): Mankoski 7-9 — severe pain, needs prompt attention.");
+        return MankoskiLevel.SEVERE;
+    };
+    c_print_err("MochaBioWarning (mocha-bio): Mankoski 10 — worst possible pain, urgent attention needed.");
+    return MankoskiLevel.WORST_POSSIBLE;
 };
 
 ~~ Cerebral perfusion pressure

@@ -1260,7 +1260,6 @@ function curie_to_becquerel(ci: float) -> float {
 
 const PLANCK: float = 0.000000000000000000000000000000000662607;
 const HBAR: float = 0.000000000000000000000000000000000105457;
-const SPEED_OF_LIGHT: float = 299792458.0;
 const RYDBERG: float = 10973730.0;
 const BOHR_RADIUS: float = 0.0000000000529177;
 
@@ -1575,7 +1574,6 @@ function degree_of_dissociation_vant(i: float, n: float) -> float {
 
 // ─── Section 9: Inorganic / Solid State ───────────────────────────────────
 
-const AVOGADRO: float = 6.02214E23;              // 6.02214 × 10²³
 const COULOMB_K: float = 8.98755E9;              // 8.98755 × 10⁹ N·m²/C²
 const ELEM_CHARGE: float = 1.60218E-19;          // 1.60218 × 10⁻¹⁹ C
 

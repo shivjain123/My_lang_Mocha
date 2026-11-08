@@ -82,12 +82,13 @@ function main(didLoad) -> null {
     assert_close("Proper motion total (3-4-5)", proper_motion_total(3.0, 4.0), 5.0, 0.001, tracking);
 
     // ── Atmospheric Refraction ────────────────────────────────────────────
-    assert_close("Refraction at 45deg altitude", atmospheric_refraction(45.0), 1.0, 0.001, tracking);
-    assert_close("Refraction at 10deg altitude", atmospheric_refraction(10.0), 5.671, 0.01, tracking);
+    assert_close("Refraction at 45deg altitude", atmospheric_refraction(45.0), 0.99485, 0.001, tracking);
+    assert_close("Refraction at 10deg altitude", atmospheric_refraction(10.0), 5.39151, 0.001, tracking);
 
     // ── Precession ─────────────────────────────────────────────────────────
+    // RA rate 3.075 s/yr at RA=0, Dec=0, verified via Python: 1.28125 deg over 100yr
     var precessed: (float, 2) = precess_ra_dec(0.0, 0.0, 100.0);
-    assert_close("Precession RA shift over 100yr", precessed#0, 1.39697, 0.001, tracking);
+    assert_close("Precession RA shift over 100yr", precessed#0, 1.28125, 0.001, tracking);
 
     // ── Hour/Degree and Sexagesimal Conversions ───────────────────────────
     assert_close("Hours to degrees (6h)", hours_to_degrees(6.0), 90.0, 0.001, tracking);

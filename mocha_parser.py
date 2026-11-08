@@ -1,7 +1,7 @@
 # ============================================================
-# Mocha Language Parser v0.9
+# Mocha Language Parser v1.0
 # mocha_parser.py
-# Pratt-style
+# Recursive descent with a precedence ladder
 #
 # Converts token stream into an Abstract Syntax Tree (AST)
 # via recursive descent parsing with precedence climbing
@@ -20,16 +20,22 @@
 #   and current token type/value in error message. Synchronization
 #   via synchronize() which consumes tokens until reaching a
 #   top-level declaration boundary (next function/class/import
-#   or unmatched RBRACE at depth 0). On error, continues
-#   parsing remaining top-level items rather than stopping
-#   cold (soft error recovery).
+#   or a ';' at depth 0, or an unmatched RBRACE). On error,
+#   continues parsing remaining top-level items rather than
+#   stopping cold (soft error recovery). parse() prints all
+#   collected errors and exits with code 1; parse(silent=True)
+#   (used by the LSP) raises the first error instead.
 #
 #   ── Type Parsing ────────────────────────────────────────
 #   Handles all Mocha types:
 #     - Primitives: int, vast, float, str, bool, Result, null
-#     - Tuples: (T, N) where N is literal int count
-#     - Arrays: T[], T[N], T[][N], etc. (1D/2D max; 3D+ rejected)
-#     - Sets: set<T> (type-parameterized)
+#     - Tuples: (T, N) where N is a literal int count (the count
+#       may be omitted: (T))
+#     - Arrays: T[], T[N], T[][N], etc. (the parser accepts any
+#       number of dimensions; the type checker rejects 3D+)
+#     - Sets: set<T> (type-parameterized); set<null, T> declares
+#       an empty typed set
+#     - lambda: the type of a lambda value
 #     - Dicts: dict (untyped at parse time)
 #     - Custom: any IDENTIFIER or CONST_IDENT (class/interface
 #       names — SCREAMING_CASE class names like `class T {}`
@@ -71,8 +77,13 @@
 #   - Lambda: lambda (x: int) -> int: x * 2
 #   - List comprehension: [x*2 for each x in arr if x > 0]
 #     with optional else clause for filtered values
-#   - Function calls: name(args), Class.obj.method(args) for
-#     qualified dispatch, "mocha-lib".func(args) for cross-lib
+#     - Tuples: (T, N) where N is a literal int count (the count
+#       may be omitted: (T))
+#     - Arrays: T[], T[N], T[][N], etc. (the parser accepts any
+#       number of dimensions; the type checker rejects 3D+)
+#     - Sets: set<T> (type-parameterized); set<null, T> declares
+#       an empty typed set
+#     - lambda: the type of a lambda value
 #   - ok(value), error(value) — Result type constructors
 #   - await expr — async operation suspension
 #
@@ -85,7 +96,8 @@
 #     distinction from array indexing; # is index operator)
 #   - 2D array access: arr[i][j], arr[0][] (row slice),
 #     arr[][1] (col slice) — special syntax for clarity
-#   - Trailing commas allowed in all collection literals
+#   - Trailing commas allowed in dict and set literals (not in
+#     array literals, tuple literals, or call arguments)
 #   - Dict literals require explicit str-typed keys (type checker
 #     enforces string-only keys; parser allows any expression)
 #
@@ -96,10 +108,11 @@
 #   - for loops: init stmt, bool condition, step expr
 #   - for-each: for each var in <set> or for each var in iterable
 #     (set iteration uses <> syntax; array/dict use bare iterable)
-#   - match/case: pattern matching with optional when guards
-#     (guards are bool exprs, scoped per-case)
-#   - All loops tracked via loop_depth (break/continue validated
-#     by type checker, not parser)
+#   - match/case: value patterns, ranges (case 90..99), member
+#     patterns (case Tag.MEMBER), and an identifier with a when
+#     guard (guards are bool exprs, scoped per-case)
+#   - break/continue are parsed anywhere; the type checker
+#     rejects them outside a loop (it tracks loop_depth)
 #   - Explicit semicolons required (no ASI)
 #
 #   ── Functions ───────────────────────────────────────────
@@ -114,7 +127,8 @@
 #     (didLoad must be first param if present; type checker enforces
 #     exactly one didLoad per module)
 #   - Lambda: lambda (params) -> type: expr (expr-only body, no stmts)
-#   - Forward references allowed (type checker resolves)
+#   - local function: top-level, or inside an extend block; usable
+#     only inside its own file (enforced by the type checker)
 #
 #   ── Classes & OOP ───────────────────────────────────────
 #   - Declarations: class Name extends Parent1, Parent2
@@ -152,9 +166,10 @@
 #   - Members must be SCREAMING_CASE (enforced at parse time,
 #     matching const naming rule)
 #   - No associated values (pure tag membership, not tagged unions)
-#   - Access: TokenType.IDENTIFIER (parsed as member access,
-#     distinguished from method calls by absence of parentheses)
-#   - Type checker enforces exhaustiveness in match statements
+#   - Access: TokenType.IDENTIFIER (parsed as a TagAccess node;
+#     tag names are found by a pre-scan of the tokens)
+#   - Type checker requires a 'default' case in every match; it
+#     does not check exhaustiveness
 #
 #   ── Exception Handling ──────────────────────────────────
 #   - try { ... } rescue, e { ... };  (with binding)
@@ -191,8 +206,8 @@
 #
 #   ── Notable Non-Features ────────────────────────────────
 #   - No generics (List<T>; type parameters are lib-level)
-#   - No function overloading (parser rejects duplicate operators)
-#   - No default parameters in classes (only functions allowed)
+#   - No function overloading (the type checker rejects duplicate
+#     function names)
 #   - No destructuring in for-each (single var only)
 #   - No guard clauses on function params (only match/case)
 #   - No implicit returns (explicit return required)
@@ -329,8 +344,9 @@ class Parser:
     def parse_type(self) -> str:
         """
         Parses a type annotation and returns it as a string.
-        Handles: int, str, int[], int[5], int[][3], (int, str), {str: int}, {int}
-        and also user-defined class names like Animal
+        Handles: int, str, int[], int[5], int[][3], tuples like (int, 3),
+        set<int> or the short form <int>, dict, lambda,
+        and user-defined class names like Animal
         """
         tok = self.current()  # capture 'var' token before consuming
 
@@ -368,8 +384,10 @@ class Parser:
             self.advance()
             return "dict"
         
-        elif self.check(TokenType.TYPE_SET):
-            self.advance()
+        elif self.check(TokenType.TYPE_SET) or self.check(TokenType.LT):
+            # 'set<int>' and the short form '<int>' mean exactly the same
+            if self.check(TokenType.TYPE_SET):
+                self.advance()
             self.expect(TokenType.LT, "Expected '<' after 'set'")
             if self.check(TokenType.NULL):
                 self.advance()  # null means empty typed set
@@ -476,17 +494,17 @@ class Parser:
     # Precedence ladder (low to high):
     #   1. || (or)
     #   2. && (and)
-    #   3. == != (equality)
-    #   4. | (bit or) |_|
-    #   5. ^ (bit xor) |_|
-    #   6. & (bit and) |_|
+    #   3. | (bit or) |_|
+    #   4. ^ (bit xor) |_|
+    #   5. & (bit and) |_|
+    #   6. == != (equality)
     #   7. < > <= >= (comparison)
     #   8. << >> (shift) |_|
     #   9. + - (addition)
     #  10. * / % (multiplication)
     #  11. ! - ~ (unary) |_| (last one)
     #  12. ++ -- (increment)
-    #  13. () [] . (call, index, member)
+    #  13. () [] . # (call, index, member, tuple access)
     #  14. literals, identifiers (primary)
     # -------------------------------------------------------
 
@@ -1029,7 +1047,7 @@ class Parser:
                 else_expr = None
                 if self.match(TokenType.IF):
                     condition = self.parse_expression()
-                    # NEW — check for else branch
+                    # optional: [a if cond else b for each x in arr]
                     if self.match(TokenType.ELSE):
                         else_expr = self.parse_expression()
                 
@@ -1436,7 +1454,7 @@ class Parser:
         
         # Set iteration: for each x in <s> { }
         if self.check(TokenType.LT):
-            self.advance()  # consume 
+            self.advance()  # consume '<'
             set_expr = self.parse_addition()
             self.expect(TokenType.GT, "Expected '>' to close set iterable")
             iterable = SetIterable(set_expr=set_expr)
@@ -1550,9 +1568,9 @@ class Parser:
 
     def parse_param(self) -> Param:
         """
-        Parses a single function parameter: name: type
-        optional: must name: type
-        optional: name: type = default
+        Parses a single function parameter:
+          name: type
+          name: type = default
         """
         if self.check(TokenType.DID_LOAD):
             raise MochaParseError(
@@ -1812,16 +1830,15 @@ class Parser:
         class Pegasus extends Bird, Horse implements Flyable { ... };
         """
         tok = self.current()  # capture 'var' token before consuming
-        #doc = self.collect_doc()
+        doc = self.collect_doc()
         self.expect(TokenType.CLASS, "Expected 'class'")
 
-        # --- CHANGED: class name may be IDENTIFIER or CONST_IDENT ---
+        # class name may be IDENTIFIER or CONST_IDENT (e.g. class T {})
         name_tok = self.current()
         if name_tok.type not in (TokenType.IDENTIFIER, TokenType.CONST_IDENT):
             raise MochaParseError("Expected class name", name_tok)
         name = name_tok.value
         self.advance()
-        # --- end change ---
 
         parents    = []
         interfaces = []

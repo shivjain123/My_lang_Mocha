@@ -531,11 +531,12 @@ extend int[][] {
 
     function svd() -> (float[][], 3) {
         var n: int = this.rows;
-        var fm: float[][] = alloc float[n][n];
+        var m: int = this.cols;
+        var fm: float[][] = alloc float[n][m];
         var i: int = 0;
         while (i < n) {
             var j: int = 0;
-            while (j < n) {
+            while (j < m) {
                 fm[i][j] = float(this[i][j]);
                 j++;
             };
@@ -545,12 +546,13 @@ extend int[][] {
     };
 
     function singular_values() -> float[] {
-        var n: int = this.length;
-        var fm: float[][] = alloc float[n][n];
+        var n: int = this.rows;
+        var m: int = this.cols;
+        var fm: float[][] = alloc float[n][m];
         var i: int = 0;
         while (i < n) {
             var j: int = 0;
-            while (j < n) {
+            while (j < m) {
                 fm[i][j] = float(this[i][j]);
                 j++;
             };
@@ -1536,7 +1538,9 @@ extend float[][] {
     // V  = eigenvectors of AᵀA  (real, cols of result)
     // Σ  = sqrt(eigenvalues of AᵀA) on diagonal
     // U  = A*vᵢ/σᵢ
-    // Returns (U, Σ, V) all float[][]
+    // Returns (U, Sigma, V), all float[][]. The third item is V itself (its COLUMNS are the
+    // right singular vectors), not V transposed. To rebuild A: U * Sigma * V.transpose().
+    // (svd_thin below returns V transposed instead, because PCA wants its rows.)
     // ----------------------------------------------------------
 
     function svd() -> (float[][], 3) {
@@ -1567,6 +1571,32 @@ extend float[][] {
                 vj++;
             };
             vi++;
+        };
+
+        // Sort eigenvalues largest first; the matching column of V moves with each one
+        var si: int = 0;
+        while (si < cols) {
+            var max_idx: int = si;
+            var sj: int = si + 1;
+            while (sj < cols) {
+                if (ata_evals[sj] > ata_evals[max_idx]) {
+                    max_idx = sj;
+                };
+                sj++;
+            };
+            if (max_idx != si) {
+                var tmp_e: float = ata_evals[si];
+                ata_evals[si] = ata_evals[max_idx];
+                ata_evals[max_idx] = tmp_e;
+                var vk: int = 0;
+                while (vk < cols) {
+                    var tmp_v: float = v[vk][si];
+                    v[vk][si] = v[vk][max_idx];
+                    v[vk][max_idx] = tmp_v;
+                    vk++;
+                };
+            };
+            si++;
         };
 
         var svd_k: int = rows;
@@ -1632,7 +1662,7 @@ extend float[][] {
         return (u, sigma, v);
     };
 
-    function svd_thin() -> (float[][], 2) {
+        function svd_thin() -> (float[][], 2) {
         var rows: int = this.rows;
         var cols: int = this.cols;
 
@@ -1659,6 +1689,32 @@ extend float[][] {
             vi++;
         };
 
+        // Sort eigenvalues largest first; the matching column of V moves with each one
+        var si: int = 0;
+        while (si < cols) {
+            var max_idx: int = si;
+            var sj: int = si + 1;
+            while (sj < cols) {
+                if (ata_evals[sj] > ata_evals[max_idx]) {
+                    max_idx = sj;
+                };
+                sj++;
+            };
+            if (max_idx != si) {
+                var tmp_e: float = ata_evals[si];
+                ata_evals[si] = ata_evals[max_idx];
+                ata_evals[max_idx] = tmp_e;
+                var vk: int = 0;
+                while (vk < cols) {
+                    var tmp_v: float = v[vk][si];
+                    v[vk][si] = v[vk][max_idx];
+                    v[vk][max_idx] = tmp_v;
+                    vk++;
+                };
+            };
+            si++;
+        };
+
         var svd_k: int = rows;
         if (cols < rows) { svd_k = cols; };
 
@@ -1682,36 +1738,6 @@ extend float[][] {
                 sigma[i][i] = 0.0;
             };
             i++;
-        };
-
-        // Sort singular values descending, reorder V columns accordingly
-        var si: int = 0;
-        while (si < svd_k) {
-            var max_idx: int = si;
-            var max_val: float = sigma[si][si];
-            var sj: int = si + 1;
-            while (sj < svd_k) {
-                if (sigma[sj][sj] > max_val) {
-                    max_val = sigma[sj][sj];
-                    max_idx = sj;
-                };
-                sj++;
-            };
-            if (max_idx != si) {
-                // Swap sigma diagonal
-                var tmp_s: float = sigma[si][si];
-                sigma[si][si] = sigma[max_idx][max_idx];
-                sigma[max_idx][max_idx] = tmp_s;
-                // Swap columns of v (rows of Vt)
-                var vk: int = 0;
-                while (vk < cols) {
-                    var tmp_v: float = v[vk][si];
-                    v[vk][si] = v[vk][max_idx];
-                    v[vk][max_idx] = tmp_v;
-                    vk++;
-                };
-            };
-            si++;
         };
 
         // Vt = V transposed
