@@ -54,9 +54,9 @@ complex_str_check
          MochaTypeError at line 2, col 29: Complex() arguments must be int, vast or float, not 'str'
 
 comprehensive_v0.5_tests
-    corpus_current\comprehensive_v0.5_tests.ll:3648:20: error: '%t1136' defined with type 'i32' but expected 'ptr'
-     3648 |   store %MochaSet* %t1136, %MochaSet** %d.ptr
-          |                    ^
+    corpus_current\comprehensive_v0.5_tests.ll:4177:21: error: use of undefined value '@fclose'
+     4177 |   %t1469 = call i32 @fclose(i8* %t1468)
+          |                     ^
     1 error generated.
 
 ctor_arity_check
@@ -83,12 +83,6 @@ dict_cycle_test
       Γ¥î Type errors found:
          MochaTypeError at line 10, col 5: Cannot store dict 'd' inside itself. That creates a cycle, and printing or releasing it would never end
 
-euler_mocha
-      Γ£à 2 lib(s) resolved
-    Step 3: Type Checking...
-      Γ¥î Type errors found:
-         MochaTypeError at line 42, col 5: 'results' is a 2D array ('int[][]') and cannot be initialised with an empty '[]'. Write an empty 2D array as [[]] (one empty row) or alloc int[0][0].
-
 extend_private
     Step 3: Type Checking...
       Γ¥î Type errors found:
@@ -100,12 +94,6 @@ file_test
       Γ£à Type check passed
     Step 4: Code Generation...
       Γ¥î MochaCodeGenError at line 3, col 27: File has no method 'readine'
-
-fixed_trig
-    corpus_current\fixed_trig.ll:422:19: error: use of undefined value '@real'
-      422 |   %t14 = call i32 @real()
-          |                   ^
-    1 error generated.
 
 hello
       Γ£à 10 tokens
@@ -143,12 +131,6 @@ lsp_mini_test
     Step 2: Parsing...
     MochaParseError at line 2, col 24: Expected a type annotation here (e.g. int, float, str, bool, or a class name). Got '' (EOF)
 
-mental_health_conf
-         MochaTypeError at line 93, col 52: 'mood_max' is not declared. Did you forget 'var mood_max: type = value;'?
-         MochaTypeError at line 93, col 63: 'mood_min' is not declared. Did you forget 'var mood_min: type = value;'?
-         MochaTypeError at line 93, col 61: Cannot use '-' on type 'unknown'. Arithmetic requires int or float
-         MochaTypeError at line 93, col 37: Cannot use '+' on type 'unknown'. Arithmetic requires int or float
-
 method_arity_check
       Γ£à No imports
     Step 3: Type Checking...
@@ -167,11 +149,17 @@ method_obj_check
       Γ¥î Type errors found:
          MochaTypeError at line 9, col 16: Method 'Math.add' takes at most 2 argument(s), got 3
 
-nested_dict_class
-    corpus_current\nested_dict_class.ll:411:13: error: '%t29' defined with type 'ptr' but expected 'i32'
-      411 |   store i32 %t29, i32* %n.ptr
-          |             ^
-    1 error generated.
+multiple_inh_base
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 9, col 1: Diamond conflict: field 'age' is inherited from both Bird and Horse in class 'Pegasus'. Mocha does not support diamond inheritance of fields ΓÇö rename one of the conflicting fields to resolve this.
+
+network_chart
+    Step 3: Type Checking...
+      Γ£à Type check passed
+    Step 4: Code Generation...
+      Γ¥î MochaCodeGenError at line 113, col 14: Unknown function or method 'NetworkChart_labels' ΓÇö did you forget to import a library?
 
 ps1_analyse_storage_code
     Step 3: Type Checking...
@@ -274,6 +262,48 @@ test_kk
       Γ£à Type check passed
     Step 4: Code Generation...
       Γ¥î MochaCodeGenError at line 9, col 9: sort() cannot determine a supported element type for this argument (supported: int[], float[], str[], vast[], bool[]); assign it to a typed variable first
+
+test_mj
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 5, col 9: Cannot assign null to 'n' which is 'int'. null is only valid for str, class, array and other pointer types; use 0 to reset a number.
+
+test_ml
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 30, col 19: Method 'Pegasus.gallop' takes at most 2 argument(s), got 3
+
+test_mn
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 30, col 16: Method 'Pegasus.fly' takes at most 1 argument(s), got 2
+
+test_mo
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 21, col 29: Constructor of 'Pegasus' takes at most 1 argument(s), got 2
+
+test_mp
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 17, col 14: Method 'C.f' takes at most 1 argument(s), got 2
+
+test_ne
+         MochaTypeError at line 4, col 29: Cannot index into non-array type 'any'
+         MochaTypeError at line 7, col 5: Cannot index into non-array type 'any'
+         MochaTypeError at line 8, col 29: Array index must be int, got 'str'
+         MochaTypeError at line 8, col 29: Cannot index into non-array type 'any'
+
+test_ng
+      Γ£à No imports
+    Step 3: Type Checking...
+      Γ¥î Type errors found:
+         MochaTypeError at line 2, col 5: 'weak' only applies to a field whose type is a single class, not 'dict'
 
 unreach_check
       Γ£à No imports

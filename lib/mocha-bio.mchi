@@ -161,7 +161,6 @@ function hba1c_to_eag(hba1c: float) -> float;
 function homa_ir(fasting_glucose: float, fasting_insulin: float) -> float;
 function corrected_calcium(measured_calcium: float, albumin: float) -> float;
 function free_water_deficit(weight_kg: float, sodium: float, sex: Sex) -> float;
-const LN2: float = 0.6931471805599453;
 const F_MIN: float = 0.0;
 const F_MAX: float = 1.0;
 const CONCENTRATION_MIN: float = 0.0;

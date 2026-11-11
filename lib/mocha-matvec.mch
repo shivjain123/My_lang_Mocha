@@ -10,7 +10,6 @@ Operations:
   .add(arr)         — element-wise addition
   .sub(arr)         — element-wise subtraction
   .magn()           — magnitude / norm (always float)
-  .normalize()      — unit vector (1D only, float[])
   .transpose()      — rows <-> cols (2D only)
   .trace()          — sum of diagonal (2D only)
   .det()            — determinant (2D only, float)

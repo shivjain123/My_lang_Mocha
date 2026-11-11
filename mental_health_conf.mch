@@ -29,7 +29,23 @@ function main(didLoad) -> null {
     };
     f.close();
 
-    var mood_n: float[] = mood.normalize();
+    // ── Compute mood min/max ──
+    var mood_min: float = mood[0];
+    var mood_max: float = mood[0];
+    var mi: int = 1;
+    while (mi < mood.length) {
+        if (mood[mi] < mood_min) { mood_min = mood[mi]; };
+        if (mood[mi] > mood_max) { mood_max = mood[mi]; };
+        mi++;
+    };
+
+    // ── Normalize mood (min-max) ──
+    var mood_n: float[] = [];
+    mi = 0;
+    while (mi < mood.length) {
+        mood_n.push((mood[mi] - mood_min) / (mood_max - mood_min));
+        mi++;
+    };
 
     var screen_n: float[][] = screen.normalize_col(0);
     var tiktok_n: float[][] = tiktok.normalize_col(0);
@@ -89,6 +105,7 @@ function main(didLoad) -> null {
     print("M4: full model (stress idx=3)            $0|4f            $1|4f".format(m4.weights[3], m4_r2), newLine=true);
     print("============================================================", newLine=true);
 
+    // ── Step 3: predict ──
     var pred_norm: float = m1.bias + m1.weights[0] * stress.normalize_val(0, 5.0);
     var pred_mood: float = mood_min + pred_norm * (mood_max - mood_min);
     print("Predicted mood at stress=5: $0|2f".format(pred_mood), newLine=true);

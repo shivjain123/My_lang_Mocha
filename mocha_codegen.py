@@ -249,6 +249,7 @@ class CodeGen:
         self.arr2d_elem_class = {}   # ptr name -> class name, for owned 2D locals whose elements are RC class instances
         self.owned_complex_locals = []
         self.owned_class_locals = []   # list of (ptr, class_name)
+        self.weak_fields = set()       # (class_name, field_name) pairs declared weak; subclasses inherit their parents' entries
 
         # === FUNCTION CONTEXT ===
         # Track current function's return type for RC cleanup
@@ -692,6 +693,17 @@ class CodeGen:
         if f"{class_name}_finalize" in self.method_return_types:
             self.emit(f"  call void @{class_name}_finalize({T} %self)")
         for idx, (fname, mtype) in enumerate(mfields):
+            if (class_name, fname) in self.weak_fields:
+                # weak field: give back the weak reference only, the target is owned elsewhere
+                if mtype not in self.rc_classes:
+                    raise RuntimeError(f"weak field {class_name}.{fname}: '{mtype}' is not a reference-counted class")
+                CT = f"%struct.{mtype}*"
+                wgep, wval, wraw = self.fresh_temp(), self.fresh_temp(), self.fresh_temp()
+                self.emit(f"  {wgep} = getelementptr %struct.{class_name}, {T} %self, i32 0, i32 {idx}")
+                self.emit(f"  {wval} = load {CT}, {CT}* {wgep}")
+                self.emit(f"  {wraw} = bitcast {CT} {wval} to i8*")
+                self.emit(f"  call void @rc_weak_release(i8* {wraw})")
+                continue
             kind = self.rc_simple_field_kind(mtype)
             is_cls = mtype in self.rc_classes
             if kind is not None and lfields[idx][1] != kind[0]:
@@ -926,6 +938,9 @@ class CodeGen:
                 "declare void @mocha_rc_shutdown()",
                 "declare void @rc_retain(i8*) nounwind",
                 "declare void @rc_release(i8*) nounwind",
+                "declare void @rc_weak_retain(i8*) nounwind",
+                "declare void @rc_weak_release(i8*) nounwind",
+                "declare i8* @rc_weak_get(i8*) nounwind",
                 "declare void @mocha_array_release_objs(%MochaArray*, void (i8*)*)",
                 "declare i64 @rc_count(i8*) nounwind",
                 "declare i8* @rc_alloc(i64) nounwind",
@@ -1221,12 +1236,21 @@ class CodeGen:
             "",
         ]
 
+        # Names this file defines itself. A declare for one of them would clash with the file's own
+        # define (a method calling the constructor of a class that is generated later in the same file,
+        # or of its own class)
+        defined_here = set()
+        for chunk in list(self.output) + list(getattr(self, 'lambda_functions', [])):
+            for ln in str(chunk).splitlines():
+                if ln.startswith("define ") and "@" in ln:
+                    defined_here.add(ln.split("@", 1)[1].split("(")[0])
+
         # Extra declares from imported libs
         for decl in self.extra_declares:
             # Extract function name from declare string
             # e.g. "declare double @mocha_wrap_hypot(double, double)"
             decl_name = decl.split("@")[1].split("(")[0] if "@" in decl else ""
-            if decl_name not in STDLIB_NAMES:
+            if decl_name not in STDLIB_NAMES and decl_name not in defined_here:
                 header.append(decl)
 
         for section, decls in sections.items():
@@ -1539,6 +1563,13 @@ class CodeGen:
                         f"%struct.{class_name}* {obj_reg}, i32 0, i32 {idx}  ; field {fname}"
                     )
                     self.emit(f"  {tmp} = load {llvm_ftype}, {llvm_ftype}* {ptr}")
+                    if (class_name, fname) in self.weak_fields:
+                        # weak field: a dead target reads as null instead of a dangling pointer
+                        wraw, wgot, wback = self.fresh_temp(), self.fresh_temp(), self.fresh_temp()
+                        self.emit(f"  {wraw} = bitcast {llvm_ftype} {tmp} to i8*")
+                        self.emit(f"  {wgot} = call i8* @rc_weak_get(i8* {wraw})")
+                        self.emit(f"  {wback} = bitcast i8* {wgot} to {llvm_ftype}")
+                        return (wback, llvm_ftype)
                     return (tmp, llvm_ftype)
         
         # Tag .name on any i32 result
@@ -4331,6 +4362,21 @@ class CodeGen:
                         old = self.fresh_temp()
                         self.emit(f"  {old} = load i8*, i8** {ptr}")
                         self.emit(f"  call void @rc_release(i8* {old})")
+                    elif (class_name, fname) in self.weak_fields:
+                        # weak field: count a weak reference on the new target first (self-assignment safe),
+                        # then give back the one held on the old target. No strong retain.
+                        if not (val_type == llvm_ftype or (val_type == "i8*" and llvm_ftype.startswith("%struct."))):
+                            raise RuntimeError(f"weak field {class_name}.{fname}: cannot store a value of type {val_type}")
+                        wnew = self.fresh_temp()
+                        self.emit(f"  {wnew} = bitcast {val_type} {val_reg} to i8*")
+                        self.emit(f"  call void @rc_weak_retain(i8* {wnew})")
+                        wold, woldraw = self.fresh_temp(), self.fresh_temp()
+                        self.emit(f"  {wold} = load {llvm_ftype}, {llvm_ftype}* {ptr}")
+                        self.emit(f"  {woldraw} = bitcast {llvm_ftype} {wold} to i8*")
+                        self.emit(f"  call void @rc_weak_release(i8* {woldraw})")
+                        if not self.is_borrowed_expr(node.value):
+                            # a fresh value arrives owning one strong reference and nothing else holds it, so give it back
+                            self.emit(f"  call void @{field_mocha_type}_release({llvm_ftype} {val_reg})")
                     elif field_mocha_type in self.rc_classes and (val_type == llvm_ftype or (val_type == "i8*" and llvm_ftype.startswith("%struct."))):
                         if borrowed:
                             raw = self.fresh_temp()
@@ -4873,7 +4919,6 @@ class CodeGen:
         self.emit(f"  {result_arr} = call %MochaArray* @mocha_array_new(i32 0, i32 {elem_size}, i32 0)")
 
         # Store result array in a local ptr so we can reference it
-        arr_ptr = self.fresh_temp()
         arr_ptr = self.alloca_at_entry("%MochaArray*")
         self.emit(f"  store %MochaArray* {result_arr}, %MochaArray** {arr_ptr}")
 
@@ -4887,7 +4932,6 @@ class CodeGen:
         # Loop counter
         count = self.temp_count
         self.temp_count += 1
-        idx_ptr = f"%lc_idx_{count}"
         idx_ptr = self.alloca_at_entry("i32")
         self.emit(f"  store i32 0, i32* {idx_ptr}")
 
@@ -4907,14 +4951,12 @@ class CodeGen:
         self.emit(f"{body_lbl}:")
 
         # Load element from source array into loop variable
-        raw_ptr = self.fresh_temp()
         raw_ptr = self.alloca_at_entry(src_llvm_type)
         cast_ptr = self.fresh_temp()
         self.emit(f"  {cast_ptr} = bitcast {src_llvm_type}* {raw_ptr} to i8*")
         self.emit(f"  call void @mocha_array_get(%MochaArray* {iter_reg}, i32 {idx}, i8* {cast_ptr})")
 
         # Register loop var in locals
-        elem_ptr = f"%lc_{node.var_name}_{count}.ptr"
         elem_ptr = self.alloca_at_entry(src_llvm_type)
         val = self.fresh_temp()
         self.emit(f"  {val} = load {src_llvm_type}, {src_llvm_type}* {raw_ptr}")
@@ -4933,7 +4975,6 @@ class CodeGen:
                 merge_lbl = f"lc_merge_{count}"
 
                 # alloca slot to merge both branch results
-                result_slot = self.fresh_temp()
                 result_slot = self.alloca_at_entry(llvm_elem_type)
 
                 self.emit(f"  br i1 {cond_i1}, label %{then_lbl}, label %{else_lbl}")
@@ -4973,13 +5014,11 @@ class CodeGen:
 
         # ── Box and append ──
         if llvm_elem_type == "i8*":
-            box_ptr = self.fresh_temp()
             box_ptr = self.alloca_at_entry("i8*")
             self.emit(f"  store i8* {expr_reg}, i8** {box_ptr}")
             boxed = self.fresh_temp()
             self.emit(f"  {boxed} = bitcast i8** {box_ptr} to i8*")
         else:
-            box_ptr = self.fresh_temp()
             box_ptr = self.alloca_at_entry(llvm_elem_type)
             self.emit(f"  store {llvm_elem_type} {expr_reg}, {llvm_elem_type}* {box_ptr}")
             boxed = self.fresh_temp()
@@ -5346,6 +5385,16 @@ class CodeGen:
                 self.gen_stmt(stmt)
 
             if not self.last_is_terminator():
+                # RC: the body fell off its end, so no return statement released the owned
+                # locals; release them here, the same way gen_function does
+                self.emit_release_owned_str_locals()
+                self.emit_release_owned_arr_locals()
+                self.emit_release_owned_tuple_locals()
+                self.emit_release_owned_set_locals()
+                self.emit_release_owned_dict_locals()
+                self.emit_release_owned_arr2d_locals()
+                self.emit_release_owned_complex_locals()
+                self.emit_release_owned_class_locals()
                 if ret_llvm == "void":
                     self.emit("  ret void")
                 elif ret_llvm == "i8*" or ret_llvm.endswith("*"):
@@ -5446,6 +5495,12 @@ class CodeGen:
         for m in node.body:
             if isinstance(m, FieldDecl):
                 mocha_fields.append((m.name, m.type))
+                if getattr(m, 'is_weak', False):
+                    self.weak_fields.add((node.name, m.name))
+        for parent_name in (node.parents or []):
+            for (wc, wf) in list(self.weak_fields):
+                if wc == parent_name:
+                    self.weak_fields.add((node.name, wf))
         self.class_mocha_fields[node.name] = mocha_fields
 
         for member in node.body:
@@ -5969,11 +6024,42 @@ class CodeGen:
                 # Cast i8* to MochaDict*
                 cast = self.fresh_temp()
                 self.emit(f"  {cast} = bitcast i8* {inner_tmp} to %MochaDict*")
-                # Second access: inner["name"] -> i8*
+                # Second access: inner["name"] (typed read when the expected type is known)
+                MOCHA_DICT_TYPE_TAG = {"int": 0, "float": 1, "str": 2, "bool": 3, "dict": 4, "vast": 6}
+                expected = self.expected_assign_type or ""
+                tag_int = MOCHA_DICT_TYPE_TAG.get(expected, -1)
                 val_tmp = self.fresh_temp()
-                self.emit(f"  {val_tmp} = call i8* @mocha_dict_get(%MochaDict* {cast}, i8* {col_reg})")
+                if tag_int == -1:
+                    self.emit(f"  {val_tmp} = call i8* @mocha_dict_get(%MochaDict* {cast}, i8* {col_reg})")
+                else:
+                    self.emit(f"  {val_tmp} = call i8* @mocha_dict_get_typed(%MochaDict* {cast}, i8* {col_reg}, i32 {tag_int})")
                 if not isinstance(node.col, (Identifier, MemberAccess, Index2DAccess)):
                     self.emit(f"  call void @rc_release(i8* {col_reg})")
+                if expected == "int":
+                    ptr = self.fresh_temp()
+                    val = self.fresh_temp()
+                    self.emit(f"  {ptr} = bitcast i8* {val_tmp} to i32*")
+                    self.emit(f"  {val} = load i32, i32* {ptr}")
+                    return (val, "i32")
+                elif expected == "float":
+                    ptr = self.fresh_temp()
+                    val = self.fresh_temp()
+                    self.emit(f"  {ptr} = bitcast i8* {val_tmp} to double*")
+                    self.emit(f"  {val} = load double, double* {ptr}")
+                    return (val, "double")
+                elif expected == "bool":
+                    val = self.fresh_temp()
+                    self.emit(f"  {val} = load i8, i8* {val_tmp}")
+                    return (val, "i8")
+                elif expected == "vast":
+                    ptr = self.fresh_temp()
+                    val = self.fresh_temp()
+                    self.emit(f"  {ptr} = bitcast i8* {val_tmp} to i64*")
+                    self.emit(f"  {val} = load i64, i64* {ptr}")
+                    return (val, "i64")
+                elif expected == "str":
+                    self.emit(f"  call void @rc_retain(i8* {val_tmp})")
+                    return (val_tmp, "i8*")
                 return (val_tmp, "i8*")
 
         elem_llvm = "i32"  # default

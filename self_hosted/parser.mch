@@ -487,16 +487,15 @@ class Parser {
 
                     while (this.check(TokenType.DOT)) {
                         this.advance();
-                        var mem_node: ASTNode = this.make_node("MemberAccess");
-                        mem_node.left = pattern;
+                        var member_text: str = "";
                         if (this.check(TokenType.CONST_IDENT)) {
                             var mc: Token = this.expect(TokenType.CONST_IDENT, "Expected member name after '.'");
-                            mem_node.value = mc.value;
+                            member_text = mc.value;
                         } else {
                             var mi: Token = this.expect(TokenType.IDENTIFIER, "Expected member name after '.'");
-                            mem_node.value = mi.value;
+                            member_text = mi.value;
                         };
-                        pattern = mem_node;
+                        pattern = this.wrap_node("MemberAccess", pattern, member_text);
                     };
 
                     case_node.left = pattern;
@@ -861,16 +860,20 @@ class Parser {
         return left;
     };
 
+    function make_binary(left: ASTNode, op_text: str, right: ASTNode) -> ASTNode {
+        var bin: ASTNode = this.make_node("BinaryOp");
+        bin.left = left;
+        bin.value = op_text;
+        bin.right = right;
+        return bin;
+    };
+
     function parse_or() -> ASTNode {
         var left: ASTNode = this.parse_and();
         while (this.check(TokenType.OR)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_and();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -880,11 +883,7 @@ class Parser {
         while (this.check(TokenType.AND)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_bit_or();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -894,11 +893,7 @@ class Parser {
         while (this.check(TokenType.BIT_OR)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_bit_xor();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -908,11 +903,7 @@ class Parser {
         while (this.check(TokenType.BIT_XOR)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_bit_and();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -922,11 +913,7 @@ class Parser {
         while (this.check(TokenType.BIT_AND)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_equality();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -936,11 +923,7 @@ class Parser {
         while (this.check(TokenType.EQ) || this.check(TokenType.NEQ)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_comparison();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -951,11 +934,7 @@ class Parser {
             this.check(TokenType.LTE) || this.check(TokenType.GTE)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_shift();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -965,11 +944,7 @@ class Parser {
         while (this.check(TokenType.BIT_SHL) || this.check(TokenType.BIT_SHR)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_addition();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -979,11 +954,7 @@ class Parser {
         while (this.check(TokenType.PLUS) || this.check(TokenType.MINUS)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_multiplication();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -994,11 +965,7 @@ class Parser {
             this.check(TokenType.PERCENT)) {
             var op_tok: Token = this.advance();
             var right: ASTNode = this.parse_unary();
-            var node: ASTNode = this.make_node("BinaryOp");
-            node.left = left;
-            node.value = op_tok.value;
-            node.right = right;
-            left = node;
+            left = this.make_binary(left, op_tok.value, right);
         };
         return left;
     };
@@ -1042,6 +1009,43 @@ class Parser {
         return this.parse_postfix();
     };
 
+    function wrap_node(kind: str, child: ASTNode, text: str) -> ASTNode {
+        var n: ASTNode = this.make_node(kind);
+        n.left = child;
+        n.value = text;
+        return n;
+    };
+
+    function make_pair_node(kind: str, first: ASTNode, second: ASTNode) -> ASTNode {
+        var n: ASTNode = this.make_node(kind);
+        n.left = first;
+        n.right = second;
+        return n;
+    };
+
+    function make_index2d_node(obj: ASTNode, row: ASTNode, col: ASTNode) -> ASTNode {
+        var n: ASTNode = this.make_node("Index2DAccess");
+        n.left = obj;
+        n.condition = row;
+        n.right = col;
+        return n;
+    };
+
+    function make_tuple_access_node(obj: ASTNode, idx_val: int) -> ASTNode {
+        var n: ASTNode = this.make_node("TupleAccess");
+        n.left = obj;
+        n.int_val = idx_val;
+        return n;
+    };
+
+    function make_named_node(kind: str, text: str, extra_text: str, type_text: str) -> ASTNode {
+        var n: ASTNode = this.make_node(kind);
+        n.value = text;
+        n.extra = extra_text;
+        n.type_str = type_text;
+        return n;
+    };
+
     function parse_postfix() -> ASTNode {
         var expr: ASTNode = this.parse_primary();
 
@@ -1049,16 +1053,10 @@ class Parser {
             // post increment/decrement
             if (this.check(TokenType.PLUS_PLUS)) {
                 this.advance();
-                var node: ASTNode = this.make_node("PostIncrement");
-                node.left = expr;
-                node.value = "++";
-                expr = node;
+                expr = this.wrap_node("PostIncrement", expr, "++");
             } else if (this.check(TokenType.MINUS_MINUS)) {
                 this.advance();
-                var node2: ASTNode = this.make_node("PostIncrement");
-                node2.left = expr;
-                node2.value = "--";
-                expr = node2;
+                expr = this.wrap_node("PostIncrement", expr, "--");
             // member access
             } else if (this.check(TokenType.DOT)) {
                 this.advance();
@@ -1071,32 +1069,22 @@ class Parser {
 
                 if (expr.kind == "Identifier" && this.is_known_tag(expr.value) && !this.check(TokenType.DOT)) {
                     // TagAccess: Color.RED
-                    var tag_node: ASTNode = this.make_node("TagAccess");
-                    tag_node.value = expr.value;
-                    tag_node.extra = mem_name;
-                    expr = tag_node;
+                    expr = this.make_named_node("TagAccess", expr.value, mem_name, "");
                 } else if (expr.kind == "Identifier" && this.is_known_class(expr.value) && this.check(TokenType.DOT)) {
                     // QualifiedMethodCall: Bird.p.breathe()
                     this.advance(); // consume second '.'
                     var qm_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected method name");
                     this.expect(TokenType.LPAREN, "Expected '(' after method name");
-                    var qm_node: ASTNode = this.make_node("QualifiedMethodCall");
-                    qm_node.value = expr.value;
-                    qm_node.extra = mem_name;
-                    qm_node.type_str = qm_tok.value;
+                    expr = this.make_named_node("QualifiedMethodCall", expr.value, mem_name, qm_tok.value);
                     while (!this.check(TokenType.RPAREN) && !this.check(TokenType.EOF)) {
-                        qm_node.args.push(this.parse_call_arg());
+                        expr.args.push(this.parse_call_arg());
                         if (!this.check(TokenType.RPAREN)) {
                             this.expect(TokenType.COMMA, "Expected ',' between arguments");
                         };
                     };
                     this.expect(TokenType.RPAREN, "Expected ')' after arguments");
-                    expr = qm_node;
                 } else {
-                    var node3: ASTNode = this.make_node("MemberAccess");
-                    node3.left = expr;
-                    node3.value = mem_name;
-                    expr = node3;
+                    expr = this.wrap_node("MemberAccess", expr, mem_name);
                 };
             // index access
             } else if (this.check(TokenType.LBRACKET)) {
@@ -1107,10 +1095,7 @@ class Parser {
                     this.expect(TokenType.LBRACKET, "Expected '[' for col slice");
                     var col_idx: ASTNode = this.parse_expression();
                     this.expect(TokenType.RBRACKET, "Expected ']' after col index");
-                    var node4: ASTNode = this.make_node("ColSlice");
-                    node4.left = expr;
-                    node4.right = col_idx;
-                    expr = node4;
+                    expr = this.make_pair_node("ColSlice", expr, col_idx);
                 } else {
                     var idx: ASTNode = this.parse_expression();
                     this.expect(TokenType.RBRACKET, "Expected ']' after index");
@@ -1119,47 +1104,32 @@ class Parser {
                         this.advance();
                         if (this.check(TokenType.RBRACKET)) {
                             this.advance();
-                            var node5: ASTNode = this.make_node("RowSlice");
-                            node5.left = expr;
-                            node5.right = idx;
-                            expr = node5;
+                            expr = this.make_pair_node("RowSlice", expr, idx);
                         } else {
                             var col_idx2: ASTNode = this.parse_expression();
                             this.expect(TokenType.RBRACKET, "Expected ']' after col index");
-                            var node6: ASTNode = this.make_node("Index2DAccess");
-                            node6.left = expr;
-                            node6.condition = idx;
-                            node6.right = col_idx2;
-                            expr = node6;
+                            expr = this.make_index2d_node(expr, idx, col_idx2);
                         };
                     } else {
-                        var node7: ASTNode = this.make_node("IndexAccess");
-                        node7.left = expr;
-                        node7.right = idx;
-                        expr = node7;
+                        expr = this.make_pair_node("IndexAccess", expr, idx);
                     };
                 };
             // tuple access #
             } else if (this.check(TokenType.HASH)) {
                 this.advance();
                 var idx_tok: Token = this.expect(TokenType.INT_LIT, "Expected index after '#'");
-                var node8: ASTNode = this.make_node("TupleAccess");
-                node8.left = expr;
-                node8.int_val = idx_tok.value.toInt();
-                expr = node8;
+                expr = this.make_tuple_access_node(expr, idx_tok.value.toInt());
             // function call
             } else if (this.check(TokenType.LPAREN)) {
                 this.advance();
-                var call_node: ASTNode = this.make_node("FunctionCall");
-                call_node.left = expr;
+                expr = this.wrap_node("FunctionCall", expr, "");
                 while (!this.check(TokenType.RPAREN) && !this.check(TokenType.EOF)) {
-                    call_node.args.push(this.parse_call_arg());
+                    expr.args.push(this.parse_call_arg());
                     if (!this.check(TokenType.RPAREN)) {
                         this.expect(TokenType.COMMA, "Expected ',' between arguments");
                     };
                 };
                 this.expect(TokenType.RPAREN, "Expected ')' after arguments");
-                expr = call_node;
             } else {
                 break;
             };

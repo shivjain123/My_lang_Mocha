@@ -226,9 +226,9 @@
  *     (the rest of each library is written in Mocha itself)
  *
  * ── MOCHA-INK SVG VISUALISATION ─────────────────────────────
- *   - Shared infrastructure: palette (Tableau-8), named color
- *     map, nice tick/range calculation, coordinate mapping,
- *     clip regions, legend rendering
+ *   - Shared infrastructure: palette (first 8 of Tableau 10),
+ *     named color map, nice tick/range calculation and
+ *     coordinate mapping
  *   - LinePlot    — polyline + dot overlay, multi-series
  *   - ScatterPlot — dot plot, multi-series
  *   - BarChart    — vertical and horizontal, multi-series,
@@ -246,7 +246,8 @@
  *                   auto-bandwidth, optional inner box plot,
  *                   horizontal variant
  *   - AreaChart   — line-plot based filled area
- *   - BubbleChart
+ *   - BubbleChart  — scatter with bubble size from a third
+ *                   array, size legend, multi-series
  *   - CurvePlot   — KDE density curve
  *   - ErrorPlot   — error bars
  *   - LMPlot      — regression plot (OLS fit)
@@ -256,7 +257,7 @@
  *   - SkewT       — Skew-T log-P sounding plot (dry/moist
  *                   adiabats, mixing-ratio lines, wind barbs)
  *   All charts: ink_*_save(path) and ink_*_show() (opens in
- *   default browser; cross-platform: start/open/xdg-open)
+ *   the default SVG viewer; start/open/xdg-open by platform)
  *   Caller-managed: call .free() on each chart when done
  *
  * ── MOCHA-METEORO v0.1 ─────────────────────────────────────
@@ -518,6 +519,7 @@ void mocha_stack_print(void); //Forward Declare
 
 #define RC_MAGIC_LIVE 0xA11C0FFEEBEEF001ULL
 #define RC_MAGIC_DEAD 0xDEADDEADDEADDEADULL
+#define RC_MAGIC_ZOMBIE 0x5A0BB1E5A0BB1E5AULL
 
 typedef struct MochaRCNode {
     size_t   ref_count;
@@ -525,7 +527,7 @@ typedef struct MochaRCNode {
     struct MochaRCNode* next;
     struct MochaRCNode* prev;
     uint64_t magic;
-    uint64_t _pad;
+    uint64_t weak_count;   /* weak references that point at this node */
 } MochaRCNode;
 
 #define RC_NODE(ptr)  ((MochaRCNode*)(((uint8_t*)(ptr)) - sizeof(MochaRCNode)))
@@ -547,6 +549,7 @@ void* rc_alloc(size_t size) {
     MochaRCNode* node = (MochaRCNode*)malloc(sizeof(MochaRCNode) + size + RC_CANARY_SIZE);
     if (!node) { fprintf(stderr, "MochaRuntimeError: Out of memory!\n"); _exit(2); }
     node->ref_count = 1;
+    node->weak_count = 0;
     node->size      = size;
     node->prev      = NULL;
     node->next      = rc_head;
@@ -562,6 +565,7 @@ void rc_retain(void* ptr) {
     if (!ptr) return;
     MochaRCNode* node = RC_NODE(ptr);
     if (node->magic == RC_MAGIC_DEAD) rc_die("RETAIN AFTER FREE", ptr);
+    if (node->magic == RC_MAGIC_ZOMBIE) rc_die("RETAIN OF DEAD OBJECT (weak refs still point at it)", ptr);
     if (node->magic != RC_MAGIC_LIVE) rc_die("retain of non-RC/corrupt ptr", ptr);
     node->ref_count++;
 }
@@ -570,6 +574,7 @@ void rc_release(void* ptr) {
     if (!ptr) return;
     MochaRCNode* node = RC_NODE(ptr);
     if (node->magic == RC_MAGIC_DEAD) rc_die("DOUBLE RELEASE", ptr);
+    if (node->magic == RC_MAGIC_ZOMBIE) rc_die("RELEASE OF DEAD OBJECT (weak refs still point at it)", ptr);
     if (node->magic != RC_MAGIC_LIVE) rc_die("release of non-RC/corrupt ptr", ptr);
     uint8_t* back = (uint8_t*)RC_DATA(node) + node->size;
     for (size_t i = 0; i < RC_CANARY_SIZE; i++)
@@ -579,9 +584,43 @@ void rc_release(void* ptr) {
     if (node->prev) node->prev->next = node->next;
     else            rc_head          = node->next;
     if (node->next) node->next->prev = node->prev;
+    if (node->weak_count > 0) {
+        /* strong count hit zero but weak refs remain: keep the empty husk so they can see it is dead */
+        node->magic = RC_MAGIC_ZOMBIE;
+        return;
+    }
     node->magic = RC_MAGIC_DEAD;
 
     free(node);
+}
+
+void rc_weak_retain(void* ptr) {
+    if (!ptr) return;
+    MochaRCNode* node = RC_NODE(ptr);
+    if (node->magic != RC_MAGIC_LIVE) rc_die("weak retain of a dead or non-RC ptr", ptr);
+    node->weak_count++;
+}
+
+void rc_weak_release(void* ptr) {
+    if (!ptr) return;
+    MochaRCNode* node = RC_NODE(ptr);
+    if (node->magic != RC_MAGIC_LIVE && node->magic != RC_MAGIC_ZOMBIE)
+        rc_die("weak release of a freed or non-RC ptr", ptr);
+    if (node->weak_count == 0) rc_die("WEAK COUNT UNDERFLOW", ptr);
+    node->weak_count--;
+    if (node->weak_count == 0 && node->magic == RC_MAGIC_ZOMBIE) {
+        node->magic = RC_MAGIC_DEAD;
+        free(node);
+    }
+}
+
+void* rc_weak_get(void* ptr) {
+    if (!ptr) return NULL;
+    MochaRCNode* node = RC_NODE(ptr);
+    if (node->magic == RC_MAGIC_LIVE) return ptr;
+    if (node->magic == RC_MAGIC_ZOMBIE) return NULL;
+    rc_die("weak read of a freed or non-RC ptr", ptr);
+    return NULL;
 }
 
 size_t rc_count(void* ptr) {
@@ -2149,6 +2188,11 @@ void mocha_array2d_resize(MochaArray2D *arr, int32_t new_rows,
         fprintf(stderr, "MochaRuntimeError: resize() can only grow a 2D array, not shrink it.\n");
         exit(2);
     }
+    /* the compiler passes an element size from a type table that defaults to 4 (class and
+       Complex pointers are 8) and cannot see the type of a field receiver, so trust the
+       array's own element size. An empty array has no rows to ask, so it falls back. */
+    if (arr->rows > 0 && arr->data[0]) elem_size = arr->data[0]->elem_size;
+    else if (arr->elem_size > 0) elem_size = arr->elem_size;
     if (new_cols > arr->cols) resize_cols(arr, new_cols, elem_size);
     if (new_rows > arr->rows) resize_rows(arr, new_rows, new_cols, elem_size);
     arr->rows = new_rows;
@@ -6878,7 +6922,7 @@ long long mocha_vast_mod(long long a, long long b) {
 
 /* ============================================================
  * mocha-ink — SVG Visualization Runtime
- * Output: SVG files, optionally opened in browser
+ * Output: SVG files, optionally opened in the default viewer
  * ============================================================ */
 
 /* ── Constants ── */
@@ -6892,8 +6936,10 @@ long long mocha_vast_mod(long long a, long long b) {
 #define INK_MAX_POINTS   1024
 #define INK_STROKE_WIDTH    2
 #define INK_DOT_RADIUS      4
+#define INK_LINE_DOT_RADIUS 3
 
-/* ── Default color palette (Tableau 8, colorblind-friendly) ── */
+/* ── Default color palette (first 8 colors of Tableau 10) ── */
+/*                Colourblind-friendly                       */
 static const char* INK_PALETTE[] = {
     "#4E79A7",  /* steelblue */
     "#F28E2B",  /* orange    */
@@ -6940,8 +6986,7 @@ typedef struct {
     char    color[32];
     char    label[64];
     int     is_scatter;
-    int     is_area;     /* new */
-
+    int     is_area;     /* filled area under the line */
 } InkSeries;
 
 /* ── Plot ── */
@@ -6969,6 +7014,43 @@ static const char* ink_resolve_color(const char* name) {
     return name;
 }
 
+/* legend text for a series: its own label, or "Series N" when it has none */
+static const char* ink_series_label(const char* label, int index,
+                                    char* buf, size_t size) {
+    if (label[0]) return label;
+    snprintf(buf, size, "Series %d", index + 1);
+    return buf;
+}
+
+/* XML-safe copy of a text for SVG output; uses a few rotating buffers so
+   several calls can appear in one fprintf */
+#define INK_ESC_BUFS 4
+#define INK_ESC_LEN  1024
+static const char* ink_xml_esc(const char* s) {
+    static char ink_esc_bufs[INK_ESC_BUFS][INK_ESC_LEN];
+    static int  ink_esc_next = 0;
+    char* out = ink_esc_bufs[ink_esc_next];
+    ink_esc_next = (ink_esc_next + 1) % INK_ESC_BUFS;
+    size_t n = 0;
+    for (; *s; s++) {
+        const char* rep = NULL;
+        switch (*s) {
+            case '&':  rep = "&amp;";  break;
+            case '<':  rep = "&lt;";   break;
+            case '>':  rep = "&gt;";   break;
+            case '"':  rep = "&quot;"; break;
+            case '\'': rep = "&apos;"; break;
+            default: break;
+        }
+        size_t len = rep ? strlen(rep) : 1;
+        if (n + len >= INK_ESC_LEN) break;      /* never cut an entity in half */
+        if (rep) { memcpy(out + n, rep, len); n += len; }
+        else     { out[n++] = *s; }
+    }
+    out[n] = '\0';
+    return out;
+}
+
 /* ── Nice tick calculation ── */
 static double ink_nice_step(double range, int target_ticks) {
     double rough = range / target_ticks;
@@ -6984,8 +7066,13 @@ static double ink_nice_step(double range, int target_ticks) {
 
 static void ink_nice_range(double data_min, double data_max,
                            double* out_min, double* out_max, double* out_step) {
+    if (data_max == data_min) {
+        /* all values equal: open a window around the value so the axis has a width */
+        double pad = (data_min == 0.0) ? 1.0 : fabs(data_min) * 0.1;
+        data_min -= pad;
+        data_max += pad;
+    }
     double range = data_max - data_min;
-    if (range == 0.0) range = 1.0;
     double step  = ink_nice_step(range, 6);
     *out_min  = floor(data_min / step) * step;
     *out_max  = ceil(data_max  / step) * step;
@@ -7023,12 +7110,7 @@ static InkPlot* ink_new(int is_scatter,
     s->n          = count;
     s->is_scatter = is_scatter;
     strncpy(s->color, INK_PALETTE[0], 31);
-    strncpy(s->label, "", 63);
     p->n_series = 1;
-
-    strncpy(p->title,  "", 127);
-    strncpy(p->xlabel, "", 63);
-    strncpy(p->ylabel, "", 63);
     return p;
 }
 
@@ -7079,7 +7161,6 @@ static void ink_add_series(InkPlot* p, int is_scatter,
     s->n          = count;
     s->is_scatter = is_scatter;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -7314,9 +7395,9 @@ void ink_save(InkPlot* p, const char* path) {
                 double cx = ink_map_x(sr->x[i], nx_min, nx_max, ml, pw);
                 double cy = ink_map_y(sr->y[i], ny_min, ny_max, mt, ph);
                 fprintf(f,
-                    "<circle cx=\"%.2f\" cy=\"%.2f\" r=\"3\" "
+                    "<circle cx=\"%.2f\" cy=\"%.2f\" r=\"%d\" "
                     "fill=\"%s\" clip-path=\"url(#ink-clip)\"/>\n",
-                    cx, cy, col
+                    cx, cy, INK_LINE_DOT_RADIUS, col
                 );
             }
         }
@@ -7326,7 +7407,7 @@ void ink_save(InkPlot* p, const char* path) {
     if (p->title[0]) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
     }
 
@@ -7334,7 +7415,7 @@ void ink_save(InkPlot* p, const char* path) {
     if (p->xlabel[0]) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
     }
 
@@ -7345,7 +7426,7 @@ void ink_save(InkPlot* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
     }
 
@@ -7378,7 +7459,7 @@ void ink_save(InkPlot* p, const char* path) {
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx - lw + 28, iy + 11, lbl
+                lx - lw + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -7387,23 +7468,20 @@ void ink_save(InkPlot* p, const char* path) {
     fclose(f);
 }
 
-/* ── show — save to temp and open in browser ── */
+/* ── show — save mocha_ink_preview.svg in the current folder and open it ── */
 void ink_show(InkPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── free ── */
@@ -7412,17 +7490,22 @@ void ink_free(InkPlot* p) {
 }
 
 /* ── Mocha array bridge ── */
-InkPlot* ink_new_line_mocha(MochaArray* x, MochaArray* y) {
+/* copy two Mocha arrays into plain double buffers; returns the shorter length */
+static int ink_arrays_to_doubles(MochaArray* x, MochaArray* y,
+                                 double** xd, double** yd) {
     int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
+    *xd = (double*)malloc(n * sizeof(double));
+    *yd = (double*)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
+        mocha_array_get(x, i, &(*xd)[i]);
+        mocha_array_get(y, i, &(*yd)[i]);
     }
+    return n;
+}
+
+InkPlot* ink_new_line_mocha(MochaArray* x, MochaArray* y) {
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     InkPlot* p = ink_new_line(xd, yd, n);
     free(xd);
     free(yd);
@@ -7430,16 +7513,8 @@ InkPlot* ink_new_line_mocha(MochaArray* x, MochaArray* y) {
 }
 
 InkPlot* ink_new_scatter_mocha(MochaArray* x, MochaArray* y) {
-    int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
-    }
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     InkPlot* p = ink_new_scatter(xd, yd, n);
     free(xd);
     free(yd);
@@ -7447,32 +7522,16 @@ InkPlot* ink_new_scatter_mocha(MochaArray* x, MochaArray* y) {
 }
 
 void ink_add_line_mocha(InkPlot* p, MochaArray* x, MochaArray* y) {
-    int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
-    }
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     ink_add_line(p, xd, yd, n);
     free(xd);
     free(yd);
 }
 
 void ink_add_scatter_mocha(InkPlot* p, MochaArray* x, MochaArray* y) {
-    int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
-    }
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     ink_add_scatter(p, xd, yd, n);
     free(xd);
     free(yd);
@@ -7508,7 +7567,7 @@ void ink_sp_show(ScatterPlot* p)                      { ink_show(p); }
 
 #define INK_MAX_BARS     64
 #define INK_MAX_BAR_SERIES 8
-#define INK_BAR_GAP_RATIO  0.2  /* 20% of bar width as gap */
+#define INK_BAR_GAP_RATIO  0.2  /* gap = 20% of each category slot */
 
 typedef struct {
     double  values[INK_MAX_BARS];
@@ -7520,7 +7579,7 @@ typedef struct {
 typedef struct {
     InkBarSeries series[INK_MAX_BAR_SERIES];
     int          n_series;
-    char         labels[INK_MAX_BARS][64];  /* x axis category labels */
+    char         labels[INK_MAX_BARS][64];  /* category labels: x axis, or y axis if horizontal */
     int          n_labels;
     char         title[128];
     char         xlabel[64];
@@ -7540,7 +7599,6 @@ static InkBarChart* ink_new_bar(char** labels, double* values, int n) {
     p->width      = INK_WIDTH;
     p->height     = INK_HEIGHT;
     p->grid       = 1;
-    p->horizontal = 0;
     p->show_values = (n <= 8) ? 1 : 0;
 
     int count = n < INK_MAX_BARS ? n : INK_MAX_BARS;
@@ -7551,23 +7609,27 @@ static InkBarChart* ink_new_bar(char** labels, double* values, int n) {
     p->series[0].n = count;
     p->n_labels    = count;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
 
-InkBarChart* ink_new_bar_mocha(MochaArray* labels, MochaArray* values) {
+/* copy a label array and a value array into C buffers; returns the shorter length */
+static int ink_labels_values_to_c(MochaArray* labels, MochaArray* values,
+                                  char*** lbls, double** vals) {
     int n = labels->length < values->length ? labels->length : values->length;
-    char** lbls = (char**)malloc(n * sizeof(char*));
-    double* vals = (double*)malloc(n * sizeof(double));
+    *lbls = (char**)malloc(n * sizeof(char*));
+    *vals = (double*)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
-        char* lbl;
-        mocha_array_get(labels, i, &lbl);
-        lbls[i] = lbl;
-        double v;
-        mocha_array_get(values, i, &v);
-        vals[i] = v;
+        mocha_array_get(labels, i, &(*lbls)[i]);
+        mocha_array_get(values, i, &(*vals)[i]);
     }
+    return n;
+}
+
+InkBarChart* ink_new_bar_mocha(MochaArray* labels, MochaArray* values) {
+    char** lbls;
+    double* vals;
+    int n = ink_labels_values_to_c(labels, values, &lbls, &vals);
     InkBarChart* p = ink_new_bar(lbls, vals, n);
     free(lbls);
     free(vals);
@@ -7588,7 +7650,6 @@ void ink_bar_add_series_mocha(InkBarChart* p, MochaArray* values) {
     }
     s->n = n;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -7622,17 +7683,17 @@ void ink_bar_save(InkBarChart* p, const char* path) {
     int pw = W - ml - mr;
     int ph = H - mt - mb;
 
-    /* find value range */
-    double vmin = 0.0;  /* bars always start at 0 */
+    /* value range; bars start at 0, so the range always includes 0 */
+    double vmin = 0.0;
     double vmax = 0.0;
     for (int s = 0; s < p->n_series; s++)
-        for (int i = 0; i < p->series[s].n; i++)
-            if (p->series[s].values[i] > vmax)
-                vmax = p->series[s].values[i];
+        for (int i = 0; i < p->series[s].n; i++) {
+            if (p->series[s].values[i] > vmax) vmax = p->series[s].values[i];
+            if (p->series[s].values[i] < vmin) vmin = p->series[s].values[i];
+        }
 
     double nv_min, nv_max, nv_step;
     ink_nice_range(vmin, vmax, &nv_min, &nv_max, &nv_step);
-    nv_min = 0.0;  /* force zero baseline */
 
     /* bar geometry */
     int   n_cats    = p->n_labels;
@@ -7708,21 +7769,22 @@ void ink_bar_save(InkBarChart* p, const char* path) {
                 double val  = p->series[s].values[i];
                 double bx   = group_x + s * bar_w;
                 double by   = ink_map_y(val, nv_min, nv_max, mt, ph);
-                double bh   = baseline - by;
+                double bh   = fabs(baseline - by);
+                double btop = by < baseline ? by : baseline;
                 const char* col = p->series[s].color;
 
                 fprintf(f,
                     "<rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" "
                     "fill=\"%s\" opacity=\"0.85\" rx=\"2\"/>\n",
-                    bx, by, bar_w, bh, col
+                    bx, btop, bar_w, bh, col
                 );
 
-                /* value label on top */
+                /* value label past the end of the bar: above it, or below if negative */
                 if (p->show_values) {
                     fprintf(f,
                         "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
                         "class=\"ink-val\">%g</text>\n",
-                        bx + bar_w / 2.0, by - 4.0, val
+                        bx + bar_w / 2.0, val < 0.0 ? by + 12.0 : by - 4.0, val
                     );
                 }
             }
@@ -7737,7 +7799,7 @@ void ink_bar_save(InkBarChart* p, const char* path) {
             fprintf(f,
                 "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
                 "class=\"ink-tick\">%s</text>\n",
-                label_x, mt + ph + 18, p->labels[i]
+                label_x, mt + ph + 18, ink_xml_esc(p->labels[i])
             );
         }
 
@@ -7777,20 +7839,24 @@ void ink_bar_save(InkBarChart* p, const char* path) {
             for (int s = 0; s < n_series; s++) {
                 double val  = p->series[s].values[i];
                 double by   = group_y + s * h_bar_h;
-                double bw   = ink_map_x(val, nv_min, nv_max, 0, pw);
+                double zero_x = ink_map_x(0.0, nv_min, nv_max, ml, pw);
+                double xv     = ink_map_x(val, nv_min, nv_max, ml, pw);
+                double bleft  = xv < zero_x ? xv : zero_x;
+                double bw     = fabs(xv - zero_x);
                 const char* col = p->series[s].color;
 
                 fprintf(f,
-                    "<rect x=\"%d\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" "
+                    "<rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" "
                     "fill=\"%s\" opacity=\"0.85\" rx=\"2\"/>\n",
-                    ml, by, bw, h_bar_h, col
+                    bleft, by, bw, h_bar_h, col
                 );
 
                 if (p->show_values) {
                     fprintf(f,
-                        "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"start\" "
+                        "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"%s\" "
                         "dominant-baseline=\"middle\" class=\"ink-val\">%g</text>\n",
-                        ml + bw + 4.0, by + h_bar_h / 2.0, val
+                        val < 0.0 ? xv - 4.0 : xv + 4.0, by + h_bar_h / 2.0,
+                        val < 0.0 ? "end" : "start", val
                     );
                 }
             }
@@ -7800,7 +7866,7 @@ void ink_bar_save(InkBarChart* p, const char* path) {
             fprintf(f,
                 "<text x=\"%d\" y=\"%.2f\" text-anchor=\"end\" "
                 "dominant-baseline=\"middle\" class=\"ink-tick\">%s</text>\n",
-                ml - 8, label_y, p->labels[i]
+                ml - 8, label_y, ink_xml_esc(p->labels[i])
             );
         }
     }
@@ -7821,24 +7887,24 @@ void ink_bar_save(InkBarChart* p, const char* path) {
     if (p->title[0])
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
-    /* x axis label */
+    /* series label under the violin */
     if (p->xlabel[0])
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
-    /* y axis label */
+    /* series label left of the violin */
     if (p->ylabel[0])
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     /* legend */
@@ -7863,11 +7929,11 @@ void ink_bar_save(InkBarChart* p, const char* path) {
                 "<rect x=\"%d\" y=\"%d\" width=\"14\" height=\"14\" fill=\"%s\" rx=\"2\"/>\n",
                 lx - lw + 8, iy, p->series[s].color
             );
-            const char* lbl = p->series[s].label[0] ? p->series[s].label
-                              : (s == 0 ? "Series 1" : s == 1 ? "Series 2" : "Series");
+            char default_label[32];
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx - lw + 28, iy + 11, lbl
+                lx - lw + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -7880,21 +7946,16 @@ void ink_bar_show(InkBarChart* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_bar_save(p, tmp);
     #ifdef _WIN32
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "start %s", tmp);
-        system(cmd);
+        const char* opener = "start";
     #elif defined(__APPLE__)
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "open %s", tmp);
-        system(cmd);
+        const char* opener = "open";
     #else
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-        system(cmd);
+        const char* opener = "xdg-open";
     #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
-
-typedef InkBarChart BarChart;
 
 void ink_bc_set_title(BarChart* p, const char* t)  { ink_bar_set_title(p, t);      }
 void ink_bc_set_xlabel(BarChart* p, const char* l) { ink_bar_set_xlabel(p, l);     }
@@ -7969,6 +8030,12 @@ static void ink_heat_color(double t, int scheme, char* out) {
     snprintf(out, 16, "#%02X%02X%02X", r, g, b);
 }
 
+/* sRGB channel (0-255) to linear light, for the brightness of a cell colour */
+static double ink_srgb_linear(double c) {
+    c /= 255.0;
+    return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+}
+
 static InkHeatmap* ink_new_heatmap(double data[][INK_HEAT_MAX_COLS],
                                     int rows, int cols) {
     InkHeatmap* p = (InkHeatmap*)malloc(sizeof(InkHeatmap));
@@ -7978,7 +8045,6 @@ static InkHeatmap* ink_new_heatmap(double data[][INK_HEAT_MAX_COLS],
     p->rows         = rows;
     p->cols         = cols;
     p->show_values  = (rows <= 12 && cols <= 12) ? 1 : 0;
-    p->color_scheme = 0;
 
     for (int i = 0; i < rows; i++)
         for (int j = 0; j < cols; j++)
@@ -8001,7 +8067,6 @@ InkHeatmap* ink_new_heatmap_mocha(MochaArray2D* mat) {
 
     /* temp 2D array */
     double data[INK_HEAT_MAX_ROWS][INK_HEAT_MAX_COLS];
-    memset(data, 0, sizeof(data));
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -8099,10 +8164,13 @@ void ink_hm_save(InkHeatmap* p, const char* path) {
 
             /* value label */
             if (p->show_values) {
-                /* choose white or black text based on brightness */
-                double brightness = t;
-                const char* txt_col = (brightness > 0.5 && p->color_scheme == 0)
-                                      ? "white" : "#222";
+                /* white text on dark cells, dark text on light ones */
+                unsigned int hm_r = 0, hm_g = 0, hm_b = 0;
+                sscanf(color, "#%2x%2x%2x", &hm_r, &hm_g, &hm_b);
+                double hm_lum = 0.2126 * ink_srgb_linear(hm_r)
+                              + 0.7152 * ink_srgb_linear(hm_g)
+                              + 0.0722 * ink_srgb_linear(hm_b);
+                const char* txt_col = (hm_lum < 0.22) ? "white" : "#222";
                 fprintf(f,
                     "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
                     "dominant-baseline=\"middle\" fill=\"%s\" class=\"ink-val\">%.2f</text>\n",
@@ -8118,7 +8186,7 @@ void ink_hm_save(InkHeatmap* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%.2f\" text-anchor=\"end\" "
             "dominant-baseline=\"middle\" class=\"ink-tick\">%s</text>\n",
-            ml - 5, cy, p->row_labels[i]
+            ml - 5, cy, ink_xml_esc(p->row_labels[i])
         );
     }
 
@@ -8128,7 +8196,7 @@ void ink_hm_save(InkHeatmap* p, const char* path) {
         fprintf(f,
             "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-tick\">%s</text>\n",
-            cx, mt + ph + 18, p->col_labels[j]
+            cx, mt + ph + 18, ink_xml_esc(p->col_labels[j])
         );
     }
 
@@ -8176,7 +8244,7 @@ void ink_hm_save(InkHeatmap* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x axis label */
@@ -8184,7 +8252,7 @@ void ink_hm_save(InkHeatmap* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            ml + pw / 2, H - 10, p->xlabel
+            ml + pw / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y axis label */
@@ -8194,7 +8262,7 @@ void ink_hm_save(InkHeatmap* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     fprintf(f, "</svg>\n");
@@ -8205,18 +8273,15 @@ void ink_hm_show(InkHeatmap* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_hm_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ============================================================
@@ -8246,7 +8311,6 @@ static InkPieChart* ink_new_pie(char** labels, double* values, int n) {
     p->width        = INK_WIDTH;
     p->height       = INK_HEIGHT;
     p->show_percent = 1;  /* default: show percentage */
-    p->show_values  = 0;
 
     int count = n < INK_PIE_MAX_SLICES ? n : INK_PIE_MAX_SLICES;
     for (int i = 0; i < count; i++) {
@@ -8259,17 +8323,9 @@ static InkPieChart* ink_new_pie(char** labels, double* values, int n) {
 }
 
 InkPieChart* ink_new_pie_mocha(MochaArray* labels, MochaArray* values) {
-    int n = labels->length < values->length ? labels->length : values->length;
-    char** lbls  = (char**)malloc(n * sizeof(char*));
-    double* vals = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        char* lbl;
-        mocha_array_get(labels, i, &lbl);
-        lbls[i] = lbl;
-        double v;
-        mocha_array_get(values, i, &v);
-        vals[i] = v;
-    }
+    char** lbls;
+    double* vals;
+    int n = ink_labels_values_to_c(labels, values, &lbls, &vals);
     InkPieChart* p = ink_new_pie(lbls, vals, n);
     free(lbls);
     free(vals);
@@ -8278,14 +8334,29 @@ InkPieChart* ink_new_pie_mocha(MochaArray* labels, MochaArray* values) {
 
 /* ── setters ── */
 void ink_pie_set_title(InkPieChart* p, const char* t) { strncpy(p->title, t, 127); }
-void ink_pie_set_show_percent(InkPieChart* p)         { p->show_percent = 1;        }
-void ink_pie_set_show_values(InkPieChart* p)          { p->show_values  = 1;        }
+void ink_pie_set_show_percent(InkPieChart* p, int8_t on) { p->show_percent = on ? 1 : 0; }
+void ink_pie_set_show_values(InkPieChart* p, int8_t on)  { p->show_values  = on ? 1 : 0; }
 void ink_pie_set_color(InkPieChart* p, int i, const char* c) {
     if (i >= 0 && i < p->n)
         strncpy(p->colors[i], ink_resolve_color(c), 31);
 }
 
 /* ── SVG generation ── */
+
+/* label text for one slice; which parts show depends on the show flags */
+static void ink_pie_label_text(InkPieChart* p, int i, double pct,
+                               char* out, size_t size) {
+    if (p->show_percent && p->show_values)
+        snprintf(out, size, "%s: %.1f (%.1f%%)",
+                 p->labels[i], p->values[i], pct * 100.0);
+    else if (p->show_values)
+        snprintf(out, size, "%s: %.1f", p->labels[i], p->values[i]);
+    else if (p->show_percent)
+        snprintf(out, size, "%s: %.1f%%", p->labels[i], pct * 100.0);
+    else
+        snprintf(out, size, "%s", p->labels[i]);
+}
+
 void ink_pie_save(InkPieChart* p, const char* path) {
     FILE* f = fopen(path, "w");
     if (!f) {
@@ -8327,7 +8398,7 @@ void ink_pie_save(InkPieChart* p, const char* path) {
     /* draw slices */
     /* start at 3 o'clock = angle 0, go clockwise */
     double angle = 0.0;
-    double two_pi = 2.0 * 3.14159265358979323846;
+    double two_pi = 2.0 * MOCHA_MATH_PI;
 
     /* collect legend-only slices */
     int in_legend[INK_PIE_MAX_SLICES];
@@ -8342,19 +8413,28 @@ void ink_pie_save(InkPieChart* p, const char* path) {
         double y1 = cy + r * sin(angle);
         double x2 = cx + r * cos(angle + sweep);
         double y2 = cy + r * sin(angle + sweep);
-        int large = (sweep > 3.14159265) ? 1 : 0;
+        int large = (sweep > MOCHA_MATH_PI) ? 1 : 0;
 
         /* slice path */
-        fprintf(f,
-            "<path d=\"M %.2f %.2f L %.2f %.2f "
-            "A %.2f %.2f 0 %d 1 %.2f %.2f Z\" "
-            "fill=\"%s\" stroke=\"white\" stroke-width=\"2\" opacity=\"0.9\"/>\n",
-            cx, cy, x1, y1, r, r, large, x2, y2, p->colors[i]
-        );
+        if (pct >= 0.9999) {
+            /* a full circle: an arc cannot start and end at the same point */
+            fprintf(f,
+                "<circle cx=\"%.2f\" cy=\"%.2f\" r=\"%.2f\" "
+                "fill=\"%s\" stroke=\"white\" stroke-width=\"2\" opacity=\"0.9\"/>\n",
+                cx, cy, r, p->colors[i]
+            );
+        } else {
+            fprintf(f,
+                "<path d=\"M %.2f %.2f L %.2f %.2f "
+                "A %.2f %.2f 0 %d 1 %.2f %.2f Z\" "
+                "fill=\"%s\" stroke=\"white\" stroke-width=\"2\" opacity=\"0.9\"/>\n",
+                cx, cy, x1, y1, r, r, large, x2, y2, p->colors[i]
+            );
+        }
 
         /* label — outside with leader line if slice >= 3% */
         if (pct >= INK_PIE_LABEL_THRESHOLD) {
-            /* leader line end point */
+            /* leader line runs from 1.18r to 1.32r along the slice's middle angle */
             double label_r  = r * 1.18;
             double label_r2 = r * 1.32;
             double lx1 = cx + label_r  * cos(mid_ang);
@@ -8362,7 +8442,7 @@ void ink_pie_save(InkPieChart* p, const char* path) {
             double lx2 = cx + label_r2 * cos(mid_ang);
             double ly2 = cy + label_r2 * sin(mid_ang);
 
-            /* horizontal end of leader */
+             /* text sits 8px past the leader end, on the side the slice faces */
             double text_offset = (cos(mid_ang) >= 0) ? 8.0 : -8.0;
             double tx = lx2 + text_offset;
             double ty = ly2;
@@ -8377,21 +8457,12 @@ void ink_pie_save(InkPieChart* p, const char* path) {
 
             /* build label text */
             char label_text[128];
-            if (p->show_percent && p->show_values) {
-                snprintf(label_text, 127, "%s: %.1f (%.1f%%)",
-                         p->labels[i], p->values[i], pct * 100.0);
-            } else if (p->show_values) {
-                snprintf(label_text, 127, "%s: %.1f",
-                         p->labels[i], p->values[i]);
-            } else {
-                snprintf(label_text, 127, "%s: %.1f%%",
-                         p->labels[i], pct * 100.0);
-            }
+            ink_pie_label_text(p, i, pct, label_text, sizeof(label_text));
 
             fprintf(f,
                 "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"%s\" "
                 "dominant-baseline=\"middle\" class=\"ink-tick\">%s</text>\n",
-                tx, ty, anchor, label_text
+                tx, ty, anchor, ink_xml_esc(label_text)
             );
         } else {
             in_legend[i] = 1;
@@ -8423,16 +8494,10 @@ void ink_pie_save(InkPieChart* p, const char* path) {
                 lx, iy - 10, p->colors[i]
             );
             char label_text[128];
-            if (p->show_percent && p->show_values)
-                snprintf(label_text, 127, "%s: %.1f (%.1f%%)",
-                         p->labels[i], p->values[i], pct * 100.0);
-            else if (p->show_values)
-                snprintf(label_text, 127, "%s: %.1f", p->labels[i], p->values[i]);
-            else
-                snprintf(label_text, 127, "%s: %.1f%%", p->labels[i], pct * 100.0);
+            ink_pie_label_text(p, i, pct, label_text, sizeof(label_text));
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx + 18, iy, label_text
+                lx + 18, iy, ink_xml_esc(label_text)
             );
             row++;
         }
@@ -8443,7 +8508,7 @@ void ink_pie_save(InkPieChart* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, 30, p->title
+            W / 2, 30, ink_xml_esc(p->title)
         );
 
     fprintf(f, "</svg>\n");
@@ -8454,24 +8519,21 @@ void ink_pie_show(InkPieChart* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_pie_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
 void ink_pc_set_title(PieChart* p, const char* t) { ink_pie_set_title(p, t);        }
-void ink_pc_set_show_percent(PieChart* p)         { ink_pie_set_show_percent(p);    }
-void ink_pc_set_show_values(PieChart* p)          { ink_pie_set_show_values(p);     }
+void ink_pc_set_show_percent(PieChart* p, int8_t on) { ink_pie_set_show_percent(p, on); }
+void ink_pc_set_show_values(PieChart* p, int8_t on)  { ink_pie_set_show_values(p, on);  }
 void ink_pc_set_color(PieChart* p, int i, const char* c) { ink_pie_set_color(p, i, c); }
 void ink_pc_save(PieChart* p, const char* path)   { ink_pie_save(p, path);          }
 void ink_pc_show(PieChart* p)                     { ink_pie_show(p);                }
@@ -8507,6 +8569,16 @@ typedef struct {
 
 typedef InkHistogram Histogram;
 
+/* stop with a clear message when a chart is given an empty array */
+static void ink_require_data(const char* chart, int n) {
+    if (n < 1) {
+        fprintf(stderr,
+            "MochaRuntimeError (mocha-ink): %s needs at least one data value\n",
+            chart);
+        exit(2);
+    }
+}
+
 /* ── Sturges' rule ── */
 static int ink_sturges(int n) {
     if (n <= 1) return 1;
@@ -8520,22 +8592,19 @@ static InkHistogram* ink_new_histogram(double* data, int n) {
     p->width        = INK_WIDTH;
     p->height       = INK_HEIGHT;
     p->grid         = 1;
-    p->bins         = 0;  /* auto */
-    p->density      = 0;
-    p->normal_curve = 0;
 
     int count = n < INK_HIST_MAX_POINTS ? n : INK_HIST_MAX_POINTS;
     for (int i = 0; i < count; i++)
         p->series[0].data[i] = data[i];
     p->series[0].n = count;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
 
 InkHistogram* ink_new_histogram_mocha(MochaArray* arr) {
     int n = arr->length < INK_HIST_MAX_POINTS ? arr->length : INK_HIST_MAX_POINTS;
+    ink_require_data("histogram", n);
     double* data = (double*)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
         double v;
@@ -8553,6 +8622,7 @@ void ink_hist_add_mocha(InkHistogram* p, MochaArray* arr) {
         return;
     }
     int n = arr->length < INK_HIST_MAX_POINTS ? arr->length : INK_HIST_MAX_POINTS;
+    ink_require_data("histogram", n);
     InkHistSeries* s = &p->series[p->n_series];
     for (int i = 0; i < n; i++) {
         double v;
@@ -8561,7 +8631,6 @@ void ink_hist_add_mocha(InkHistogram* p, MochaArray* arr) {
     }
     s->n = n;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -8569,7 +8638,14 @@ void ink_hist_add_mocha(InkHistogram* p, MochaArray* arr) {
 void ink_hist_set_title(InkHistogram* p, const char* t)  { strncpy(p->title,  t, 127); }
 void ink_hist_set_xlabel(InkHistogram* p, const char* l) { strncpy(p->xlabel, l, 63);  }
 void ink_hist_set_ylabel(InkHistogram* p, const char* l) { strncpy(p->ylabel, l, 63);  }
-void ink_hist_set_bins(InkHistogram* p, int32_t b)       { p->bins = b;                }
+void ink_hist_set_bins(InkHistogram* p, int32_t b) {
+    if (b > INK_HIST_MAX_BINS) {
+        fprintf(stderr, "MochaWarning (mocha-ink): histogram bins limited to %d\n",
+                INK_HIST_MAX_BINS);
+        b = INK_HIST_MAX_BINS;
+    }
+    p->bins = b;
+}
 void ink_hist_set_density(InkHistogram* p)               { p->density = 1;             }
 void ink_hist_set_normal_curve(InkHistogram* p)          { p->normal_curve = 1;        }
 void ink_hist_set_grid(InkHistogram* p, int8_t on)       { p->grid = on ? 1 : 0;       }
@@ -8584,7 +8660,21 @@ void ink_hist_set_label(InkHistogram* p, const char* l) {
 static double ink_normal_pdf(double x, double mean, double std) {
     if (std == 0.0) return 0.0;
     double z = (x - mean) / std;
-    return exp(-0.5 * z * z) / (std * sqrt(2.0 * 3.14159265358979323846));
+    return exp(-0.5 * z * z) / (std * sqrt(2.0 * MOCHA_MATH_PI));
+}
+
+/* population mean and standard deviation of n values */
+static void ink_mean_std(const double* data, int n, double* mean, double* std) {
+    double m = 0.0;
+    for (int i = 0; i < n; i++) m += data[i];
+    m /= n;
+    double var = 0.0;
+    for (int i = 0; i < n; i++) {
+        double d = data[i] - m;
+        var += d * d;
+    }
+    *mean = m;
+    *std  = sqrt(var / n);
 }
 
 /* ── SVG generation ── */
@@ -8646,15 +8736,8 @@ void ink_hist_save(InkHistogram* p, const char* path) {
     /* also check normal curve peak if enabled */
     if (p->normal_curve) {
         /* compute mean and std of first series */
-        double mean = 0.0;
-        for (int i = 0; i < p->series[0].n; i++) mean += p->series[0].data[i];
-        mean /= p->series[0].n;
-        double var = 0.0;
-        for (int i = 0; i < p->series[0].n; i++) {
-            double d = p->series[0].data[i] - mean;
-            var += d * d;
-        }
-        double std = sqrt(var / p->series[0].n);
+        double mean, std;
+        ink_mean_std(p->series[0].data, p->series[0].n, &mean, &std);
         double peak = ink_normal_pdf(mean, mean, std);
         if (!p->density) peak *= p->series[0].n * bin_w;
         if (peak > cmax) cmax = peak;
@@ -8662,7 +8745,6 @@ void ink_hist_save(InkHistogram* p, const char* path) {
 
     double nv_min, nv_max, nv_step;
     ink_nice_range(0.0, cmax, &nv_min, &nv_max, &nv_step);
-    nv_min = 0.0;
 
     /* bar width in pixels — split among series with small gap */
     double bar_pw  = (double)pw / n_bins;
@@ -8732,7 +8814,7 @@ void ink_hist_save(InkHistogram* p, const char* path) {
             double bh  = baseline - by;
             if (bh <= 0) continue;
 
-            /* hex color with alpha for overlap visibility */
+            /* semi-transparent fill; series sit side by side within each bin */
             fprintf(f,
                 "<rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" "
                 "fill=\"%s\" opacity=\"0.75\" rx=\"1\"/>\n",
@@ -8752,17 +8834,10 @@ void ink_hist_save(InkHistogram* p, const char* path) {
 
     /* normal curve overlay */
     if (p->normal_curve) {
-        double mean = 0.0;
-        for (int i = 0; i < p->series[0].n; i++) mean += p->series[0].data[i];
-        mean /= p->series[0].n;
-        double var = 0.0;
-        for (int i = 0; i < p->series[0].n; i++) {
-            double d = p->series[0].data[i] - mean;
-            var += d * d;
-        }
-        double std = sqrt(var / p->series[0].n);
+        double mean, std;
+        ink_mean_std(p->series[0].data, p->series[0].n, &mean, &std);
 
-        /* draw as polyline with 200 points */
+        /* draw as polyline: 200 segments (201 points) */
         fprintf(f,
             "<polyline fill=\"none\" stroke=\"#E15759\" stroke-width=\"2\" "
             "stroke-dasharray=\"6,3\" points=\""
@@ -8796,7 +8871,7 @@ void ink_hist_save(InkHistogram* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -8804,7 +8879,7 @@ void ink_hist_save(InkHistogram* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -8814,7 +8889,7 @@ void ink_hist_save(InkHistogram* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     /* legend */
@@ -8836,8 +8911,8 @@ void ink_hist_save(InkHistogram* p, const char* path) {
         );
         for (int s = 0; s < p->n_series; s++) {
             int iy = ly + 10 + s * 22;
-            const char* lbl = p->series[s].label[0] ? p->series[s].label
-                              : (s == 0 ? "Series 1" : "Series 2");
+            char default_label[32];
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             fprintf(f,
                 "<rect x=\"%d\" y=\"%d\" width=\"14\" height=\"14\" "
                 "fill=\"%s\" opacity=\"0.75\" rx=\"2\"/>\n",
@@ -8845,7 +8920,7 @@ void ink_hist_save(InkHistogram* p, const char* path) {
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx - lw + 28, iy + 11, lbl
+                lx - lw + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -8858,18 +8933,15 @@ void ink_hist_show(InkHistogram* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_hist_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
@@ -8922,7 +8994,7 @@ static int ink_double_cmp(const void* a, const void* b) {
     return (da > db) - (da < db);
 }
 
-/* ── five number summary ── */
+/* ── summary statistics for one box ── */
 typedef struct {
     double min, q1, median, q3, max;
     double iqr;
@@ -8980,21 +9052,19 @@ static InkBoxPlot* ink_new_boxplot(double* data, int n) {
     p->width      = INK_WIDTH;
     p->height     = INK_HEIGHT;
     p->grid       = 1;
-    p->horizontal = 0;
-    p->confidence = 0;
 
     int count = n < INK_BOX_MAX_POINTS ? n : INK_BOX_MAX_POINTS;
     for (int i = 0; i < count; i++)
         p->series[0].data[i] = data[i];
     p->series[0].n = count;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
 
 InkBoxPlot* ink_new_boxplot_mocha(MochaArray* arr) {
     int n = arr->length < INK_BOX_MAX_POINTS ? arr->length : INK_BOX_MAX_POINTS;
+    ink_require_data("box plot", n);
     double* data = (double*)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
         double v;
@@ -9012,6 +9082,7 @@ void ink_box_add_mocha(InkBoxPlot* p, MochaArray* arr) {
         return;
     }
     int n = arr->length < INK_BOX_MAX_POINTS ? arr->length : INK_BOX_MAX_POINTS;
+    ink_require_data("box plot", n);
     InkBoxSeries* s = &p->series[p->n_series];
     for (int i = 0; i < n; i++) {
         double v;
@@ -9020,7 +9091,6 @@ void ink_box_add_mocha(InkBoxPlot* p, MochaArray* arr) {
     }
     s->n = n;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -9064,9 +9134,7 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
     double vmin = stats[0].min;
     double vmax = stats[0].max;
     for (int s = 0; s < p->n_series; s++) {
-        if (stats[s].whisker_lo < vmin) vmin = stats[s].whisker_lo;
-        if (stats[s].whisker_hi > vmax) vmax = stats[s].whisker_hi;
-        /* include outliers */
+        /* every data point, so whiskers and outliers are both covered */
         for (int i = 0; i < p->series[s].n; i++) {
             if (p->series[s].data[i] < vmin) vmin = p->series[s].data[i];
             if (p->series[s].data[i] > vmax) vmax = p->series[s].data[i];
@@ -9180,7 +9248,8 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
                 fprintf(f,
                     "<polygon points=\""
                     "%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f "
-                    "%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f\" "
+                    "%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f "
+                    "%.2f,%.2f %.2f,%.2f\" "
                     "fill=\"%s\" opacity=\"0.7\" stroke=\"%s\" stroke-width=\"1.5\"/>\n",
                     bx, y_q1,
                     bx + box_w, y_q1,
@@ -9189,7 +9258,9 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
                     bx + box_w, y_cihi,
                     bx + box_w, y_q3,
                     bx, y_q3,
+                    bx, y_cihi,
                     bx + notch_w, y_med,
+                    bx, y_cilo,
                     col, col
                 );
             } else {
@@ -9224,12 +9295,12 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
                 }
             }
 
-            /* x axis label */
+            /* series label under the box */
             if (p->series[s].label[0]) {
                 fprintf(f,
                     "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
                     "class=\"ink-tick\">%s</text>\n",
-                    cx, mt + ph + 18, p->series[s].label
+                    cx, mt + ph + 18, ink_xml_esc(p->series[s].label)
                 );
             }
         }
@@ -9303,12 +9374,37 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
             );
 
             /* box body */
-            fprintf(f,
-                "<rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" "
-                "fill=\"%s\" opacity=\"0.7\" stroke=\"%s\" "
-                "stroke-width=\"1.5\" rx=\"2\"/>\n",
-                x_q1, by, bw, box_h, col, col
-            );
+            if (p->confidence) {
+                /* notched box: the top and bottom edges dent in at the median */
+                double x_cilo  = ink_map_x(st->ci_lo, nv_min, nv_max, ml, pw);
+                double x_cihi  = ink_map_x(st->ci_hi, nv_min, nv_max, ml, pw);
+                double notch_h = box_h * 0.4;
+                fprintf(f,
+                    "<polygon points=\""
+                    "%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f "
+                    "%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f "
+                    "%.2f,%.2f %.2f,%.2f\" "
+                    "fill=\"%s\" opacity=\"0.7\" stroke=\"%s\" stroke-width=\"1.5\"/>\n",
+                    x_q1,   by,
+                    x_cilo, by,
+                    x_med,  by + notch_h,
+                    x_cihi, by,
+                    x_q3,   by,
+                    x_q3,   by + box_h,
+                    x_cihi, by + box_h,
+                    x_med,  by + box_h - notch_h,
+                    x_cilo, by + box_h,
+                    x_q1,   by + box_h,
+                    col, col
+                );
+            } else {
+                fprintf(f,
+                    "<rect x=\"%.2f\" y=\"%.2f\" width=\"%.2f\" height=\"%.2f\" "
+                    "fill=\"%s\" opacity=\"0.7\" stroke=\"%s\" "
+                    "stroke-width=\"1.5\" rx=\"2\"/>\n",
+                    x_q1, by, bw, box_h, col, col
+                );
+            }
 
             /* median line */
             fprintf(f,
@@ -9332,12 +9428,12 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
                 }
             }
 
-            /* y axis label */
+            /* series label left of the box */
             if (p->series[s].label[0]) {
                 fprintf(f,
                     "<text x=\"%d\" y=\"%.2f\" text-anchor=\"end\" "
                     "dominant-baseline=\"middle\" class=\"ink-tick\">%s</text>\n",
-                    ml - 8, cy, p->series[s].label
+                    ml - 8, cy, ink_xml_esc(p->series[s].label)
                 );
             }
         }
@@ -9360,7 +9456,7 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -9368,7 +9464,7 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -9378,7 +9474,7 @@ void ink_box_save(InkBoxPlot* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     fprintf(f, "</svg>\n");
@@ -9389,18 +9485,15 @@ void ink_box_show(InkBoxPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_box_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
@@ -9449,7 +9542,7 @@ typedef InkViolinPlot ViolinPlot;
 
 /* ── Gaussian kernel ── */
 static double ink_gaussian_kernel(double x) {
-    return exp(-0.5 * x * x) / sqrt(2.0 * 3.14159265358979323846);
+    return exp(-0.5 * x * x) / sqrt(2.0 * MOCHA_MATH_PI);
 }
 
 /* ── KDE at point x ── */
@@ -9463,15 +9556,8 @@ static double ink_kde(double x, double* data, int n, double h) {
 /* ── Silverman bandwidth ── */
 static double ink_silverman(double* data, int n) {
     if (n <= 1) return 1.0;
-    double mean = 0.0;
-    for (int i = 0; i < n; i++) mean += data[i];
-    mean /= n;
-    double var = 0.0;
-    for (int i = 0; i < n; i++) {
-        double d = data[i] - mean;
-        var += d * d;
-    }
-    double std = sqrt(var / n);
+    double mean, std;
+    ink_mean_std(data, n, &mean, &std);
     /* IQR-based robust estimate */
     double* sorted = (double*)malloc(n * sizeof(double));
     memcpy(sorted, data, n * sizeof(double));
@@ -9493,21 +9579,19 @@ static InkViolinPlot* ink_new_violin(double* data, int n) {
     p->height    = INK_HEIGHT;
     p->grid      = 1;
     p->show_box  = 1;
-    p->bandwidth = 0.0;  /* auto */
-    p->horizontal = 0;
 
     int count = n < INK_VIOLIN_MAX_POINTS ? n : INK_VIOLIN_MAX_POINTS;
     for (int i = 0; i < count; i++)
         p->series[0].data[i] = data[i];
     p->series[0].n = count;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
 
 InkViolinPlot* ink_new_violin_mocha(MochaArray* arr) {
     int n = arr->length < INK_VIOLIN_MAX_POINTS ? arr->length : INK_VIOLIN_MAX_POINTS;
+    ink_require_data("violin plot", n);
     double* data = (double*)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
         double v;
@@ -9525,6 +9609,7 @@ void ink_violin_add_mocha(InkViolinPlot* p, MochaArray* arr) {
         return;
     }
     int n = arr->length < INK_VIOLIN_MAX_POINTS ? arr->length : INK_VIOLIN_MAX_POINTS;
+    ink_require_data("violin plot", n);
     InkViolinSeries* s = &p->series[p->n_series];
     for (int i = 0; i < n; i++) {
         double v;
@@ -9533,7 +9618,6 @@ void ink_violin_add_mocha(InkViolinPlot* p, MochaArray* arr) {
     }
     s->n = n;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -9668,30 +9752,11 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
             double cx = ml + s * slot_w + slot_w / 2.0;
             const char* col = p->series[s].color;
 
-            /* build polygon points — right side then left side reversed */
-            /* right side: kde mapped to x offset */
-            fprintf(f, "<polygon fill=\"%s\" opacity=\"0.7\" "
-                    "clip-path=\"url(#ink-vclip)\" points=\"", col);
-
-            /* right side top to bottom */
-            for (int k = 0; k < INK_VIOLIN_KDE_STEPS; k++) {
-                double y_val = nv_min + (nv_max - nv_min) * k / (INK_VIOLIN_KDE_STEPS - 1);
-                double py    = ink_map_y(y_val, nv_min, nv_max, mt, ph);
-                double kde_w = (kde_vals[s][k] / kde_max_all) * violin_w;
-                fprintf(f, "%.2f,%.2f ", cx + kde_w, py);
-            }
-            /* left side bottom to top */
-            for (int k = INK_VIOLIN_KDE_STEPS - 1; k >= 0; k--) {
-                double y_val = nv_min + (nv_max - nv_min) * k / (INK_VIOLIN_KDE_STEPS - 1);
-                double py    = ink_map_y(y_val, nv_min, nv_max, mt, ph);
-                double kde_w = (kde_vals[s][k] / kde_max_all) * violin_w;
-                fprintf(f, "%.2f,%.2f ", cx - kde_w, py);
-            }
-            fprintf(f, "\"/>\n");
-
-            /* outline */
-            fprintf(f, "<polyline fill=\"none\" stroke=\"%s\" stroke-width=\"1.5\" "
-                    "opacity=\"0.9\" clip-path=\"url(#ink-vclip)\" points=\"", col);
+            /* one closed polygon for fill and outline:
+               right side bottom to top, then left side top to bottom */
+            fprintf(f, "<polygon fill=\"%s\" fill-opacity=\"0.7\" "
+                    "stroke=\"%s\" stroke-opacity=\"0.9\" stroke-width=\"1.5\" "
+                    "clip-path=\"url(#ink-vclip)\" points=\"", col, col);
             for (int k = 0; k < INK_VIOLIN_KDE_STEPS; k++) {
                 double y_val = nv_min + (nv_max - nv_min) * k / (INK_VIOLIN_KDE_STEPS - 1);
                 double py    = ink_map_y(y_val, nv_min, nv_max, mt, ph);
@@ -9742,7 +9807,7 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
                 fprintf(f,
                     "<text x=\"%.2f\" y=\"%d\" text-anchor=\"middle\" "
                     "class=\"ink-tick\">%s</text>\n",
-                    cx, mt + ph + 18, p->series[s].label
+                    cx, mt + ph + 18, ink_xml_esc(p->series[s].label)
                 );
             }
         }
@@ -9780,26 +9845,11 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
             double cy = mt + s * slot_h + slot_h / 2.0;
             const char* col = p->series[s].color;
 
-            /* top half */
-            fprintf(f, "<polygon fill=\"%s\" opacity=\"0.7\" "
-                    "clip-path=\"url(#ink-vclip)\" points=\"", col);
-            for (int k = 0; k < INK_VIOLIN_KDE_STEPS; k++) {
-                double x_val = nv_min + (nv_max - nv_min) * k / (INK_VIOLIN_KDE_STEPS - 1);
-                double px    = ink_map_x(x_val, nv_min, nv_max, ml, pw);
-                double kde_h = (kde_vals[s][k] / kde_max_all) * violin_h;
-                fprintf(f, "%.2f,%.2f ", px, cy - kde_h);
-            }
-            for (int k = INK_VIOLIN_KDE_STEPS - 1; k >= 0; k--) {
-                double x_val = nv_min + (nv_max - nv_min) * k / (INK_VIOLIN_KDE_STEPS - 1);
-                double px    = ink_map_x(x_val, nv_min, nv_max, ml, pw);
-                double kde_h = (kde_vals[s][k] / kde_max_all) * violin_h;
-                fprintf(f, "%.2f,%.2f ", px, cy + kde_h);
-            }
-            fprintf(f, "\"/>\n");
-
-            /* outline */
-            fprintf(f, "<polyline fill=\"none\" stroke=\"%s\" stroke-width=\"1.5\" "
-                    "opacity=\"0.9\" clip-path=\"url(#ink-vclip)\" points=\"", col);
+            /* one closed polygon for fill and outline:
+                top edge left to right, then bottom edge back */
+            fprintf(f, "<polygon fill=\"%s\" fill-opacity=\"0.7\" "
+                    "stroke=\"%s\" stroke-opacity=\"0.9\" stroke-width=\"1.5\" "
+                    "clip-path=\"url(#ink-vclip)\" points=\"", col, col);
             for (int k = 0; k < INK_VIOLIN_KDE_STEPS; k++) {
                 double x_val = nv_min + (nv_max - nv_min) * k / (INK_VIOLIN_KDE_STEPS - 1);
                 double px    = ink_map_x(x_val, nv_min, nv_max, ml, pw);
@@ -9846,7 +9896,7 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
                 fprintf(f,
                     "<text x=\"%d\" y=\"%.2f\" text-anchor=\"end\" "
                     "dominant-baseline=\"middle\" class=\"ink-tick\">%s</text>\n",
-                    ml - 8, cy, p->series[s].label
+                    ml - 8, cy, ink_xml_esc(p->series[s].label)
                 );
             }
         }
@@ -9869,7 +9919,7 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -9877,7 +9927,7 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -9887,7 +9937,7 @@ void ink_violin_save(InkViolinPlot* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     fprintf(f, "</svg>\n");
@@ -9898,18 +9948,15 @@ void ink_violin_show(InkViolinPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_violin_save(p, tmp);
     #ifdef _WIN32
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "start %s", tmp);
-        system(cmd);
+        const char* opener = "start";
     #elif defined(__APPLE__)
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "open %s", tmp);
-        system(cmd);
+        const char* opener = "open";
     #else
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-        system(cmd);
+        const char* opener = "xdg-open";
     #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
@@ -9926,18 +9973,10 @@ void ink_vn_add(ViolinPlot* p, MochaArray* arr)      { ink_violin_add_mocha(p, a
 void ink_vn_save(ViolinPlot* p, const char* path)    { ink_violin_save(p, path);    }
 void ink_vn_show(ViolinPlot* p)                      { ink_violin_show(p);          }
 
-//Area Chart
+// Area Chart
 InkPlot* ink_new_area_mocha(MochaArray* x, MochaArray* y) {
-    int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
-    }
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     InkPlot* p = ink_new_line(xd, yd, n);
     p->series[0].is_area = 1;
     free(xd);
@@ -9946,21 +9985,14 @@ InkPlot* ink_new_area_mocha(MochaArray* x, MochaArray* y) {
 }
 
 void ink_add_area_mocha(InkPlot* p, MochaArray* x, MochaArray* y) {
-    int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
-    }
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     ink_add_series(p, 0, xd, yd, n);
     p->series[p->n_series - 1].is_area = 1;
     free(xd);
     free(yd);
 }
+
 typedef InkPlot AreaChart;
 
 AreaChart* ink_ac_new(MochaArray* x, MochaArray* y)          { return ink_new_area_mocha(x, y);      }
@@ -10002,6 +10034,7 @@ typedef struct {
     int             grid;
     double          min_r;
     double          max_r;
+    int             size_by_area;  /* 0 = radius grows with z (default), 1 = area grows with z */
 } InkBubbleChart;
 
 typedef InkBubbleChart BubbleChart;
@@ -10029,7 +10062,6 @@ static InkBubbleChart* ink_new_bubble(double* x, double* y, double* z, int n) {
     }
     p->series[0].n = count;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
@@ -10091,6 +10123,7 @@ void ink_bb_set_ylabel(InkBubbleChart* p, const char* l) { strncpy(p->ylabel, l,
 void ink_bb_set_grid(InkBubbleChart* p, int8_t on)       { p->grid = on ? 1 : 0;       }
 void ink_bb_set_min_size(InkBubbleChart* p, double r)    { p->min_r = r;               }
 void ink_bb_set_max_size(InkBubbleChart* p, double r)    { p->max_r = r;               }
+void ink_bb_set_size_by_area(InkBubbleChart* p, int8_t on) { p->size_by_area = on ? 1 : 0; }
 void ink_bb_set_color(InkBubbleChart* p, const char* c) {
     strncpy(p->series[p->n_series - 1].color, ink_resolve_color(c), 31);
 }
@@ -10228,17 +10261,14 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
         );
     }
 
-    /* draw bubbles — smallest z first so large don't cover small */
-    /* simple sort by z descending per series */
+    /* draw bubbles, largest z first so smaller ones stay visible on top */
     for (int s = 0; s < p->n_series; s++) {
         InkBubbleSeries* sr = &p->series[s];
         const char* col = sr->color;
 
-        /* draw order: largest first so smallest visible on top */
-        /* build index array sorted by z descending */
+        /* index array sorted by z descending (exchange sort; n <= 512) */
         int idx[INK_BUBBLE_MAX_POINTS];
         for (int i = 0; i < sr->n; i++) idx[i] = i;
-        /* bubble sort by z descending — n is small enough */
         for (int i = 0; i < sr->n - 1; i++) {
             for (int j = i + 1; j < sr->n; j++) {
                 if (sr->z[idx[j]] > sr->z[idx[i]]) {
@@ -10252,7 +10282,9 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
             double cx = ink_map_x(sr->x[i], nx_min, nx_max, ml, pw);
             double cy = ink_map_y(sr->y[i], ny_min, ny_max, mt, ph);
             double t  = (sr->z[i] - zmin) / z_range;
-            double r  = p->min_r + t * (p->max_r - p->min_r);
+            double r  = p->size_by_area
+                        ? sqrt(p->min_r * p->min_r + t * (p->max_r * p->max_r - p->min_r * p->min_r))
+                        : p->min_r + t * (p->max_r - p->min_r);
 
             fprintf(f,
                 "<circle cx=\"%.2f\" cy=\"%.2f\" r=\"%.2f\" "
@@ -10284,41 +10316,51 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
         ml, mt, ml, mt + ph
     );
 
-    /* size legend */
-    int lx = ml + pw - 10;
-    int ly = mt + ph - 100;
+        /* size legend: both bubbles are drawn at their real radii, so the box
+       grows with min_r and max_r */
+    int s_pad = 10;
+    int s_rs  = (int)p->min_r;
+    int s_rl  = (int)p->max_r;
+    int s_lw  = s_pad + 2 * s_rl + 8 + 62;
+    int leg_h  = 24 + 2 * s_rs + 14 + 2 * s_rl + s_pad;
+    int lx    = ml + pw - 10;
+    int ly    = mt + ph - leg_h - 10;
+    int s_cx  = lx - s_lw + s_pad + s_rl;
+    int s_cys = ly + 24 + s_rs;
+    int s_cyl = s_cys + s_rs + 14 + s_rl;
+    int s_tx  = s_cx + s_rl + 8;
     fprintf(f,
-        "<rect x=\"%d\" y=\"%d\" width=\"130\" height=\"90\" "
+        "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
         "fill=\"white\" stroke=\"#DDD\" stroke-width=\"1\" "
         "rx=\"4\" opacity=\"0.9\"/>\n",
-        lx - 130, ly
+        lx - s_lw, ly, s_lw, leg_h
     );
     fprintf(f,
         "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
         "class=\"ink-legend\" font-weight=\"bold\">Size: z</text>\n",
-        lx - 65, ly + 14
+        lx - s_lw / 2, ly + 14
     );
     /* small bubble */
     fprintf(f,
         "<circle cx=\"%d\" cy=\"%d\" r=\"%.1f\" "
         "fill=\"#BAB0AC\" opacity=\"0.7\"/>\n",
-        lx - 95, ly + 40, p->min_r
+        s_cx, s_cys, p->min_r
     );
     fprintf(f,
         "<text x=\"%d\" y=\"%d\" dominant-baseline=\"middle\" "
         "class=\"ink-tick\">%g</text>\n",
-        lx - 85, ly + 40, zmin
+        s_tx, s_cys, zmin
     );
     /* large bubble */
     fprintf(f,
         "<circle cx=\"%d\" cy=\"%d\" r=\"%.1f\" "
         "fill=\"#BAB0AC\" opacity=\"0.7\"/>\n",
-        lx - 95, ly + 68, p->max_r * 0.5
+        s_cx, s_cyl, p->max_r
     );
     fprintf(f,
         "<text x=\"%d\" y=\"%d\" dominant-baseline=\"middle\" "
         "class=\"ink-tick\">%g</text>\n",
-        lx - 85 + (int)(p->max_r * 0.5) - (int)p->min_r, ly + 68, zmax
+        s_tx, s_cyl, zmax
     );
 
     /* series legend if multi */
@@ -10339,16 +10381,15 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
         );
         for (int s = 0; s < p->n_series; s++) {
             int iy = lly + 10 + s * 22;
-            const char* lbl = p->series[s].label[0]
-                              ? p->series[s].label
-                              : (s == 0 ? "Series 1" : "Series 2");
+            char default_label[32];
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             fprintf(f,
                 "<circle cx=\"%d\" cy=\"%d\" r=\"7\" fill=\"%s\" opacity=\"0.75\"/>\n",
                 llx + 14, iy + 7, p->series[s].color
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                llx + 28, iy + 11, lbl
+                llx + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -10358,7 +10399,7 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -10366,7 +10407,7 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -10376,7 +10417,7 @@ void ink_bubble_save(InkBubbleChart* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     fprintf(f, "</svg>\n");
@@ -10387,18 +10428,15 @@ void ink_bubble_show(InkBubbleChart* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_bubble_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
@@ -10410,6 +10448,7 @@ void ink_bc2_set_color(BubbleChart* p, const char* c)  { ink_bb_set_color(p, c);
 void ink_bc2_set_label(BubbleChart* p, const char* l)  { ink_bb_set_label(p, l);     }
 void ink_bc2_set_min_size(BubbleChart* p, double r)    { ink_bb_set_min_size(p, r);  }
 void ink_bc2_set_max_size(BubbleChart* p, double r)    { ink_bb_set_max_size(p, r);  }
+void ink_bc2_set_size_by_area(BubbleChart* p, int8_t on) { ink_bb_set_size_by_area(p, on); }
 void ink_bc2_add(BubbleChart* p, MochaArray* x, MochaArray* y, MochaArray* z) {
     ink_bubble_add_mocha(p, x, y, z);
 }
@@ -10452,21 +10491,19 @@ static InkCurvePlot* ink_new_curve(double* data, int n) {
     p->width     = INK_WIDTH;
     p->height    = INK_HEIGHT;
     p->grid      = 1;
-    p->bandwidth = 0.0;
 
     int count = n < INK_CURVE_MAX_POINTS ? n : INK_CURVE_MAX_POINTS;
     for (int i = 0; i < count; i++)
         p->series[0].data[i] = data[i];
     p->series[0].n      = count;
-    p->series[0].filled = 0;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
 
 InkCurvePlot* ink_new_curve_mocha(MochaArray* arr) {
     int n = arr->length < INK_CURVE_MAX_POINTS ? arr->length : INK_CURVE_MAX_POINTS;
+    ink_require_data("curve plot", n);
     double* data = (double*)malloc(n * sizeof(double));
     for (int i = 0; i < n; i++) {
         double v;
@@ -10484,6 +10521,7 @@ void ink_curve_add_mocha(InkCurvePlot* p, MochaArray* arr) {
         return;
     }
     int n = arr->length < INK_CURVE_MAX_POINTS ? arr->length : INK_CURVE_MAX_POINTS;
+    ink_require_data("curve plot", n);
     InkCurveSeries* s = &p->series[p->n_series];
     for (int i = 0; i < n; i++) {
         double v;
@@ -10491,9 +10529,7 @@ void ink_curve_add_mocha(InkCurvePlot* p, MochaArray* arr) {
         s->data[i] = v;
     }
     s->n      = n;
-    s->filled = 0;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -10563,7 +10599,6 @@ void ink_curve_save(InkCurvePlot* p, const char* path) {
 
     double ny_min, ny_max, ny_step;
     ink_nice_range(0.0, kde_max, &ny_min, &ny_max, &ny_step);
-    ny_min = 0.0;
 
     /* SVG header */
     fprintf(f,
@@ -10707,7 +10742,7 @@ void ink_curve_save(InkCurvePlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -10715,7 +10750,7 @@ void ink_curve_save(InkCurvePlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -10725,7 +10760,7 @@ void ink_curve_save(InkCurvePlot* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     /* legend */
@@ -10746,9 +10781,8 @@ void ink_curve_save(InkCurvePlot* p, const char* path) {
         );
         for (int s = 0; s < p->n_series; s++) {
             int iy = ly + 10 + s * 22;
-            const char* lbl = p->series[s].label[0]
-                              ? p->series[s].label
-                              : (s == 0 ? "Series 1" : "Series 2");
+            char default_label[32];
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             fprintf(f,
                 "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
                 "stroke=\"%s\" stroke-width=\"2.5\"/>\n",
@@ -10757,7 +10791,7 @@ void ink_curve_save(InkCurvePlot* p, const char* path) {
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx - lw + 28, iy + 11, lbl
+                lx - lw + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -10770,18 +10804,15 @@ void ink_curve_show(InkCurvePlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_curve_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
@@ -10845,9 +10876,7 @@ static InkErrorPlot* ink_new_errorplot(double* x, double* y,
         p->series[0].err_hi[i] = err_hi[i];
     }
     p->series[0].n       = count;
-    p->series[0].connect = 0;
     strncpy(p->series[0].color, INK_PALETTE[0], 31);
-    strncpy(p->series[0].label, "", 63);
     p->n_series = 1;
     return p;
 }
@@ -10909,9 +10938,7 @@ void ink_err_add_mocha(InkErrorPlot* p,
         s->err_hi[i] = e;
     }
     s->n       = n;
-    s->connect = 0;
     strncpy(s->color, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label, "", 63);
     p->n_series++;
 }
 
@@ -11133,7 +11160,7 @@ void ink_errorplot_save(InkErrorPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -11141,7 +11168,7 @@ void ink_errorplot_save(InkErrorPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -11151,7 +11178,7 @@ void ink_errorplot_save(InkErrorPlot* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     /* legend */
@@ -11172,9 +11199,8 @@ void ink_errorplot_save(InkErrorPlot* p, const char* path) {
         );
         for (int s = 0; s < p->n_series; s++) {
             int iy = ly + 10 + s * 22;
-            const char* lbl = p->series[s].label[0]
-                              ? p->series[s].label
-                              : (s == 0 ? "Series 1" : "Series 2");
+            char default_label[32];
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             /* error bar icon in legend */
             fprintf(f,
                 "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
@@ -11200,7 +11226,7 @@ void ink_errorplot_save(InkErrorPlot* p, const char* path) {
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx - lw + 28, iy + 11, lbl
+                lx - lw + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -11213,18 +11239,15 @@ void ink_errorplot_show(InkErrorPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_errorplot_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── wrappers ── */
@@ -11312,14 +11335,59 @@ static InkOLS ink_ols(const double* x, const double* y, int n) {
     return r;
 }
 
-/* ── t-value lookup (approximate) for common CI levels ── */
+/* ── z-value lookup (normal approximation to t) for common CI levels ── */
+/* continued fraction for the incomplete beta function (modified Lentz) */
+static double ink_betacf(double a, double b, double x) {
+    const double tiny = 1e-300;
+    double qab = a + b, qap = a + 1.0, qam = a - 1.0;
+    double c = 1.0;
+    double d = 1.0 - qab * x / qap;
+    if (fabs(d) < tiny) d = tiny;
+    d = 1.0 / d;
+    double h = d;
+    for (int m = 1; m <= 300; m++) {
+        int m2 = 2 * m;
+        double aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1.0 + aa * d;  if (fabs(d) < tiny) d = tiny;
+        c = 1.0 + aa / c;  if (fabs(c) < tiny) c = tiny;
+        d = 1.0 / d;
+        h *= d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1.0 + aa * d;  if (fabs(d) < tiny) d = tiny;
+        c = 1.0 + aa / c;  if (fabs(c) < tiny) c = tiny;
+        d = 1.0 / d;
+        double del = d * c;
+        h *= del;
+        if (fabs(del - 1.0) < 1e-14) break;
+    }
+    return h;
+}
+
+/* regularized incomplete beta function I_x(a, b) */
+static double ink_betai(double a, double b, double x) {
+    if (x <= 0.0) return 0.0;
+    if (x >= 1.0) return 1.0;
+    double bt = exp(lgamma(a + b) - lgamma(a) - lgamma(b)
+                    + a * log(x) + b * log(1.0 - x));
+    if (x < (a + 1.0) / (a + b + 2.0))
+        return bt * ink_betacf(a, b, x) / a;
+    return 1.0 - bt * ink_betacf(b, a, 1.0 - x) / b;
+}
+
+/* two-sided t-value: P(|T| < t) = ci_level with df degrees of freedom.
+   A level outside (0, 1) falls back to 0.95; df below 1 is treated as 1. */
 static double ink_t_value(double ci_level, int df) {
-    /* simple lookup for 90/95/99, fallback to 1.96 */
-    (void)df; /* for large n t ≈ z */
-    if (ci_level >= 0.99) return 2.576;
-    if (ci_level >= 0.95) return 1.960;
-    if (ci_level >= 0.90) return 1.645;
-    return 1.960;
+    if (!(ci_level > 0.0 && ci_level < 1.0)) ci_level = 0.95;
+    if (df < 1) df = 1;
+    double lo = 0.0, hi = 1.0;
+    while (1.0 - ink_betai(df / 2.0, 0.5, df / (df + hi * hi)) < ci_level && hi < 1e12)
+        hi *= 2.0;
+    for (int i = 0; i < 100; i++) {
+        double mid = 0.5 * (lo + hi);
+        double p = 1.0 - ink_betai(df / 2.0, 0.5, df / (df + mid * mid));
+        if (p < ci_level) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
 }
 
 /* ── Constructor ── */
@@ -11329,7 +11397,6 @@ static InkLMPlot* ink_lm_new(double* x, double* y, int n) {
     p->width    = INK_WIDTH;
     p->height   = INK_HEIGHT;
     p->grid     = 1;
-    p->noband   = 0;
     p->ci_level = 0.95;
 
     InkLMSeries* s = &p->series[0];
@@ -11341,23 +11408,14 @@ static InkLMPlot* ink_lm_new(double* x, double* y, int n) {
     s->n = count;
     strncpy(s->color,     INK_PALETTE[0], 31);
     strncpy(s->linecolor, INK_PALETTE[0], 31);
-    strncpy(s->label,     "",             63);
     p->n_series = 1;
     return p;
 }
 
 /* ── Mocha-facing constructor ── */
 InkLMPlot* ink_new_lmplot_mocha(MochaArray* x, MochaArray* y) {
-    int n = x->length < y->length ? x->length : y->length;
-    double* xd = (double*)malloc(n * sizeof(double));
-    double* yd = (double*)malloc(n * sizeof(double));
-    for (int i = 0; i < n; i++) {
-        double xv, yv;
-        mocha_array_get(x, i, &xv);
-        mocha_array_get(y, i, &yv);
-        xd[i] = xv;
-        yd[i] = yv;
-    }
+    double *xd, *yd;
+    int n = ink_arrays_to_doubles(x, y, &xd, &yd);
     InkLMPlot* p = ink_lm_new(xd, yd, n);
     free(xd);
     free(yd);
@@ -11373,10 +11431,10 @@ void ink_lm_set_noband(InkLMPlot* p)                   { p->noband = 1; }
 void ink_lm_set_ci(InkLMPlot* p, double level)         { p->ci_level = level; }
 
 void ink_lm_set_color(InkLMPlot* p, const char* c) {
-    strncpy(p->series[p->n_series - 1].color, c, 31);
+    strncpy(p->series[p->n_series - 1].color, ink_resolve_color(c), 31);
 }
 void ink_lm_set_linecolor(InkLMPlot* p, const char* c) {
-    strncpy(p->series[p->n_series - 1].linecolor, c, 31);
+    strncpy(p->series[p->n_series - 1].linecolor, ink_resolve_color(c), 31);
 }
 void ink_lm_set_label(InkLMPlot* p, const char* l) {
     strncpy(p->series[p->n_series - 1].label, l, 63);
@@ -11401,7 +11459,6 @@ void ink_lm_add_series(InkLMPlot* p, MochaArray* x, MochaArray* y) {
     s->n = count;
     strncpy(s->color,     INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
     strncpy(s->linecolor, INK_PALETTE[p->n_series % INK_MAX_SERIES], 31);
-    strncpy(s->label,     "", 63);
     p->n_series++;
 }
 
@@ -11641,9 +11698,8 @@ void ink_lm_save(InkLMPlot* p, const char* path) {
         );
         for (int s = 0; s < p->n_series; s++) {
             int iy = ly + 10 + s * 22;
-            const char* lbl = p->series[s].label[0]
-                              ? p->series[s].label
-                              : (s == 0 ? "Series 1" : "Series 2");
+            char default_label[32];
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             /* line swatch */
             fprintf(f,
                 "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
@@ -11657,7 +11713,7 @@ void ink_lm_save(InkLMPlot* p, const char* path) {
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx + 28, iy + 11, lbl
+                lx + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }
@@ -11667,7 +11723,7 @@ void ink_lm_save(InkLMPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, mt - 15, p->title
+            W / 2, mt - 15, ink_xml_esc(p->title)
         );
 
     /* x label */
@@ -11675,7 +11731,7 @@ void ink_lm_save(InkLMPlot* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-label\">%s</text>\n",
-            W / 2, H - 10, p->xlabel
+            W / 2, H - 10, ink_xml_esc(p->xlabel)
         );
 
     /* y label */
@@ -11685,7 +11741,7 @@ void ink_lm_save(InkLMPlot* p, const char* path) {
             "transform=\"rotate(-90, %d, %d)\" class=\"ink-label\">%s</text>\n",
             ml - 55, mt + ph / 2,
             ml - 55, mt + ph / 2,
-            p->ylabel
+            ink_xml_esc(p->ylabel)
         );
 
     fprintf(f, "</svg>\n");
@@ -11697,18 +11753,15 @@ void ink_lm_show(InkLMPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_lm_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* Wrappers */
@@ -11733,7 +11786,6 @@ void ink_lm_show_mocha(InkLMPlot* p)                         { ink_lm_show(p); }
 #define INK_NET_MAX_EDGES  256
 #define INK_NET_NODE_R     22.0
 #define INK_NET_ARROW_SIZE 10.0
-#define M_PI_NET           3.14159265358979323846
 
 /* ── Node ── */
 typedef struct {
@@ -11761,7 +11813,7 @@ typedef struct {
     int        n_edges;
     char       title[128];
     int        directed;
-    int        show_labels;
+    int        show_weights;
     int        width;
     int        height;
 } InkNetChart;
@@ -11772,8 +11824,7 @@ static InkNetChart* ink_net_new_internal(void) {
     memset(p, 0, sizeof(InkNetChart));
     p->width       = INK_WIDTH;
     p->height      = INK_HEIGHT;
-    p->directed    = 0;
-    p->show_labels = 1;
+    p->show_weights = 1;
     return p;
 }
 
@@ -11804,22 +11855,7 @@ void ink_net_add_node(InkNetChart* p, const char* id, const char* label) {
     p->n_nodes++;
 }
 
-/* ── Add edge (unweighted) ── */
-void ink_net_add_edge(InkNetChart* p, const char* from, const char* to) {
-    if (p->n_edges >= INK_NET_MAX_EDGES) {
-        fprintf(stderr, "MochaWarning (mocha-ink): max edges (%d) reached\n",
-                INK_NET_MAX_EDGES);
-        return;
-    }
-    InkNetEdge* e = &p->edges[p->n_edges];
-    strncpy(e->from,  from, 63);
-    strncpy(e->to,    to,   63);
-    e->weight = 0.0;
-    strncpy(e->color, "#AAAAAA", 31);
-    p->n_edges++;
-}
-
-/* ── Add edge (weighted) ── */
+/* add a weighted edge */
 void ink_net_add_edge_weight(InkNetChart* p,
                              const char* from, const char* to,
                              double weight) {
@@ -11836,6 +11872,11 @@ void ink_net_add_edge_weight(InkNetChart* p,
     p->n_edges++;
 }
 
+/* add an unweighted edge (weight 0) */
+void ink_net_add_edge(InkNetChart* p, const char* from, const char* to) {
+    ink_net_add_edge_weight(p, from, to, 0.0);
+}
+
 /* ── Setters ── */
 void ink_net_set_title(InkNetChart* p, const char* t) {
     strncpy(p->title, t, 127);
@@ -11843,13 +11884,13 @@ void ink_net_set_title(InkNetChart* p, const char* t) {
 void ink_net_set_directed(InkNetChart* p, int8_t on) {
     p->directed = on;
 }
-void ink_net_set_labels(InkNetChart* p, int8_t on) {
-    p->show_labels = on;
+void ink_net_set_weight_labels(InkNetChart* p, int8_t on) {
+    p->show_weights = on;
 }
 void ink_net_set_node_color(InkNetChart* p,
                             const char* id, const char* color) {
     int i = ink_net_find_node(p, id);
-    if (i >= 0) strncpy(p->nodes[i].color, color, 31);
+    if (i >= 0) strncpy(p->nodes[i].color, ink_resolve_color(color), 31);
 }
 void ink_net_set_node_size(InkNetChart* p,
                            const char* id, double size) {
@@ -11862,7 +11903,7 @@ void ink_net_set_edge_color(InkNetChart* p,
     for (int i = 0; i < p->n_edges; i++) {
         if (strcmp(p->edges[i].from, from) == 0 &&
             strcmp(p->edges[i].to,   to)   == 0) {
-            strncpy(p->edges[i].color, color, 31);
+            strncpy(p->edges[i].color, ink_resolve_color(color), 31);
             return;
         }
     }
@@ -11887,7 +11928,7 @@ static void ink_net_layout(InkNetChart* p) {
         return;
     }
     for (int i = 0; i < p->n_nodes; i++) {
-        double angle = 2.0 * M_PI_NET * i / p->n_nodes - M_PI_NET / 2.0;
+        double angle = 2.0 * MOCHA_MATH_PI * i / p->n_nodes - MOCHA_MATH_PI / 2.0;
         p->nodes[i].cx = cx + r * cos(angle);
         p->nodes[i].cy = cy + r * sin(angle);
     }
@@ -12004,8 +12045,8 @@ void ink_net_save(InkNetChart* p, const char* path) {
             ink_net_arrow(f, fn->cx, fn->cy, tn->cx, tn->cy,
                           r2, e->color);
 
-        /* edge weight label at midpoint */
-        if (p->show_labels && weighted && e->weight > 0.0) {
+        /* edge weight label just above the midpoint */
+        if (p->show_weights && weighted && e->weight > 0.0) {
             double mx = (fn->cx + tn->cx) / 2.0;
             double my = (fn->cy + tn->cy) / 2.0;
             /* white background rect */
@@ -12038,7 +12079,7 @@ void ink_net_save(InkNetChart* p, const char* path) {
         fprintf(f,
             "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
             "dominant-baseline=\"middle\" class=\"ink-nodelbl\">%s</text>\n",
-            n->cx, n->cy, n->label
+            n->cx, n->cy, ink_xml_esc(n->label)
         );
     }
 
@@ -12047,7 +12088,7 @@ void ink_net_save(InkNetChart* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, INK_MARGIN_TOP - 15, p->title
+            W / 2, INK_MARGIN_TOP - 15, ink_xml_esc(p->title)
         );
 
     fprintf(f, "</svg>\n");
@@ -12059,18 +12100,15 @@ void ink_net_show(InkNetChart* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_net_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── Mocha wrappers ── */
@@ -12081,7 +12119,7 @@ void ink_net_add_edge_weight_mocha(InkNetChart* p, const char* from, const char*
 void ink_net_set_node_color_mocha(InkNetChart* p, const char* id, const char* c)               { ink_net_set_node_color(p, id, c); }
 void ink_net_set_node_size_mocha(InkNetChart* p, const char* id, double s)                     { ink_net_set_node_size(p, id, s); }
 void ink_net_set_edge_color_mocha(InkNetChart* p, const char* from, const char* to, const char* c) { ink_net_set_edge_color(p, from, to, c); }
-void ink_net_set_labels_mocha(InkNetChart* p, int8_t on)              { ink_net_set_labels(p, on); }
+void ink_net_set_weight_labels_mocha(InkNetChart* p, int8_t on)              { ink_net_set_weight_labels(p, on); }
 void ink_net_set_title_mocha(InkNetChart* p, const char* t)           { ink_net_set_title(p, t); }
 void ink_net_set_directed_mocha(InkNetChart* p, int8_t on)            { ink_net_set_directed(p, on); }
 void ink_net_save_mocha(InkNetChart* p, const char* path)             { ink_net_save(p, path); }
@@ -12094,8 +12132,6 @@ void ink_net_show_mocha(InkNetChart* p)                               { ink_net_
 #define INK_SK_MAX_NODES  64
 #define INK_SK_MAX_FLOWS  256
 #define INK_SK_NODE_W     15
-#define INK_SK_PAD_X      120
-#define INK_SK_PAD_Y      20
 
 /* ── Flow ── */
 typedef struct {
@@ -12125,6 +12161,7 @@ typedef struct {
     char      title[128];
     int       width;
     int       height;
+    double    scale;   /* height per unit of flow, set by the layout */
 } InkSkChart;
 
 /* ── Constructor ── */
@@ -12142,14 +12179,11 @@ static int ink_sk_find_or_add(InkSkChart* p, const char* id) {
         if (strcmp(p->nodes[i].id, id) == 0) return i;
     if (p->n_nodes >= INK_SK_MAX_NODES) {
         fprintf(stderr, "MochaWarning (mocha-ink): max sankey nodes reached\n");
-        return 0;
+        return -1;
     }
     int i = p->n_nodes++;
     strncpy(p->nodes[i].id,    id, 63);
     strncpy(p->nodes[i].color, INK_PALETTE[i % INK_MAX_SERIES], 31);
-    p->nodes[i].col       = 0;
-    p->nodes[i].total_in  = 0.0;
-    p->nodes[i].total_out = 0.0;
     return i;
 }
 
@@ -12176,12 +12210,13 @@ void ink_sk_set_title(InkSkChart* p, const char* t) {
 void ink_sk_set_node_color(InkSkChart* p,
                            const char* id, const char* color) {
     int i = ink_sk_find_or_add(p, id);
-    strncpy(p->nodes[i].color, color, 31);
+    if (i >= 0) strncpy(p->nodes[i].color, ink_resolve_color(color), 31);
 }
 
 /* ── Column layout (longest-path layering) ── */
 static void ink_sk_assign_columns(InkSkChart* p) {
-    /* iterative relaxation — repeat until stable */
+    /* iterative relaxation until stable; columns are capped at n_nodes - 1
+       so a cycle in the flows cannot loop forever */
     int changed = 1;
     while (changed) {
         changed = 0;
@@ -12192,7 +12227,8 @@ static void ink_sk_assign_columns(InkSkChart* p) {
                 if (strcmp(p->nodes[n].id, p->flows[f].dst) == 0) di = n;
             }
             if (si < 0 || di < 0) continue;
-            if (p->nodes[di].col <= p->nodes[si].col) {
+            if (p->nodes[di].col <= p->nodes[si].col
+                    && p->nodes[si].col + 1 < p->n_nodes) {
                 p->nodes[di].col = p->nodes[si].col + 1;
                 changed = 1;
             }
@@ -12202,6 +12238,10 @@ static void ink_sk_assign_columns(InkSkChart* p) {
 
 /* ── Compute node totals ── */
 static void ink_sk_compute_totals(InkSkChart* p) {
+    for (int n = 0; n < p->n_nodes; n++) {
+        p->nodes[n].total_in  = 0.0;
+        p->nodes[n].total_out = 0.0;
+    }
     for (int f = 0; f < p->n_flows; f++) {
         for (int n = 0; n < p->n_nodes; n++) {
             if (strcmp(p->nodes[n].id, p->flows[f].src) == 0)
@@ -12267,8 +12307,9 @@ static void ink_sk_layout(InkSkChart* p) {
             if (p->nodes[i].col == c) idx[cnt++] = i;
         if (cnt == 0) continue;
 
-        /* max node height = 60% of available height divided by nodes in column */
+        /* height per unit of flow: the busiest column's nodes add up to about 27% of the plot height */
         double scale = (usable_h * 0.5) / max_col_total;
+        p->scale     = scale;
         double gap   = (cnt > 1)
                        ? (ph - usable_h) / (cnt - 1)
                        : 0.0;
@@ -12300,7 +12341,7 @@ void ink_sk_save(InkSkChart* p, const char* path) {
 
     FILE* f = fopen(path, "w");
     if (!f) {
-        fprintf(stderr, "MochaRuntimeError (mocha-ink): cannot open '%s'\n", path);
+        fprintf(stderr, "MochaRuntimeError (mocha-ink): cannot open '%s' for writing\n", path);
         exit(2);
     }
 
@@ -12344,11 +12385,9 @@ void ink_sk_save(InkSkChart* p, const char* path) {
         InkSkNode* sn = &p->nodes[si];
         InkSkNode* dn = &p->nodes[di];
 
-        /* flow max for scaling ribbon thickness */
-        double sflow = sn->total_out > 0.0 ? sn->total_out : 1.0;
-        double dflow = dn->total_in  > 0.0 ? dn->total_in  : 1.0;
-        double sw    = (fl->value / sflow) * sn->h;
-        double dw    = (fl->value / dflow) * dn->h;
+        /* ribbon width is the same at both ends: value times the layout scale */
+        double sw = fl->value * p->scale;
+        double dw = sw;
 
         /* attachment points on src (right edge) and dst (left edge) */
         double x1  = sn->x + INK_SK_NODE_W;
@@ -12417,13 +12456,13 @@ void ink_sk_save(InkSkChart* p, const char* path) {
             fprintf(f,
                 "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
                 "dominant-baseline=\"middle\" class=\"%s\">%s</text>\n",
-                n->x + INK_SK_NODE_W / 2.0, label_y - 7.0, cls, n->id
+                n->x + INK_SK_NODE_W / 2.0, label_y - 7.0, cls, ink_xml_esc(n->id)
             );
             /* value label */
             fprintf(f,
                 "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
                 "dominant-baseline=\"middle\" class=\"%s\" "
-                "font-size=\"10px\">%g</text>\n",
+                "style=\"font-size:10px\">%g</text>\n",
                 n->x + INK_SK_NODE_W / 2.0, label_y + 7.0,
                 cls,
                 n->total_in > n->total_out ? n->total_in : n->total_out
@@ -12433,7 +12472,7 @@ void ink_sk_save(InkSkChart* p, const char* path) {
             fprintf(f,
                 "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
                 "class=\"ink-skval\">%s</text>\n",
-                n->x + INK_SK_NODE_W / 2.0, n->y + n->h + 13.0, n->id
+                n->x + INK_SK_NODE_W / 2.0, n->y + n->h + 13.0, ink_xml_esc(n->id)
             );
             fprintf(f,
                 "<text x=\"%.2f\" y=\"%.2f\" text-anchor=\"middle\" "
@@ -12449,7 +12488,7 @@ void ink_sk_save(InkSkChart* p, const char* path) {
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            W / 2, INK_MARGIN_TOP - 15, p->title
+            W / 2, INK_MARGIN_TOP - 15, ink_xml_esc(p->title)
         );
 
     fprintf(f, "</svg>\n");
@@ -12461,18 +12500,15 @@ void ink_sk_show(InkSkChart* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_sk_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ── Mocha wrappers ── */
@@ -12498,8 +12534,8 @@ void ink_sk_show_mocha(InkSkChart* p)                                          {
 /* ── Diagram bounds ── */
 #define ST_P_BOT    1050.0    /* hPa — bottom of diagram           */
 #define ST_P_TOP    100.0     /* hPa — top of diagram              */
-#define ST_T_MIN   -60.0      /* °C  — left edge at 1000 hPa       */
-#define ST_T_MAX    50.0      /* °C  — right edge at 1000 hPa      */
+#define ST_T_MIN   -60.0      /* °C  — left edge at the bottom (1050 hPa)       */
+#define ST_T_MAX    50.0      /* °C  — right edge at the bottom (1050 hPa)      */
 #define ST_SKEW     0.4       /* skew factor (1.0 = 45°)           */
 
 /* ── Layout ── */
@@ -12577,8 +12613,6 @@ static InkSTPlot* ink_st_new(
     p->height             = ST_HEIGHT;
     p->show_dry_adiabats  = 1;
     p->show_moist_adiabats = 1;
-    p->show_mixing_ratios = 0;
-    p->title[0]           = '\0';
 
     int count = n < ST_MAX_LEVELS ? n : ST_MAX_LEVELS;
     for (int i = 0; i < count; i++) {
@@ -12650,7 +12684,7 @@ static double st_dry_adiabat_t(double theta_k, double p_hpa) {
     return theta_k * pow(p_hpa / 1000.0, ST_KAPPA) - 273.15;
 }
 
-/* moist adiabat: integrate dT/dP downward from (t0_c, p0_hpa)
+/* moist adiabat: integrate dT/dP from (t0_c, p0_hpa) to p_hpa (either direction)
    returns T in °C at pressure p_hpa
    uses MetPy-verified formula: dT/dP = (1/P)*(Rd*T + Lv*rs) / (Cpd + Lv²*rs*ε/(Rd*T²)) */
 #define MOIST_STEP_SIZE 2.0  /* hPa — smaller = more accurate */
@@ -12764,7 +12798,7 @@ static void ink_st_draw_background(FILE* f, InkSTPlot* p,
 
     /* ── Dry adiabats ── */
     if (p->show_dry_adiabats) {
-        /* theta values in °C (= theta_K - 273.15), every 10°C */
+        /* theta values in °C (= theta_K - 273.15): every 10 up to 100, then every 20 */
         double thetas[] = {
             -30,-20,-10, 0, 10, 20, 30, 40, 50,
              60, 70, 80, 90,100,120,140,160,180
@@ -12791,7 +12825,7 @@ static void ink_st_draw_background(FILE* f, InkSTPlot* p,
 
     /* ── Moist adiabats ── */
     if (p->show_moist_adiabats) {
-        /* starting temperatures at 1000 hPa, every 4°C */
+        /* starting temperatures at the diagram bottom (1050 hPa), every 4°C */
         double t_starts[] = {
             -20,-16,-12,-8,-4, 0, 4, 8,
              12, 16, 20, 24, 28, 32, 36
@@ -12845,8 +12879,7 @@ static void ink_st_draw_background(FILE* f, InkSTPlot* p,
 
             /* label at bottom */
             double pr_label = ST_P_BOT;
-            double ws_kgkg_ = ws_lines[wi] / 1000.0;
-            double es_l     = ws_kgkg_ * pr_label / (ST_EPS + ws_kgkg_);
+            double es_l     = ws_kgkg * pr_label / (ST_EPS + ws_kgkg);
             double t_label  = 243.5 * log(es_l / 6.112) /
                               (17.67 - log(es_l / 6.112));
             double px_label = st_t_to_px(t_label, pr_label, ml, pw);
@@ -12871,7 +12904,7 @@ static void ink_st_draw_background(FILE* f, InkSTPlot* p,
         fprintf(f,
             "<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
             "class=\"ink-title\">%s</text>\n",
-            ml + pw / 2, mt - 20, p->title);
+            ml + pw / 2, mt - 20, ink_xml_esc(p->title));
     }
 
     /* ── Axis labels ── */
@@ -12968,7 +13001,7 @@ static void ink_st_draw_sounding(FILE* f, InkSTPlot* p,
     int lx = ml + pw - 110;
     int ly = mt + 12;
     fprintf(f,
-        "<rect x=\"%d\" y=\"%d\" width=\"105\" height=\"52\" "
+        "<rect x=\"%d\" y=\"%d\" width=\"105\" height=\"64\" "
         "fill=\"white\" stroke=\"#DDD\" stroke-width=\"1\" "
         "rx=\"3\" opacity=\"0.9\"/>\n", lx, ly);
 
@@ -13023,11 +13056,11 @@ static void ink_st_draw_barb(FILE* f, double cx, double cy,
         return;
     }
 
-    /* meteorological convention: dir is where wind comes FROM
-       stem points INTO the wind (toward origin)
-       in SVG: north=up, angle 0=north, clockwise
-       convert to SVG angle: SVG 0=right, so subtract 90 */
-    double angle_rad = (dir_deg - 180.0) * M_PI_NET / 180.0;
+    /* meteorological convention: dir is where the wind comes FROM,
+       clockwise from north. The staff points toward that origin;
+       in SVG north is up, so a compass bearing maps straight onto
+       sin (x) and -cos (y) */
+    double angle_rad = dir_deg * MOCHA_MATH_PI / 180.0;
     double stem_len  = 22.0;
     double barb_len  = 10.0;
     double barb_gap  = 4.0;
@@ -13042,8 +13075,8 @@ static void ink_st_draw_barb(FILE* f, double cx, double cy,
         "stroke=\"#333\" stroke-width=\"1.2\"/>\n",
         cx, cy, sx, sy);
 
-    /* perpendicular direction for barbs (to the left of stem) */
-    double perp_rad = angle_rad - M_PI_NET / 2.0;
+    /* barbs point to the right of the staff (Northern Hemisphere convention) */
+    double perp_rad = angle_rad + MOCHA_MATH_PI / 2.0;
     double pbx = barb_len * sin(perp_rad);
     double pby = -barb_len * cos(perp_rad);
 
@@ -13054,7 +13087,7 @@ static void ink_st_draw_barb(FILE* f, double cx, double cy,
     int full_barbs = spd / 10; spd %= 10;
     int half_barbs = spd / 5;
 
-    /* position along stem from tip outward */
+    /* distance back from the tip toward the station */
     double pos = 0.0;
 
     /* ── Pennants (filled triangles, 50 kt each) ── */
@@ -13181,25 +13214,22 @@ void ink_st_save(InkSTPlot* p, const char* path) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   Show — save to temp file and open
+   Show — save mocha_ink_preview.svg and open it
    ════════════════════════════════════════════════════════════ */
 
 void ink_st_show(InkSTPlot* p) {
     const char* tmp = "mocha_ink_preview.svg";
     ink_st_save(p, tmp);
 #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "start %s", tmp);
-    system(cmd);
+    const char* opener = "start";
 #elif defined(__APPLE__)
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "open %s", tmp);
-    system(cmd);
+    const char* opener = "open";
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "xdg-open %s", tmp);
-    system(cmd);
+    const char* opener = "xdg-open";
 #endif
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s %s", opener, tmp);
+    system(cmd);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -13209,7 +13239,7 @@ void ink_st_show(InkSTPlot* p) {
 void ink_st_save_mocha(InkSTPlot* p, const char* path) { ink_st_save(p, path); }
 void ink_st_show_mocha(InkSTPlot* p)                   { ink_st_show(p); }
 
-//Freeing wrappers
+// Freeing wrappers
 void ink_lp_free(LinePlot* p)       { free(p); }
 void ink_sp_free(ScatterPlot* p)    { free(p); }
 void ink_bc_free(BarChart* p)       { free(p); }
@@ -13227,8 +13257,8 @@ void ink_net_free(InkNetChart* p) { free(p); }
 void ink_sk_free(InkSkChart* p) { free(p); }
 void ink_st_free(InkSTPlot* p)  { free(p); }
 
-
 /*!!MOCHA - INK END!!*/
+
 //Default Params
 void mocha_missing_arg(const char* name, const char* type) {
     fprintf(stderr, "MochaRuntimeError: required argument '%s: %s' was not provided.\n", name, type);
@@ -13606,7 +13636,7 @@ double metero_wind_speed_from_uv(double u, double v) {
 /* Wind direction from u/v components (degrees, meteorological) */
 double metero_wind_dir_from_uv(double u, double v) {
     double dir = MUL(
-        atan2(-u, -v) * 180.0 / 3.14159265358979323846, 1.0);
+        atan2(-u, -v) * 180.0 / MOCHA_MATH_PI, 1.0);
     if (dir < 0.0) dir = ADD(dir, 360.0);
     return dir;
 }
@@ -14311,7 +14341,6 @@ double metero_aqi_from_subindices(double pm25, double pm10,
  * mocha-metero C helpers — Solar & Radiation
  * ============================================================ */
 
-#define METERO_PI 3.14159265358979323846
 #define METERO_DEG2RAD 0.017453293
 #define METERO_RAD2DEG 57.295779513
 
@@ -14320,7 +14349,7 @@ double metero_solar_declination(int32_t day_of_year) {
     double d = (double)day_of_year;
     /* Spencer 1971 Fourier series */
     double b = MUL(
-        MUL(2.0, METERO_PI),
+        MUL(2.0, MOCHA_MATH_PI),
         DIV(SUB(d, 1.0), 365.0));
     return MUL(METERO_RAD2DEG,
         ADD(0.006918,
@@ -14335,7 +14364,7 @@ double metero_solar_declination(int32_t day_of_year) {
 /* Equation of time (minutes) from day of year */
 double metero_equation_of_time(int32_t day_of_year) {
     double b = MUL(
-        MUL(2.0, METERO_PI),
+        MUL(2.0, MOCHA_MATH_PI),
         DIV((double)(day_of_year - 1), 365.0));
     return MUL(229.18,
         ADD(0.000075,
@@ -14445,7 +14474,7 @@ double metero_extraterrestrial_radiation(double lat_deg, int32_t day_of_year) {
     double ha_r  = MUL(ha, METERO_DEG2RAD);
     /* Dr — relative earth-sun distance */
     double b     = MUL(
-        MUL(2.0, METERO_PI),
+        MUL(2.0, MOCHA_MATH_PI),
         DIV((double)day_of_year, 365.0));
     double dr    = ADD(1.0,
         MUL(0.033,
@@ -14460,7 +14489,7 @@ double metero_extraterrestrial_radiation(double lat_deg, int32_t day_of_year) {
                         mocha_ext_float_sin(ha_r, 0)));
     return MUL(
         MUL(
-            DIV(MUL(24.0, 60.0), METERO_PI),
+            DIV(MUL(24.0, 60.0), MOCHA_MATH_PI),
             MUL(gsc, dr)),
         ADD(term1, term2));
 }

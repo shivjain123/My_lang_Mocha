@@ -6,7 +6,6 @@ function test(didLoad){
     print(x.sec(RAD));
     print(x.cot(RAD));
     print(x.cosech());
-    print(x.sech().real());
     print(x.coth());
     print(x.inv_cosech());
     print(x.inv_sech());

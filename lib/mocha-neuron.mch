@@ -29,6 +29,7 @@ function mocha_tensor_relu_grad(dout: vast, out: vast) -> vast native mocha_tens
 function mocha_tensor_sigmoid_grad(dout: vast, out: vast) -> vast native mocha_tensor_sigmoid_grad;
 function mocha_tensor_tanh_grad(dout: vast, out: vast) -> vast native mocha_tensor_tanh_grad;
 function mocha_tensor_softmax_ce_grad(out: vast, labels: vast) -> vast native mocha_tensor_softmax_ce_grad;
+function mocha_tensor_softmax_grad(dout: vast, out: vast) -> vast native mocha_tensor_softmax_grad;
 function mocha_tensor_bias_grad(dout: vast) -> vast native mocha_tensor_bias_grad;
 function mocha_tensor_mse_loss(out: vast, labels: vast) -> float native mocha_tensor_mse_loss;
 function mocha_tensor_mse_grad(out: vast, labels: vast) -> vast native mocha_tensor_mse_grad;
@@ -1818,7 +1819,7 @@ class Attention {
         // softmax backward: dscores = softmax_grad(dweights, weights)
         var dscores: Tensor = Tensor(dweights.nrows, dweights.ncols);
         mocha_tensor_free(dscores.ptr);
-        dscores.ptr = mocha_tensor_sigmoid_grad(dweights.ptr, this.last_weights.ptr);
+        dscores.ptr = mocha_tensor_softmax_grad(dweights.ptr, this.last_weights.ptr);
         dweights.dispose();
 
         // scale gradient

@@ -836,6 +836,27 @@ class TypeChecker:
             )
         return "unknown"
     
+    def class_chain(self, start: str):
+        """The class and all its ancestors, depth-first in declaration order (every parent, not only the first)"""
+        all_parents = getattr(self, 'all_parents', {})
+        order = []
+        seen = set()
+
+        def walk(current):
+            if not current or current in seen:
+                return
+            seen.add(current)
+            order.append(current)
+            parents = all_parents.get(current)
+            if parents is None:
+                single = self.inheritance.get(current)
+                parents = [single] if single else []
+            for parent in parents:
+                walk(parent)
+
+        walk(start)
+        return order
+
     def lookup_member(self, obj_type: str, member: str):
         """Look up a field/method, walking up ALL parents (depth-first, declaration order)"""
         all_parents = getattr(self, 'all_parents', {})
@@ -1070,14 +1091,13 @@ class TypeChecker:
         # Too many arguments to a method would be silently dropped
         # (walks up the parent chain so inherited methods are checked too)
         if obj_type in self.class_nodes:
-            current = obj_type
-            seen = set()
             found = False
-            while current in self.class_nodes and current not in seen and not found:
-                seen.add(current)
-                cls_node = self.class_nodes[current]
-                if not hasattr(cls_node, "body"):
+            for current in self.class_chain(obj_type): # type: ignore
+                if found:
                     break
+                cls_node = self.class_nodes.get(current)
+                if cls_node is None or not hasattr(cls_node, "body"):
+                    continue
                 for member in cls_node.body:
                     if isinstance(member, (FunctionDecl, MethodDecl)) and member.name == func_name:
                         max_args = len([p for p in member.params if p.name != "didLoad"])
@@ -1089,19 +1109,17 @@ class TypeChecker:
                             )
                         found = True
                         break
-                current = self.inheritance.get(current)
 
         # Too many arguments to a constructor would be silently dropped
         # (walks up the parent chain in case the constructor is inherited)
         if obj_type is None and func_name in self.class_nodes:
-            current = func_name
-            seen = set()
             found = False
-            while current in self.class_nodes and current not in seen and not found:
-                seen.add(current)
-                cls_node = self.class_nodes[current]
-                if not hasattr(cls_node, "body"):
+            for current in self.class_chain(func_name):
+                if found:
                     break
+                cls_node = self.class_nodes.get(current)
+                if cls_node is None or not hasattr(cls_node, "body"):
+                    continue
                 for member in cls_node.body:
                     if isinstance(member, (FunctionDecl, MethodDecl)) and member.name == "constructor":
                         max_args = len([p for p in member.params if p.name != "didLoad"])
@@ -1113,7 +1131,6 @@ class TypeChecker:
                             )
                         found = True
                         break
-                current = self.inheritance.get(current)
 
         # Diamond conflict check — unqualified call on ambiguous method
         if obj_type and obj_type != "unknown":
@@ -2217,6 +2234,9 @@ class TypeChecker:
         # (so methods can reference each other!)
         for member in node.body:
             if isinstance(member, FieldDecl):
+                if getattr(member, 'is_weak', False):
+                    if "[" in member.type or not (member.type in self.class_nodes or self.symbols.lookup_safe(member.type)):
+                        self.error(f"'weak' only applies to a field whose type is a single class, not '{member.type}'", member)
                 if getattr(member, 'is_shared', False):
                     self.error("'shared' is not allowed on fields — use a module-level variable instead", member)
                 self.symbols.declare(

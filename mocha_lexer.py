@@ -1,5 +1,5 @@
 # ============================================================
-# Mocha Language Lexer v0.9
+# Mocha Language Lexer v1.0
 # mocha_lexer.py
 #
 # Converts raw Mocha source code into a stream of tokens
@@ -11,10 +11,9 @@
 #     - Literals: INT_LIT, FLOAT_LIT, STR_LIT, BOOL_LIT,
 #       COMPLEX_LIT (with 'im' suffix), NULL
 #     - Identifiers: IDENTIFIER, CONST_IDENT (SCREAMING_CASE),
-#       NATIVE
 #     - Keywords: 50+ reserved words (var, function, class,
 #       if, while, for, import, try, etc.)
-#     - Types: int, vast, float, str, bool, Result, dict, set
+#     - Types: int, vast, float, str, bool, null, Result, dict, set
 #     - Operators: arithmetic, comparison, logical, bitwise,
 #       compound assignment (+=, -=, etc.), increment/decrement
 #     - Delimiters: (), {}, [], comma, colon, semicolon, dot,
@@ -28,12 +27,12 @@
 #     raises explicit error guiding user to Mocha convention
 #     (consistency across codebase; prevents silent misparse)
 #   - Underscores for readability (1_000_000 → stored as
-#     1000000; validation: underscores only between digits,
-#     never leading/trailing/consecutive)
+#     1000000; an underscore not between two digits ends the
+#     number, so no leading/trailing/consecutive underscores)
 #   - Complex numbers via imaginary suffix: 3im, 2.5im
 #     (stored with TokenType.COMPLEX_LIT)
-#   - Compile-time error on malformed numbers (e.g. 1.2.3,
-#     E with no exponent digits)
+#   - A number ends where it stops being valid (1.2.3 lexes as
+#     1.2, then . and 3); the parser reports what follows
 #
 #   ── String Lexing ──────────────────────────────────────────
 #   - Double-quoted literals only ("hello", "line\nbreak")
@@ -43,14 +42,14 @@
 #     to strings ("a"); char-literal syntax is foreign to
 #     Mocha's vision and confuses intent
 #   - Unterminated string → compile error with line/col
-#   - Multiline strings via triple quotes ("""...""")
+#   - Multiline comments via triple quotes ("""...""")
 #   - No raw string prefix (r"..."); raw behavior via explicit
 #     escape handling in string methods (mocha-string)
 #
 #   ── Comments ───────────────────────────────────────────────
 #   - Single-line: // comment (ignored, not tokenized)
 #   - Doc comments: ~~ docstring (tokenized as DOC_COMMENT,
-#     passed to docs generator; file-top-level only per spec)
+#     collected by the parser for the docs generator)
 #   - Multiline: """comment""" (ignored, not tokenized)
 #   - Nesting not supported (first closing """ ends comment)
 #
@@ -62,14 +61,14 @@
 #     module constants to type checker)
 #   - Keyword map: 50+ reserved words mapped at lex time
 #     (immutable; no user-defined keywords)
-#   - Reserved words case-sensitive (If, CLASS rejected as
-#     identifiers — user must use lowercase keywords)
+#   - Reserved words are case-sensitive (If is a plain
+#     identifier and CLASS a CONST_IDENT, not keywords)
 #
 #   ── Operators ──────────────────────────────────────────────
 #   - Arithmetic: + - * / %
 #   - Comparison: < > <= >=
 #   - Equality: == !=
-#   - Logical: && ||, ! (not compound from & and |)
+#   - Logical: && || ! (separate from bitwise & and |)
 #   - Bitwise: & | ^ ~ << >>
 #   - Compound assignment: += -= *= /=
 #   - Increment/decrement: ++ --
@@ -84,9 +83,9 @@
 #     context (e.g. "Single-quoted char literals not supported;
 #     use double-quoted strings")
 #   - Compile fails fast on syntax error; no error recovery
-#   - Unicode non-ASCII characters silently skipped (emoji in
-#     comments, etc.); raises error only on non-printable
-#     ASCII (ord(ch) < 127 check)
+#   - Non-ASCII characters that are not letters are silently
+#     skipped (e.g. emoji outside comments); any other
+#     unrecognised ASCII character (@ $ ? etc.) is an error
 #
 #   ── Special Cases ──────────────────────────────────────────
 #   - Whitespace: space, tab, CR, LF all consumed; NL bumps
@@ -115,7 +114,7 @@ class TokenType(Enum):
     STR_LIT      = auto()   # "hello"
     BOOL_LIT     = auto()   # true / false
     COMPLEX_LIT = auto()
-    NULL     = auto()   # null (doubles as Java's null and Java's void)
+    NULL     = auto()   # null *doubles as the null value for obj or ffi handle and as void)
 
     # --- Identifiers & Keywords ---
     IDENTIFIER   = auto()   # variable/function/class names
@@ -152,7 +151,8 @@ class TokenType(Enum):
     IMPLEMENTS   = auto()
     SHARED       = auto()
     PRIVATE      = auto()
-    LOCAL      = auto()
+    LOCAL      =   auto()
+    WEAK      =   auto()
     PROTECTED    = auto()
     THIS         = auto()
     ALLOC        = auto()
@@ -205,12 +205,12 @@ class TokenType(Enum):
     OR           = auto()   # ||
     NOT          = auto()   # !
     RANGE        = auto()   # ..
-    #Bitwise
+    # --- Bitwise ---
     BIT_AND      = auto()   # &
     BIT_OR       = auto()   # |
     BIT_XOR      = auto()   # ^
     BIT_NOT      = auto()   # ~
-    BIT_SHL      = auto()   # 
+    BIT_SHL      = auto()   # <<
     BIT_SHR      = auto()   # >>
 
     # --- Increment / Decrement ---
@@ -246,7 +246,7 @@ class TokenType(Enum):
     EOF          = auto()
     UNKNOWN      = auto()
     EXTEND       = auto()
-    TAG = auto()            # My Enum!
+    TAG = auto()            # tag declaration (Mocha's enum)
     DOC_COMMENT = auto ()
 
 
@@ -262,7 +262,7 @@ KEYWORDS = {
     "lambda":     TokenType.LAMBDA,
     "async":      TokenType.ASYNC,
     "await":      TokenType.AWAIT,
-    "didLoad":   TokenType.DID_LOAD,
+    "didLoad":    TokenType.DID_LOAD,
     "class":      TokenType.CLASS,
     "interface":  TokenType.INTERFACE,
     "extends":    TokenType.EXTENDS,
@@ -270,9 +270,10 @@ KEYWORDS = {
     "shared":     TokenType.SHARED,
     "private":    TokenType.PRIVATE,
     "local":      TokenType.LOCAL,
+    "weak":       TokenType.WEAK,
     "protected":  TokenType.PROTECTED,
     "this":       TokenType.THIS,
-    "alloc":        TokenType.ALLOC,
+    "alloc":      TokenType.ALLOC,
     "if":         TokenType.IF,
     "else":       TokenType.ELSE,
     "match":      TokenType.MATCH,
@@ -420,7 +421,7 @@ class Lexer:
 
     def skip_multiline_comment(self):
         """ triple-quote multiline comment: \"\"\"..\"\"\" """
-        # already consumed first """
+        # opening """ already consumed
         while self.current() is not None:
             if (self.current() == '"'
                     and self.peek(1) == '"'
@@ -501,10 +502,10 @@ class Lexer:
                     while self.current() is not None and self.current().isdigit(): # pyright: ignore[reportOptionalMemberAccess]
                         num += self.advance()
                 else:
-                    # E with no digits after — not scientific notation, back off
-                    num = num[:-1]
-                    self.pos -= 1
-                    self.column -= 1
+                    # E and its sign with no digits after — not scientific notation, back off both
+                    num = num[:-2]
+                    self.pos -= 2
+                    self.column -= 2
                     is_float = '.' in num
 
         # Strip underscores before storing — they're purely for readability
@@ -760,7 +761,7 @@ class Lexer:
 
             else:
                 if ord(ch) > 127:
-                    continue  # silently skip unicode chars (emojis in comments etc.)
+                    continue  # silently skip non-ASCII non-letters (emoji, symbols)
                 raise MochaLexError(
                     f"Unexpected character: '{ch}'", line, col
                 )

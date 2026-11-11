@@ -1,7 +1,6 @@
 """
-mocha-SymCha v0.6 — Symbolic Mathematics Library
-UPDATE % WAS BREAKING CHANGE WHEN TAN, INV_TRIG, and HYPERBOLIC_TRIG NODES WERE ADDED
-Pure Mocha 🐶 (almost)
+mocha-SymCha v0.7 — Symbolic Mathematics Library
+Pure Mocha (almost)
 """
 
 from "mocha-math" import *;

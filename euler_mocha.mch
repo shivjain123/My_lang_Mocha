@@ -39,7 +39,7 @@ function gcd(a: int, b: int) -> int {
 // 3. SEARCH 4D EULER BRICKS
 // ============================================================
 function search_4d(limit: int) -> int[][] {
-    var results: int[][] = [];
+    var results: int[][] = [[]];
     var a: int = 1;
     while (a <= limit) {
         var b: int = a;

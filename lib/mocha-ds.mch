@@ -3181,7 +3181,7 @@ class BloomFilter {
     function constructor(expected_items: int, false_positive_rate: float) -> null {
         var n: float = float(expected_items);
         var p: float = false_positive_rate;
-        var ln2: float = 0.6931471805599453;
+        var ln2: float = (2.0).log().real;
         var ln_p: float = p.log().real;
         var m_calc: float = (-1.0 * n * ln_p) / (ln2 * ln2);
         this.m = int(m_calc) + 1;
@@ -3263,7 +3263,7 @@ class CountingBloomFilter {
     function constructor(expected_items: int, false_positive_rate: float) -> null {
         var n: float = float(expected_items);
         var p: float = false_positive_rate;
-        var ln2: float = 0.6931471805599453;
+        var ln2: float = (2.0).log().real;
         var ln_p: float = p.log().real;
         var m_calc: float = (-1.0 * n * ln_p) / (ln2 * ln2);
         this.m = int(m_calc) + 1;

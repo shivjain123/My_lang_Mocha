@@ -565,7 +565,7 @@ function section_sets() -> null {
     print(u.size, newLine=true);           // 7
     var inter: set<int> = sa.intersect(sb);
     print(inter.size, newLine=true);       // 2
-    var d: set<int> = sa.diff(sb);
+    var d: set<int> = sa.rel_diff(sb);
     print(d.size, newLine=true);           // 5
 
     var sn: set<int> = <1, 2, 3>;

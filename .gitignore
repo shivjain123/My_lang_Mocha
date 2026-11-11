@@ -103,3 +103,6 @@ tiny_*.mch
 leak_*.mch
 
 !lua_*.mch
+_old_build/
+corpus_current/try_*.py
+decomp_out/

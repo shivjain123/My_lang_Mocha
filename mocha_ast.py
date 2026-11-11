@@ -57,8 +57,8 @@ class BinaryOp(Node):
     left:  Node
     op:    str
     right: Node
-    inferred_type: str = None # type: ignore
-    op_kind: str = None #type: ignore
+    inferred_type: Optional[str] = None
+    op_kind: Optional[str] = None
 
 # --- Unary Operation ---
 @dataclass
@@ -122,7 +122,7 @@ class Param(Node):
     name: str
     type: str
     is_required: bool = False
-    default: Node = None # type: ignore
+    default: Optional[Node] = None
 
 # --- Function Declaration ---
 @dataclass
@@ -134,10 +134,10 @@ class FunctionDecl(Node):
     is_async:    bool = False
     has_didLoad: bool = False
     is_native:   bool = False
-    native_name: str  = "" # None
+    native_name: str  = ""
     is_variadic: bool = False
-    is_local:    bool = False   # like static of C (local=true function only for that file)
-    doc:         list = None   # type: ignore # list of ~~ comment strings
+    is_local:    bool = False   # like C's static: function is visible only inside its own file
+    doc:         Optional[list] = None   # list of ~~ comment strings
 
 # --- Function Call: add(1, 2) ---
 @dataclass
@@ -188,7 +188,7 @@ class ForEachLoop(Node):
 
 @dataclass
 class SetIterable(Node):
-    set_expr: Node  # the set being iterated
+    set_expr: Node
 
 # --- Break / Continue ---
 @dataclass
@@ -248,6 +248,7 @@ class FieldDecl(Node):
     visibility: str = "public"
     value:      Optional[Node] = None
     is_shared:  bool = False
+    is_weak:    bool = False   # weak var: non-owning reference (no retain, nulled view once the target dies)
 
 # --- Method Declaration ---
 @dataclass
@@ -292,7 +293,7 @@ class ImportStmt(Node):
 @dataclass
 class LibQualifiedCall(Node):
     source:  str   # "mocha-math"
-    method:  str   # sin
+    method:  str   # "cos"
     args:    list
 
 # --- Ok / Error Result ---
@@ -314,7 +315,7 @@ class IndexAccess(Node):
     obj: Node       # the array
     index: Node     # the index expression
 
-# 2D Arrays #
+# --- 2D Arrays ---
 @dataclass
 class Index2DAccess(Node):
     obj: Node        # the 2D array
@@ -347,7 +348,7 @@ class SetLiteral(Node):
 
 @dataclass
 class ExtendDecl(Node):
-    type_name: str        # "str", "int", "float", "bool", or class name
+    type_name: str        # any type name: built-in, collection or class
     body:      list       # list of FunctionDecl nodes
 
 @dataclass
@@ -362,7 +363,7 @@ class ListComprehension(Node):
     var_name:  str            # "x"
     iterable:  Node           # nums
     condition: Optional[Node] # x>0, or None
-    else_expr:     Optional[Node] # NEW — for "else" after if
+    else_expr:     Optional[Node] # for "else" after if
     elem_type: str            # inferred element type
     src_elem_type: str = ""
 

@@ -402,6 +402,18 @@ __global__ void kernel_softmax_ce_grad(float* out, float* labels, float* din, in
     if (i < n) din[i] = out[i] - labels[i];
 }
 
+/* Softmax gradient (one row per thread): dInput_ij = out_ij * (dOutput_ij - sum_k dOutput_ik * out_ik) */
+__global__ void kernel_softmax_grad(float* dout, float* out, float* din, int rows, int cols) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= rows) return;
+    float* d = dout + row * cols;
+    float* o = out + row * cols;
+    float* g = din + row * cols;
+    float dot = 0.0f;
+    for (int j = 0; j < cols; j++) dot += d[j] * o[j];
+    for (int j = 0; j < cols; j++) g[j] = o[j] * (d[j] - dot);
+}
+
 /* Bias gradient: sum dOutput rows → dBias [1 x cols] */
 __global__ void kernel_bias_grad(float* dout, float* dbias, int rows, int cols) {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -475,6 +487,16 @@ extern "C" MochaTensor* mocha_tensor_softmax_ce_grad(MochaTensor* out, MochaTens
     din->on_gpu = 1;
     int n = out->rows * out->cols;
     kernel_softmax_ce_grad<<<blocks(n, 256), 256>>>(out->dev_data, labels->dev_data, din->dev_data, n);
+    return din;
+}
+
+extern "C" MochaTensor* mocha_tensor_softmax_grad(MochaTensor* dout, MochaTensor* out) {
+    if (!dout->on_gpu) mocha_tensor_upload(dout);
+    if (!out->on_gpu)  mocha_tensor_upload(out);
+    MochaTensor* din = mocha_tensor_new(dout->rows, dout->cols);
+    cudaMalloc((void**)&din->dev_data, dout->rows * dout->cols * sizeof(float));
+    din->on_gpu = 1;
+    kernel_softmax_grad<<<blocks(dout->rows, 256), 256>>>(dout->dev_data, out->dev_data, din->dev_data, dout->rows, dout->cols);
     return din;
 }
 

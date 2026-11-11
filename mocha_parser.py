@@ -1774,6 +1774,17 @@ class Parser:
             is_async = True
             self.advance()
 
+        # Weak modifier: only valid directly before 'var' (a non-owning field)
+        is_weak = False
+        if self.check(TokenType.WEAK):
+            is_weak = True
+            self.advance()
+            if not self.check(TokenType.VAR):
+                raise MochaParseError(
+                    "'weak' can only be used on a field: weak var name: Type;",
+                    self.current()
+                )
+
         # Method
         if self.check(TokenType.FUNCTION):
             method = self.parse_function(
@@ -1814,8 +1825,14 @@ class Parser:
                 value = self.parse_expression()
 
             self.expect(TokenType.SEMICOLON, "Expected ';' after field")
+            if is_weak and value is not None:
+                raise MochaParseError(
+                    "A weak field cannot have an initial value; assign it later with this.name = ...;",
+                    tok
+                )
             node = FieldDecl(name=name, type=type_,
-                    visibility=visibility, value=value, is_shared=is_shared)
+                    visibility=visibility, value=value, is_shared=is_shared,
+                    is_weak=is_weak)
             node.line = tok.line
             node.col = tok.column
             return node

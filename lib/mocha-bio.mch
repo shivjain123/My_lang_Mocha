@@ -26,7 +26,7 @@
     13. Genetics
 
     Part of Mocha Scientific Library Ecosystem
-    License: Polyform Noncommercial
+    License: Apache 2.0
 """
 
 //FFI Wrappers
@@ -1710,7 +1710,6 @@ function free_water_deficit(weight_kg: float, sodium: float, sex: Sex) -> float 
      PHARMACOKINETICS CONSTANTS
      ========================  """
 
-const LN2: float = 0.6931471805599453;
 const F_MIN: float = 0.0;
 const F_MAX: float = 1.0;
 const CONCENTRATION_MIN: float = 0.0;
@@ -1788,7 +1787,7 @@ function half_life(ke: float) -> float {
         c_exit(2);
         return 0.0;
     };
-    return LN2 / ke;
+    return ((2.0).log().real) / ke;
 };
 
 ~~ Half-life from CL and Vd directly
@@ -1802,7 +1801,7 @@ function half_life_from_cl_vd(cl: float, vd: float) -> float {
         c_exit(2);
         return 0.0;
     };
-    return (LN2 * vd) / cl;
+    return (((2.0).log().real) * vd) / cl;
 };
 
 ~~ Volume of distribution
@@ -3026,7 +3025,7 @@ function doubling_time(r: float) -> float {
         c_exit(2);
         return 0.0;
     };
-    return LN2 / r;
+    return ((2.0).log().real) / r;
 };
 
 ~~ Carrying capacity utilization — what fraction of K is currently used

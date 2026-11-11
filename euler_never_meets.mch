@@ -40,4 +40,7 @@ function main(didLoad) -> null {
     
     print("euler_spiral.svg saved", newLine=true);
     print("The ends never meet...", newLine=true);
+    
+    p.show();
+    p.dispose();
 };

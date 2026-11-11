@@ -795,18 +795,11 @@ class ExponentialDist {
         return c_exp(-this.rate * x);
     };
 
-    function mean() -> float {
-        return 1.0 / this.rate;
-    };
+    function mean() -> float { return 1.0 / this.rate; };
 
-    function variance() -> float {
-        return 1.0 / (this.rate * this.rate);
-    };
+    function variance() -> float { return 1.0 / (this.rate * this.rate); };
 
-    function median() -> float {
-        var ln2: float = 0.69314718055994;
-        return ln2 / this.rate;
-    };
+    function median() -> float { return ((2.0).log().real) / this.rate; };
 
     function memoryless(t: float, s: float) -> float {
         if (t < 0.0 || s < 0.0) {

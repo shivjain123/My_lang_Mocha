@@ -122,8 +122,8 @@ extend Heatmap {
 
 extend PieChart {
     function title(t: str) -> null native ink_pc_set_title;
-    function show_percent() -> null native ink_pc_set_show_percent;
-    function show_values() -> null native ink_pc_set_show_values;
+    function show_percent(on: bool) -> null native ink_pc_set_show_percent;
+    function show_values(on: bool) -> null native ink_pc_set_show_values;
     function color(i: int, c: str) -> null native ink_pc_set_color;
     function save(path: str) -> null native ink_pc_save;
     function show() -> null native ink_pc_show;
@@ -219,6 +219,7 @@ extend BubbleChart {
     function grid(on: bool) -> null native ink_bc2_set_grid;
     function min_size(r: float) -> null native ink_bc2_set_min_size;
     function max_size(r: float) -> null native ink_bc2_set_max_size;
+    function size_by_area(on: bool) -> null native ink_bc2_set_size_by_area;
     function add(x: float[], y: float[], z: float[]) -> null native ink_bc2_add;
     function save(path: str) -> null native ink_bc2_save;
     function show() -> null native ink_bc2_show;
@@ -294,7 +295,7 @@ extend NetworkChart {
     function nodecolor(id: str, color: str) -> null native ink_net_set_node_color_mocha;
     function nodesize(id: str, size: float) -> null native ink_net_set_node_size_mocha;
     function edgecolor(src: str, dst: str, color: str) -> null native ink_net_set_edge_color_mocha;
-    function labels(on: bool) -> null native ink_net_set_labels_mocha;
+    function weight_labels(on: bool) -> null native ink_net_set_weight_labels_mocha;
     function title(t: str) -> null native ink_net_set_title_mocha;
     function directed(on: bool) -> null native ink_net_set_directed_mocha;
     function save(path: str) -> null native ink_net_save_mocha;
