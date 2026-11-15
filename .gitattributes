@@ -1,1 +1,2 @@
-*.mch linguist-language=Text
+*.mch linguist-language=Mocha
+*.mchi linguist-language=Mocha
