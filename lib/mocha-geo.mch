@@ -11,7 +11,7 @@ Section 5: Volcanology
 Section 6: Geochronology
 
 Part of the Mocha Scientific Library Ecosystem
-License: Polyform Non-Commercial
+License: Apache 2.0
 
 """
 

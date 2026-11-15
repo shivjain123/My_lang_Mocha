@@ -24,9 +24,12 @@ class TypeChecker {
     var current_class:  str;
     var current_return: str;
     var loop_depth:     int;
+    var try_depth:      int;
+    var rescue_depth:   int;
     var inheritance:    HashTable;
     var errors:         MochaTypeError[];
     var tag_types:      str[];
+    var class_names:    str[];
     var current_shared: bool;
 
     function constructor() -> null {
@@ -34,9 +37,12 @@ class TypeChecker {
         this.current_class  = "";
         this.current_return = "";
         this.loop_depth     = 0;
+        this.try_depth      = 0;
+        this.rescue_depth   = 0;
         this.inheritance    = HashTable();
         this.errors         = [];
         this.tag_types      = [];
+        this.class_names    = [];
         this.current_shared = false;
 
         // Built-in functions
@@ -56,6 +62,22 @@ class TypeChecker {
         this.symbols.declareClass("Complex");
         this.symbols.declareClass("File");
         this.symbols.declareClass("HashTable");
+    };
+
+    // true for classes declared with 'class' in the program (not tags, interfaces or built-ins)
+    function isUserClass(name: str) -> bool {
+        var i: int = 0;
+        while (i < this.class_names.length) {
+            if (this.class_names[i] == name) { return true; };
+            i += 1;
+        };
+        return false;
+    };
+
+    // true for classes and for the C-backed handle types: these are move-only
+    function isMoveOnly(type_name: str) -> bool {
+        if (this.isUserClass(type_name)) { return true; };
+        return type_name == "File" || type_name == "StringBuilder" || type_name == "HashTable";
     };
 
     // -------------------------------------------------------
@@ -116,6 +138,15 @@ class TypeChecker {
         return "";
     };
 
+        // int < vast < float < Complex, or -1 if not numeric
+    function numericRank(t: str) -> int {
+        if (t == "int")     { return 0; };
+        if (t == "vast")    { return 1; };
+        if (t == "float")   { return 2; };
+        if (t == "Complex") { return 3; };
+        return -1;
+    };
+
     function typesCompatible(expected: str, actual: str) -> bool {
         if (expected == actual) { return true; };
 
@@ -123,8 +154,12 @@ class TypeChecker {
         if (actual == "unknown" || actual == "any") { return true; };
         if (expected == "unknown" || expected == "any") { return true; };
 
-        // numeric types are mutually compatible
-        if (this.isNumeric(expected) && this.isNumeric(actual)) { return true; };
+        // numeric types only convert upward: int -> vast -> float -> Complex
+        var exp_rank: int = this.numericRank(expected);
+        var act_rank: int = this.numericRank(actual);
+        if (exp_rank >= 0 && act_rank >= 0) {
+            return act_rank <= exp_rank;
+        };
 
         // null compatible with non-primitives
         if (actual == "null" && this.isPrimitive(expected) == false) { return true; };
@@ -206,6 +241,12 @@ class TypeChecker {
 
         // Arithmetic: + - * / %
         if (op == "+" || op == "-" || op == "*" || op == "/" || op == "%") {
+            // Tags are not integers
+            if (this.isTagType(left) || this.isTagType(right)) {
+                this.addErrorAt("Arithmetic on tag types is not allowed. Tags are not integers. Use match() for tag logic.", node);
+                return "int";
+            };
+
             // String concat
             if (op == "+" && left == "str" && right == "str") { return "str"; };
 
@@ -264,13 +305,25 @@ class TypeChecker {
             return "bool";
         };
 
+        // Bitwise: & | ^ << >>
+        if (op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>") {
+            if (left != "int" && left != "vast") {
+                this.addErrorAt("Bitwise operator '" + op + "' requires int or vast, got '" + left + "'", node);
+            };
+            if (right != "int" && right != "vast") {
+                this.addErrorAt("Bitwise operator '" + op + "' requires int or vast, got '" + right + "'", node);
+            };
+            if (left == "vast" || right == "vast") { return "vast"; };
+            return "int";
+        };
+
         return "unknown";
     };
 
     function checkExpr(node: ASTNode) -> str {
         var kind: str = node.kind;
         match (kind) {
-             case "IntLiteral":     return "int";
+            case "IntLiteral":     return "int";
             case "FloatLiteral":   return "float";
             case "ComplexLiteral": return "Complex";
             case "StrLiteral":     return "str";
@@ -309,6 +362,15 @@ class TypeChecker {
 
             case "MemberAccess":
                 return this.checkMemberAccess(node);
+
+            case "TagAccess":
+                var tag_key: str = node.value + "." + node.extra;
+                var tag_sym: str = this.symbols.lookupEncoded(tag_key);
+                if (tag_sym == "") {
+                    this.addErrorAt("'" + node.extra + "' is not a member of tag '" + node.value + "'", node);
+                    return "unknown";
+                };
+                return this.symbols.decodeField(tag_sym, 0);
 
             case "IndexAccess":
                 return this.checkIndexAccess(node);
@@ -407,6 +469,9 @@ class TypeChecker {
 
         var result_type: str = this.resultTypeOfOp(node.value, left_type, right_type, node);
 
+        // inferred type for codegen
+        node.type_str = result_type;
+
         // Set op_kind in node.extra for codegen
         var op: str = node.value;
 
@@ -477,12 +542,25 @@ class TypeChecker {
             return result_type;
         };
 
+        // Bitwise: vast_bit_* if either side is vast, otherwise int_bit_*
+        if (op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>") {
+            var bit_pfx: str = "int_";
+            if (left_type == "vast" || right_type == "vast") { bit_pfx = "vast_"; };
+            if (op == "&")  { node.extra = bit_pfx + "bit_and"; };
+            if (op == "|")  { node.extra = bit_pfx + "bit_or"; };
+            if (op == "^")  { node.extra = bit_pfx + "bit_xor"; };
+            if (op == "<<") { node.extra = bit_pfx + "bit_shl"; };
+            if (op == ">>") { node.extra = bit_pfx + "bit_shr"; };
+            return result_type;
+        };
+
         // Logical
         if (op == "&&") { node.extra = "bool_and"; };
         if (op == "||") { node.extra = "bool_or"; };
 
         return result_type;
     };
+
     function checkUnaryOp(node: ASTNode) -> str {
         var right_type: str = this.checkExpr(node.right);
         if (node.value == "!") {
@@ -494,6 +572,12 @@ class TypeChecker {
         if (node.value == "-") {
             if (this.isNumeric(right_type) == false) {
                 this.addErrorAt("Unary '-' requires int or float, got '" + right_type + "'", node);
+            };
+            return right_type;
+        };
+        if (node.value == "~") {
+            if (right_type != "int" && right_type != "vast") {
+                this.addErrorAt("'~' requires int or vast, got '" + right_type + "'", node);
             };
             return right_type;
         };
@@ -596,15 +680,23 @@ class TypeChecker {
                 elem_type = "unknown";
             };
         };
+
+        // source element type for codegen
+        node.extra = elem_type;
+
         this.symbols.pushScope();
         this.symbols.declareSimple(node.value, elem_type);
         var expr_type: str = this.checkExpr(node.left);
+
+        // result element type for codegen
+        node.type_str = expr_type;
+
         if (node.condition != null) {
             var cond_type: str = this.checkExpr(node.condition);
             if (cond_type != "bool") {
                 this.addErrorAt("List comprehension condition must be bool, got '" + cond_type + "'", node);
             };
-            // NEW — check else branch if present
+            // check else branch if present
             if (node.else_body.length > 0) {
                 var else_type: str = this.checkExpr(node.else_body[0]);
                 if (else_type != expr_type) {
@@ -620,7 +712,7 @@ class TypeChecker {
         this.symbols.pushScope();
         var i: int = 0;
         while (i < node.params.length) {
-            this.symbols.declareSimple(node.params[i].value, node.params[i].type_str);
+            this.declareChecked(node.params[i].value, node.params[i].type_str, false, node.params[i]);
             i += 1;
         };
         if (node.type_str != "" && node.type_str != "null") {
@@ -664,7 +756,7 @@ class TypeChecker {
             var ck: str = this.checkExpr(node.right);
             if (rk != "str") { this.addErrorAt("Dict key must be str, got '" + rk + "'", node); };
             if (ck != "str") { this.addErrorAt("Dict key must be str, got '" + ck + "'", node); };
-            return "dict";
+            return "any";
         };
 
         var row_type: str = this.checkExpr(node.condition);
@@ -994,6 +1086,14 @@ class TypeChecker {
                 this.checkForeach(node);
             case "MatchStmt":
                 this.checkMatch(node);
+            case "TryRescue":
+                this.checkTryRescue(node);
+            case "FailStmt":
+                this.checkFail(node);
+            case "RethrowStmt":
+                if (this.rescue_depth == 0) {
+                    this.addErrorAt("'rethrow' used outside of a rescue block", node);
+                };
             case "BreakStmt":
                 if (this.loop_depth == 0) {
                     this.addErrorAt("'break' used outside of a loop", node);
@@ -1023,24 +1123,99 @@ class TypeChecker {
         };
     };
 
-    function checkBlock(stmts: ASTNode[]) -> null {
-        this.symbols.pushScope();
+    function checkStmtList(stmts: ASTNode[]) -> null {
+        var left_block: bool = false;
+        var reported:   bool = false;
         var i: int = 0;
         while (i < stmts.length) {
-            this.checkStmt(stmts[i]);
+            var stmt: ASTNode = stmts[i];
+            if (left_block && reported == false) {
+                this.addErrorAt("Unreachable code: this statement can never run, because an earlier statement always leaves the block.", stmt);
+                reported = true;
+            };
+            this.checkStmt(stmt);
+            if (left_block == false) {
+                var one: ASTNode[] = [];
+                one.push(stmt);
+                if (this.hasReturn(one) || stmt.kind == "BreakStmt" || stmt.kind == "ContinueStmt") {
+                    left_block = true;
+                };
+            };
             i += 1;
         };
+    };
+
+    function checkBlock(stmts: ASTNode[]) -> null {
+        this.symbols.pushScope();
+        this.checkStmtList(stmts);
         this.symbols.popScope();
     };
 
+    // "int[][]" -> 2
+    function countBrackets(t: str) -> int {
+        var n: int = 0;
+        var i: int = 0;
+        while (i < t.length) {
+            if (t.charAt(i) == "[") { n += 1; };
+            i += 1;
+        };
+        return n;
+    };
+
+    // true if the type ends with "[]"
+    function endsWithBrackets(t: str) -> bool {
+        if (t.length < 2) { return false; };
+        return t.charAt(t.length - 2) == "[" && t.charAt(t.length - 1) == "]";
+    };
+
+    // "File[][]" -> "File", "int" -> "int"
+    function baseTypeName(t: str) -> str {
+        var i: int = 0;
+        while (i < t.length) {
+            if (t.charAt(i) == "[") {
+                if (i == 0) { return ""; };
+                return t.substring(0, i - 1);
+            };
+            i += 1;
+        };
+        return t;
+    };
+
+    // declare a variable/constant in the current scope, rejecting a second declaration
+    function declareChecked(name: str, type_str: str, is_const: bool, node: ASTNode) -> null {
+        if (this.symbols.isDeclaredLocally(name)) {
+            this.addErrorAt("'" + name + "' is already declared in this scope. Mocha prohibits variable redeclaration.", node);
+        };
+        this.symbols.declare(name, type_str, is_const, false, false, "public");
+    };
+
     function checkVarDecl(node: ASTNode) -> null {
+        var dims: int = this.countBrackets(node.type_str);
+
+        // 3D arrays not supported
+        if (dims > 2) {
+            this.addErrorAt(str(dims) + "D arrays are not supported in Mocha. Use a class or 2D array instead.", node);
+        };
+
+        // Arrays of C-backed handle types are not supported
+        if (this.endsWithBrackets(node.type_str)) {
+            var handle_type: str = this.baseTypeName(node.type_str);
+            if (handle_type == "File" || handle_type == "StringBuilder" || handle_type == "HashTable") {
+                this.addErrorAt("Arrays of " + handle_type + " are not supported. Keep each " + handle_type + " in its own variable.", node);
+            };
+        };
+
         var value_type: str = "unknown";
         if (node.left != null) {
             value_type = this.checkExpr(node.left);
         };
 
-        if (value_type == "unknown[]" && node.type_str.length >= 2) {
-            // empty array literal — trust declared type
+        // Empty array literal [] fits any 1D array type; a 2D type needs [[]] or alloc T[0][0]
+        if (value_type == "unknown[]" && this.endsWithBrackets(node.type_str)) {
+            if (dims == 2) {
+                var base_type: str = this.baseTypeName(node.type_str);
+                this.addErrorAt("'" + node.value + "' is a 2D array ('" + node.type_str + "') and cannot be initialised with an empty '[]'. Write an empty 2D array as [[]] (one empty row) or alloc " + base_type + "[0][0].", node);
+            };
         } else if (this.typesCompatible(node.type_str, value_type) == false) {
             this.addErrorAt("Type mismatch in declaration of '" + node.value + "': declared as '" + node.type_str + "' but value is '" + value_type + "'", node);
         };
@@ -1051,19 +1226,51 @@ class TypeChecker {
             };
         };
 
-        this.symbols.declareSimple(node.value, node.type_str);
+        this.declareChecked(node.value, node.type_str, false, node);
+
+        // Class instances and C-backed handles are move-only, not aliasable
+        if (this.isMoveOnly(node.type_str) && node.left != null) {
+            if (node.left.kind == "Identifier") {
+                this.reportAlias(node.type_str, node.left.value, node.value, node);
+            };
+        };
     };
 
     function checkConstDecl(node: ASTNode) -> null {
+        var dims: int = this.countBrackets(node.type_str);
+
+        // 3D arrays not supported
+        if (dims > 2) {
+            this.addErrorAt(str(dims) + "D arrays are not supported in Mocha. Use a class or 2D array instead.", node);
+        };
+
         var value_type: str = this.checkExpr(node.left);
 
-        if (value_type == "unknown[]" && node.type_str.length >= 2) {
-            // empty array literal — trust declared type
+        // Empty array literal [] fits any 1D array type; a 2D type needs [[]] or alloc T[0][0]
+        if (value_type == "unknown[]" && this.endsWithBrackets(node.type_str)) {
+            if (dims == 2) {
+                var base_type: str = this.baseTypeName(node.type_str);
+                this.addErrorAt("'" + node.value + "' is a 2D array ('" + node.type_str + "') and cannot be initialised with an empty '[]'. Write an empty 2D array as [[]] (one empty row) or alloc " + base_type + "[0][0].", node);
+            };
         } else if (this.typesCompatible(node.type_str, value_type) == false) {
             this.addErrorAt("Type mismatch in constant '" + node.value + "': declared as '" + node.type_str + "' but value is '" + value_type + "'", node);
         };
 
-        this.symbols.declare(node.value, node.type_str, true, false, false, "public");
+        // Class instances and C-backed handles are move-only, not aliasable
+        if (this.isMoveOnly(node.type_str)) {
+            if (node.left.kind == "Identifier") {
+                this.reportAlias(node.type_str, node.left.value, node.value, node);
+            };
+        };
+
+        this.declareChecked(node.value, node.type_str, true, node);
+    };
+
+    // shared error for var / const / assignment aliasing
+    function reportAlias(type_name: str, from_name: str, into_name: str, node: ASTNode) -> null {
+        var kind: str = "class instance";
+        if (this.isUserClass(type_name) == false) { kind = type_name + " handle"; };
+        this.addErrorAt("Cannot alias " + kind + " '" + from_name + "' into '" + into_name + "': " + kind + "s in Mocha are move-only, not copyable. This prevents security issues and accidental mutations. Construct a new one instead.", node);
     };
 
     function checkAssignment(node: ASTNode) -> null {
@@ -1073,6 +1280,14 @@ class TypeChecker {
         };
 
         var value_type: str = this.checkExpr(node.right);
+
+        // C-backed handles have no RC: storing a variable of one into a field or an
+        // array/dict slot would leave two owners of one object
+        if (node.left.kind != "Identifier" && node.right.kind == "Identifier") {
+            if (value_type == "File" || value_type == "StringBuilder" || value_type == "HashTable") {
+                this.addErrorAt("Cannot store " + value_type + " handle '" + node.right.value + "' into a field or element: " + value_type + " handles in Mocha are move-only, not copyable. Construct a new one in place instead.", node);
+            };
+        };
 
         if (node.left.kind == "Identifier") {
             var encoded: str = this.symbols.lookupEncoded(node.left.value);
@@ -1084,10 +1299,38 @@ class TypeChecker {
                 if (this.typesCompatible(target_type, value_type) == false) {
                     this.addErrorAt("Type mismatch: cannot assign '" + value_type + "' to '" + node.left.value + "' which is '" + target_type + "'", node);
                 };
+
+                // Class instances and C-backed handles are move-only, not aliasable (x = x is fine)
+                if (this.isMoveOnly(target_type)) {
+                    if (node.right.kind == "Identifier") {
+                        if (node.right.value != node.left.value) {
+                            this.reportAlias(target_type, node.right.value, node.left.value, node);
+                        };
+                    };
+                };
             };
 
         } else if (node.left.kind == "MemberAccess") {
-            this.checkExpr(node.left);
+            // Complex is immutable: c.real = 9 would be silently ignored by codegen
+            var target_obj_type: str = this.checkExpr(node.left.left);
+            if (target_obj_type == "Complex") {
+                this.addErrorAt("Cannot assign to '" + node.left.value + "': Complex is immutable in Mocha. Create a new one instead, e.g. c = Complex(9, c.imag)", node);
+                return;
+            };
+
+            var field_type: str = this.checkExpr(node.left);
+            var field_is_prim: bool = field_type == "int" || field_type == "vast" || field_type == "float" || field_type == "bool" || field_type == "str";
+            var value_is_prim: bool = value_type == "int" || value_type == "vast" || value_type == "float" || value_type == "bool" || value_type == "str";
+
+            // null is not a number: it can't clear an int/vast/float/bool field
+            if (node.right.kind == "NullLiteral" && field_is_prim && field_type != "str") {
+                this.addErrorAt("Cannot assign null to '" + node.left.value + "' which is '" + field_type + "'. null is only valid for str, class, array and other pointer types; use 0 to reset a number.", node);
+            } else if (field_is_prim && value_is_prim) {
+                // primitive field: the value's primitive type must be compatible (same rule as variables)
+                if (this.typesCompatible(field_type, value_type) == false) {
+                    this.addErrorAt("Type mismatch: cannot assign '" + value_type + "' to field '" + node.left.value + "' which is '" + field_type + "'", node);
+                };
+            };
 
         } else if (node.left.kind == "IndexAccess") {
             if (node.left.left.kind == "Identifier") {
@@ -1097,7 +1340,17 @@ class TypeChecker {
             };
             var obj_type: str = this.checkExpr(node.left.left);
             this.checkExpr(node.left.right);
-            if (obj_type == "dict") { return; };
+
+            // Dict assignment: values are dynamic, but a dict cannot hold itself
+            if (obj_type == "dict") {
+                if (node.left.left.kind == "Identifier" && node.right.kind == "Identifier") {
+                    if (node.left.left.value == node.right.value) {
+                        this.addErrorAt("Cannot store dict '" + node.right.value + "' inside itself. That creates a cycle, and printing or releasing it would never end", node);
+                    };
+                };
+                return;
+            };
+
             var elem_type: str = this.extractElementType(obj_type);
             if (elem_type == "") {
                 this.addErrorAt("Cannot index into non-array type '" + obj_type + "'", node);
@@ -1112,6 +1365,8 @@ class TypeChecker {
                 };
             };
             var obj_type2: str = this.checkExpr(node.left.left);
+            // Nested dict write, e.g. d["a"]["b"] = v: values are dynamic, always valid
+            if (obj_type2 == "dict") { return; };
             var elem2: str = this.extractElementType(obj_type2);
             if (elem2 != "") { elem2 = this.extractElementType(elem2); };
             if (elem2 == "") {
@@ -1129,6 +1384,13 @@ class TypeChecker {
         if (node.left.kind == "Identifier") {
             if (this.symbols.isConst(node.left.value)) {
                 this.addErrorAt("Cannot use '" + node.value + "' on constant '" + node.left.value + "'", node);
+            };
+        } else if (node.left.kind == "MemberAccess") {
+            // Complex is immutable: c.real += 5 must not reach codegen
+            var target_obj_type: str = this.checkExpr(node.left.left);
+            if (target_obj_type == "Complex") {
+                this.addErrorAt("Cannot use '" + node.value + "' on '" + node.left.value + "': Complex is immutable in Mocha. Create a new one instead, e.g. c = Complex(c.real + 5, c.imag)", node);
+                return;
             };
         } else if (node.left.kind == "IndexAccess") {
             if (node.left.left.kind == "Identifier") {
@@ -1212,6 +1474,32 @@ class TypeChecker {
         this.loop_depth -= 1;
     };
 
+    function checkTryRescue(node: ASTNode) -> null {
+        // try body in its own scope
+        this.try_depth += 1;
+        this.symbols.pushScope();
+        this.checkStmtList(node.body);
+        this.symbols.popScope();
+        this.try_depth -= 1;
+
+        // rescue body in its own scope (node.value is the optional binding name)
+        this.rescue_depth += 1;
+        this.symbols.pushScope();
+        if (node.value != "") {
+            this.symbols.declareSimple(node.value, "str");
+        };
+        this.checkStmtList(node.else_body);
+        this.symbols.popScope();
+        this.rescue_depth -= 1;
+    };
+
+    function checkFail(node: ASTNode) -> null {
+        var msg_type: str = this.checkExpr(node.left);
+        if (msg_type != "str") {
+            this.addErrorAt("'fail' expects a str message, got '" + msg_type + "'", node);
+        };
+    };
+
     function checkFor(node: ASTNode) -> null {
         this.loop_depth += 1;
         this.symbols.pushScope();
@@ -1223,11 +1511,7 @@ class TypeChecker {
         };
         this.checkExpr(node.right);
 
-        var i: int = 0;
-        while (i < node.body.length) {
-            this.checkStmt(node.body[i]);
-            i += 1;
-        };
+        this.checkStmtList(node.body);
 
         this.symbols.popScope();
         this.loop_depth -= 1;
@@ -1242,13 +1526,10 @@ class TypeChecker {
         if (iterable_type.length >= 4) {
             if (iterable_type.substring(0, 3) == "set<") {
                 elem_type = iterable_type.substring(4, iterable_type.length - 1);
+                node.type_str = elem_type;
                 this.symbols.pushScope();
                 this.symbols.declareSimple(node.value, elem_type);
-                var si: int = 0;
-                while (si < node.body.length) {
-                    this.checkStmt(node.body[si]);
-                    si += 1;
-                };
+                this.checkStmtList(node.body);
                 this.symbols.popScope();
                 this.loop_depth -= 1;
                 return;
@@ -1268,14 +1549,11 @@ class TypeChecker {
 
         var var_type: str = node.type_str;
         if (var_type == "") { var_type = elem_type; };
+        node.type_str = var_type;
 
         this.symbols.pushScope();
         this.symbols.declareSimple(node.value, var_type);
-        var i: int = 0;
-        while (i < node.body.length) {
-            this.checkStmt(node.body[i]);
-            i += 1;
-        };
+        this.checkStmtList(node.body);
         this.symbols.popScope();
         this.loop_depth -= 1;
     };
@@ -1342,18 +1620,15 @@ class TypeChecker {
         while (i < node.params.length) {
             var param: ASTNode = node.params[i];
             if (param.value != "didLoad") {
-                this.symbols.declareSimple(param.value, param.type_str);
+                this.declareChecked(param.value, param.type_str, false, param);
             };
             i += 1;
         };
 
-        // native functions have no body
-        if (node.flag2 == false) {
-            var bi: int = 0;
-            while (bi < node.body.length) {
-                this.checkStmt(node.body[bi]);
-                bi += 1;
-            };
+        // native functions have no body (the parser stores the native name in extra;
+        // flag2 can't be used here because it also means "local")
+        if (node.extra == "") {
+            this.checkStmtList(node.body);
 
             if (node.type_str != "null") {
                 if (this.hasReturn(node.body) == false) {
@@ -1367,18 +1642,69 @@ class TypeChecker {
         this.current_shared = prev_shared;
     };
 
+    function isLiteralTrue(node: ASTNode) -> bool {
+        if (node == null) { return false; };
+        if (node.kind == "BoolLiteral") { return node.bool_val; };
+        return false;
+    };
+
+    // True if a 'break' in these statements could leave the CURRENT loop.
+    // Nested loops are skipped: their breaks only leave themselves.
+    function hasLoopBreak(stmts: ASTNode[]) -> bool {
+        var i: int = 0;
+        while (i < stmts.length) {
+            var stmt: ASTNode = stmts[i];
+            if (stmt.kind == "BreakStmt") { return true; };
+            if (stmt.kind == "IfStmt") {
+                if (this.hasLoopBreak(stmt.body)) { return true; };
+                var ei: int = 0;
+                while (ei < stmt.else_ifs.length) {
+                    if (this.hasLoopBreak(stmt.else_ifs[ei].body)) { return true; };
+                    ei += 1;
+                };
+                if (this.hasLoopBreak(stmt.else_body)) { return true; };
+            };
+            if (stmt.kind == "MatchStmt") {
+                var ci: int = 0;
+                while (ci < stmt.cases.length) {
+                    if (this.hasLoopBreak(stmt.cases[ci].body)) { return true; };
+                    ci += 1;
+                };
+            };
+            i += 1;
+        };
+        return false;
+    };
+
     function hasReturn(stmts: ASTNode[]) -> bool {
         var i: int = 0;
         while (i < stmts.length) {
             var stmt: ASTNode = stmts[i];
             if (stmt.kind == "ReturnStmt") { return true; };
+
+            // every path must return: then, each else-if, and a final else
             if (stmt.kind == "IfStmt") {
                 if (stmt.else_body.length > 0) {
-                    if (this.hasReturn(stmt.body) && this.hasReturn(stmt.else_body)) {
-                        return true;
+                    var all_paths: bool = this.hasReturn(stmt.body) && this.hasReturn(stmt.else_body);
+                    var ei: int = 0;
+                    while (ei < stmt.else_ifs.length) {
+                        if (this.hasReturn(stmt.else_ifs[ei].body) == false) {
+                            all_paths = false;
+                        };
+                        ei += 1;
                     };
+                    if (all_paths) { return true; };
                 };
             };
+
+            // a loop on literal 'true' with no break that can leave it never completes
+            if (stmt.kind == "WhileLoop" || stmt.kind == "DoWhileLoop" || stmt.kind == "ForLoop") {
+                if (this.isLiteralTrue(stmt.condition)) {
+                    if (this.hasLoopBreak(stmt.body) == false) { return true; };
+                };
+            };
+
+            // needs a default, and every case must really return (a break is not a return)
             if (stmt.kind == "MatchStmt") {
                 var has_default: bool = false;
                 var ci: int = 0;
@@ -1391,24 +1717,13 @@ class TypeChecker {
                     var ci2: int = 0;
                     while (ci2 < stmt.cases.length) {
                         if (this.hasReturn(stmt.cases[ci2].body) == false) {
-                            if (this.hasBreak(stmt.cases[ci2].body) == false) {
-                                all_return = false;
-                            };
+                            all_return = false;
                         };
                         ci2 += 1;
                     };
                     if (all_return) { return true; };
                 };
             };
-            i += 1;
-        };
-        return false;
-    };
-
-    function hasBreak(stmts: ASTNode[]) -> bool {
-        var i: int = 0;
-        while (i < stmts.length) {
-            if (stmts[i].kind == "BreakStmt") { return true; };
             i += 1;
         };
         return false;
@@ -1628,6 +1943,8 @@ class TypeChecker {
                 if (this.symbols.isDeclared(node.value) == false) {
                     this.symbols.declareClass(node.value);
                 };
+                // remember real classes (not tags/interfaces) for the move-only rule
+                this.class_names.push(node.value);
                 // Pre-register all fields so cross-class references work
                 var fi: int = 0;
                 while (fi < node.body.length) {

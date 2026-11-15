@@ -7,7 +7,7 @@
  * 
  * sm_86 = RTX 3050 (Ampere architecture) #My own
  *
- * Exposes a pure C API so Mocha can call these via `native`.
+ * Exposes a pure C API so Mocha can call these via "native".
  */
 
 #include <cuda_runtime.h>

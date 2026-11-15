@@ -3,9 +3,7 @@
 
 // mocha-lib-type: compiled
 
-// mocha-lib-deps: mocha-math, mocha-string
-
-// mocha-lib-deps: mocha-sqlite
+// mocha-lib-deps: mocha-math, mocha-string, mocha-sqlite
 
 function mocha_cuda_init() -> int native mocha_cuda_init;
 function mocha_tensor_new(rows: int, cols: int) -> vast native mocha_tensor_new;

@@ -1,8 +1,10 @@
 class ScopeManager {
     var scopes: HashTable[];
+    var keep: str[];
 
     function constructor() -> null {
         this.scopes = [];
+        this.keep = [];
         this.scopes.push(HashTable());
     };
 
@@ -54,6 +56,7 @@ class ScopeManager {
         var encoded: str = this.encodeSymbol(type_str, is_const,
                                              is_function, is_class, visibility);
         top.put(name, encoded);
+        this.keep.push(encoded);
     };
 
     function declareSimple(name: str, type_str: str) -> null {
@@ -123,5 +126,6 @@ class ScopeManager {
         var encoded: str = this.encodeSymbol(type_str, is_const,
                                              is_function, is_class, visibility);
         this.scopes[0].put(name, encoded);
+        this.keep.push(encoded);
     };
 };

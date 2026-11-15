@@ -1,5 +1,4 @@
-// mocha-lib-deps: mocha-math, mocha-string
-from "mocha-sqlite" import *;
+// mocha-lib-deps: mocha-math, mocha-string, mocha-sqlite
 // =============================================
 // CUDA NATIVE BINDINGS (internal)
 // =============================================

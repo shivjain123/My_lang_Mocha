@@ -155,12 +155,6 @@ multiple_inh_base
       Γ¥î Type errors found:
          MochaTypeError at line 9, col 1: Diamond conflict: field 'age' is inherited from both Bird and Horse in class 'Pegasus'. Mocha does not support diamond inheritance of fields ΓÇö rename one of the conflicting fields to resolve this.
 
-network_chart
-    Step 3: Type Checking...
-      Γ£à Type check passed
-    Step 4: Code Generation...
-      Γ¥î MochaCodeGenError at line 113, col 14: Unknown function or method 'NetworkChart_labels' ΓÇö did you forget to import a library?
-
 ps1_analyse_storage_code
     Step 3: Type Checking...
       Γ¥î Type errors found:
@@ -304,6 +298,17 @@ test_ng
     Step 3: Type Checking...
       Γ¥î Type errors found:
          MochaTypeError at line 2, col 5: 'weak' only applies to a field whose type is a single class, not 'dict'
+
+test_nv
+    ≡ƒöÑ Mocha Compiler v1.6
+    ≡ƒôä Compiling: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\test_nv.mch
+      Γ¥î mocha-native file not found: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\some_folder\fake.a
+
+test_ny
+      ΓÜí C++ cached
+      ΓÜí sqlite3 cached
+      Γ¥î // mocha-native: is not supported together with CUDA (mocha-neuron GPU) programs yet.
+         The CUDA link path builds its own objects, so your native files would be ignored.
 
 unreach_check
       Γ£à No imports

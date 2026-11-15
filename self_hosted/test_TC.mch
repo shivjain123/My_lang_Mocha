@@ -14,10 +14,12 @@ function check(label: str, expected: str, actual: str) -> null {
 function check_int(label: str, expected: int, actual: int) -> null {
     if (expected == actual) {
         print("✅ ", label, newLine=true);
+        print("\n");
     } else {
         print("❌ ", label, newLine=true);
         print("   expected: ", expected, newLine=true);
         print("   actual:   ", actual, newLine=true);
+        print("\n");
     };
 };
 
@@ -135,6 +137,136 @@ function main(didLoad) -> null {
     sm.popScope();
     check("y gone after pop", "", sm.lookupType("y"));
     check("x still there", "int", sm.lookupType("x"));
+
+    // ─── TEST 16: try / rescue / fail / rethrow (valid) ─────
+    print("--- TEST 16: try rescue valid ---", newLine=true);
+    var tc16: TypeChecker = run_tc("function main(didLoad) -> null { try { fail \"boom\"; } rescue, e { var m: str = e; rethrow; }; };");
+    check_int("no errors", 0, tc16.errors.length);
+
+    // ─── TEST 17: rethrow outside rescue ────────────────────
+    print("--- TEST 17: rethrow outside rescue ---", newLine=true);
+    var tc17: TypeChecker = run_tc("function main(didLoad) -> null { rethrow; };");
+    check_int("1 error", 1, tc17.errors.length);
+
+    // ─── TEST 18: fail needs a str message ──────────────────
+    print("--- TEST 18: fail with non-str ---", newLine=true);
+    var tc18: TypeChecker = run_tc("function main(didLoad) -> null { fail 42; };");
+    check_int("1 error", 1, tc18.errors.length);
+
+    // ─── TEST 19: unreachable code after return ─────────────
+    print("--- TEST 19: unreachable after return ---", newLine=true);
+    var tc19: TypeChecker = run_tc("function f() -> int { return 1; var a: int = 2; var b: int = 3; }; function main(didLoad) -> null { };");
+    check_int("1 error (reported once)", 1, tc19.errors.length);
+
+    // ─── TEST 20: unreachable code after break ──────────────
+    print("--- TEST 20: unreachable after break ---", newLine=true);
+    var tc20: TypeChecker = run_tc("function main(didLoad) -> null { while (true) { break; var y: int = 1; }; };");
+    check_int("1 error", 1, tc20.errors.length);
+
+    // ─── TEST 21: while(true) with no break needs no return ─
+    print("--- TEST 21: while true no break ---", newLine=true);
+    var tc21: TypeChecker = run_tc("function f() -> int { while (true) { var a: int = 1; }; }; function main(didLoad) -> null { };");
+    check_int("no errors", 0, tc21.errors.length);
+
+    // ─── TEST 22: while(true) WITH a break still needs return ─
+    print("--- TEST 22: while true with break ---", newLine=true);
+    var tc22: TypeChecker = run_tc("function f() -> int { while (true) { break; }; }; function main(didLoad) -> null { };");
+    check_int("1 error", 1, tc22.errors.length);
+
+    // ─── TEST 23: else-if branch that does not return ───────
+    print("--- TEST 23: else-if path without return ---", newLine=true);
+    var tc23: TypeChecker = run_tc("function f(x: int) -> int { if (x == 1) { return 1; } else if (x == 2) { var a: int = 0; } else { return 3; }; }; function main(didLoad) -> null { };");
+    check_int("1 error", 1, tc23.errors.length);
+
+    // ─── TEST 24: float into int is an error ────────────────
+    print("--- TEST 24: float into int ---", newLine=true);
+    var tc24: TypeChecker = run_tc("function main(didLoad) -> null { var a: int = 2.5; };");
+    check_int("1 error", 1, tc24.errors.length);
+
+    // ─── TEST 25: int into float and vast is fine ───────────
+    print("--- TEST 25: numeric widening ---", newLine=true);
+    var tc25: TypeChecker = run_tc("function main(didLoad) -> null { var f: float = 1; var v: vast = 2; };");
+    check_int("no errors", 0, tc25.errors.length);
+
+    // ─── TEST 26: arithmetic on a tag type ──────────────────
+    print("--- TEST 26: tag arithmetic ---", newLine=true);
+    var tc26: TypeChecker = run_tc("tag Color { RED, GREEN }; function f(c: Color) -> int { return c + 1; }; function main(didLoad) -> null { };");
+    check_int("1 error", 1, tc26.errors.length);
+
+    // ─── TEST 27: bitwise needs int or vast ─────────────────
+    print("--- TEST 27: bitwise types ---", newLine=true);
+    var tc27: TypeChecker = run_tc("function main(didLoad) -> null { var a: int = 6 & 3; var b: int = 1.5 | 2; };");
+    check_int("1 error", 1, tc27.errors.length);
+
+    // ─── TEST 28: bitwise NOT ───────────────────────────────
+    print("--- TEST 28: unary tilde ---", newLine=true);
+    var tc28: TypeChecker = run_tc("function main(didLoad) -> null { var a: int = ~5; var b: bool = ~true; };");
+    check_int("1 error", 1, tc28.errors.length);
+
+    // ─── TEST 29: tag access ────────────────────────────────
+    print("--- TEST 29: tag access ---", newLine=true);
+    var tc29: TypeChecker = run_tc("tag Color { RED, GREEN }; function main(didLoad) -> null { var a: Color = Color.RED; var b: Color = Color.BLUE; };");
+    check_int("1 error", 1, tc29.errors.length);
+
+    // ─── TEST 30: nested dict read gives any ────────────────
+    print("--- TEST 30: nested dict index ---", newLine=true);
+    var tc30: TypeChecker = run_tc("function f(d: dict) -> int { var x: int = d[\"a\"][\"b\"]; return x; }; function main(didLoad) -> null { };");
+    check_int("no errors", 0, tc30.errors.length);
+
+    // ─── TEST 31: nested dict write ─────────────────────────
+    print("--- TEST 31: nested dict write ---", newLine=true);
+    var tc31: TypeChecker = run_tc("function f(d: dict) -> null { d[\"a\"][\"b\"] = 5; }; function main(didLoad) -> null { };");
+    check_int("no errors", 0, tc31.errors.length);
+
+    // ─── TEST 32: var declaration rules ─────────────────────
+    print("--- TEST 32: 3D, empty 2D, handle arrays ---", newLine=true);
+    var tc32: TypeChecker = run_tc("function main(didLoad) -> null { var a: int[][][] = []; var b: int[][] = []; var c: File[] = []; };");
+    check_int("3 errors", 3, tc32.errors.length);
+
+    // ─── TEST 33: move-only alias rule ──────────────────────
+    print("--- TEST 33: alias class vs tag ---", newLine=true);
+    var tc33: TypeChecker = run_tc("tag Color { RED, GREEN }; class Dog { var name: str; function constructor() -> null { this.name = \"\"; }; }; function main(didLoad) -> null { var a: Dog = Dog(); var b: Dog = a; var c: Color = Color.RED; var d: Color = c; };");
+    check_int("1 error (class only)", 1, tc33.errors.length);
+
+    // ─── TEST 34: redeclaration vs shadowing ────────────────
+    print("--- TEST 34: redeclaration ---", newLine=true);
+    var tc34: TypeChecker = run_tc("function main(didLoad) -> null { var x: int = 1; var x: int = 2; if (x == 2) { var x: int = 3; }; };");
+    check_int("1 error (inner shadow is fine)", 1, tc34.errors.length);
+
+    // ─── TEST 35: duplicate parameter ───────────────────────
+    print("--- TEST 35: duplicate parameter ---", newLine=true);
+    var tc35: TypeChecker = run_tc("function f(a: int, a: int) -> int { return a; }; function main(didLoad) -> null { };");
+    check_int("1 error", 1, tc35.errors.length);
+
+    // ─── TEST 36: assignment alias rule ─────────────────────
+    print("--- TEST 36: alias by assignment ---", newLine=true);
+    var tc36: TypeChecker = run_tc("class Dog { var name: str; function constructor() -> null { this.name = \"\"; }; }; function main(didLoad) -> null { var a: Dog = Dog(); var b: Dog = Dog(); b = a; a = a; };");
+    check_int("1 error (a = a is fine)", 1, tc36.errors.length);
+
+    // ─── TEST 37: Complex is immutable ──────────────────────
+    print("--- TEST 37: Complex immutable ---", newLine=true);
+    var tc37: TypeChecker = run_tc("function main(didLoad) -> null { var c: Complex = Complex(1, 2); var r: float = c.real; c.real = 9; c.imag += 5; };");
+    check_int("2 errors (reading is fine)", 2, tc37.errors.length);
+
+    // ─── TEST 38: handle stored into a field ────────────────
+    print("--- TEST 38: handle into field ---", newLine=true);
+    var tc38: TypeChecker = run_tc("class Box { var sb: StringBuilder; function constructor() -> null { this.sb = StringBuilder(); }; }; function main(didLoad) -> null { var s: StringBuilder = StringBuilder(); var b: Box = Box(); b.sb = s; b.sb = StringBuilder(); };");
+    check_int("1 error (new handle is fine)", 1, tc38.errors.length);
+
+    // ─── TEST 39: null and mismatch on fields ───────────────
+    print("--- TEST 39: field null and mismatch ---", newLine=true);
+    var tc39: TypeChecker = run_tc("class Box { var n: int; var s: str; function constructor() -> null { this.n = 0; this.s = \"\"; }; }; function main(didLoad) -> null { var b: Box = Box(); b.n = null; b.s = 5; b.n = 7; };");
+    check_int("2 errors (b.n = 7 is fine)", 2, tc39.errors.length);
+
+    // ─── TEST 40: dict inside itself ────────────────────────
+    print("--- TEST 40: dict inside itself ---", newLine=true);
+    var tc40: TypeChecker = run_tc("function f(d: dict) -> null { d[\"me\"] = d; d[\"x\"] = 5; }; function main(didLoad) -> null { };");
+    check_int("1 error (d[x] = 5 is fine)", 1, tc40.errors.length);
+
+    // ─── TEST 41: local body checked, native body skipped ───
+    print("--- TEST 41: local vs native function ---", newLine=true);
+    var tc41: TypeChecker = run_tc("local function f() -> int { var x: int = true; return 1; }; function ext(a: int) -> int native c_ext; function main(didLoad) -> null { };");
+    check_int("1 error (local body checked, native has no body)", 1, tc41.errors.length);
 
     print("--- ALL TESTS DONE ---", newLine=true);
 };

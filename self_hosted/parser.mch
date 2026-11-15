@@ -1229,6 +1229,10 @@ class Parser {
                 var bool_node: ASTNode = this.make_node("BoolLiteral");
                 bool_node.bool_val = tok.value == "true";
                 return bool_node;
+            case TokenType.NULL:
+                this.advance();
+                var null_lit_node: ASTNode = this.make_node("NullLiteral");
+                return null_lit_node;
             case TokenType.IDENTIFIER:
                 this.advance();
                 var ident_node: ASTNode = this.make_node("Identifier");

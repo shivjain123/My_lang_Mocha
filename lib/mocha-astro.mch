@@ -10,7 +10,7 @@
  software may differ by a few arcminutes due to periodic correction terms.
 
  Part of the Mocha Scientific Library Ecosystem
- License: Polyform Non-Commercial
+ License: Apache 2.0
 """
 // mocha-lib-deps: mocha-math
 

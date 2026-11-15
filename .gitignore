@@ -96,7 +96,6 @@ hopfield_*.mch
 check_*.py
 gru_seq_train.mch
 *_leak.mch
-build_*.py
 *_check.mch
 idx_*.mch
 tiny_*.mch

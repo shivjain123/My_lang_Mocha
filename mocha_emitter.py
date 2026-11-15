@@ -37,7 +37,7 @@ RET_VAL_RE = re.compile(r'^ret (?!void)(\S+) (\S+)$')
 BITCAST_RE = re.compile(r'^bitcast (\S+) (%[\w.$]+) to (\S+)$')
 INDIRECT_RE = re.compile(r'^(?:tail )?call\s+(\S+)\s+(%[\w.$]+)\((.*)\)\s*(?:;.*)?$')     # a call through a function pointer: call i8 %t57(i8* %t55, i8* %t53)
 FNPTR_CAST_RE = re.compile(r'^bitcast i8\* (%[\w.$]+) to .+\)\*$')  
-PLUMBING_RE = re.compile(r'^(rc_retain|rc_release|mocha_ex_pop|mocha_ex_push|mocha_ex_env_ptr|mocha_ex_reset_landed|mocha_ex_did_land|mocha_array_retain_elems|RtlCaptureContext|free|mocha_file_free|\w+_release|\w+_release_objs|\w+_retain)$') #refcounting, never in the source
+PLUMBING_RE = re.compile(r'^(rc_retain|rc_release|mocha_ex_pop|mocha_ex_push|mocha_ex_env_ptr|mocha_ex_reset_landed|mocha_ex_did_land|mocha_array_retain_elems|RtlCaptureContext|free|\w+_release|\w+_release_objs|\w+_retain)$') #refcounting, never in the source
 SLOT_LOAD_RE = re.compile(r'^load i8, i8\* (%t\d+)$')           # reads the hidden bool slot of an and/or
 SLOT_STORE_RE = re.compile(r'^store i8 (\S+), i8\* (%t\d+)$')
 ZEXT_RE = re.compile(r'^zext i1 (%[\w.$]+) to i8$')
@@ -111,19 +111,59 @@ BUILTIN_RET = {                     # only entries that agreed everywhere in the
 }
 AMBIG_RET = {"i32", "%MochaArray*", "%MochaArray2D*", "%MochaSet*", "%MochaTuple*"}
 RET_MAP = {}          # callee name -> Mocha return type; refilled per module by infer_returns
+NATIVE_RET_MOD = {}    # file-declared native -> 'str' or 'null' (an i8* return); refilled by infer_returns
+
+
+def native_ret_kinds(funcs, g):
+    """An i8* result is a str when it reaches a string use (print_str, mocha_str_*), directly or through the local it is stored in; otherwise it is an opaque null handle."""
+    kinds = {}
+    for f in funcs.values():
+        ins = [i for l in f.block_order for i in f.blocks[l].instrs]
+        loads = {}
+        for i in ins:
+            lm = LOAD_RE.match(i.text) if i.op == "load" and i.result else None
+            if lm:
+                loads.setdefault(lm.group(3), []).append(i.result)
+        stro = set()
+        for i in ins:
+            cm = CALL_RE.match(i.text) if i.op == "call" else None
+            if cm and (cm.group(2) == "mocha_print_str" or cm.group(2).startswith("mocha_str_")):
+                stro.update(a.split()[-1] for a in split_top_level(cm.group(3)))
+        for i in ins:
+            cm = CALL_RE.match(i.text) if i.op == "call" else None
+            name = cm.group(2) if cm else None
+            if not cm or not i.result or name not in g.natives or g.declares.get(name) != "i8*" or name in NATIVE_RET or name in LIB_SIGS \
+                    or re.match(r'mocha_ext_|rc_|__mocha|.*_(release|drop)$', name):
+                continue
+            hit = i.result in stro
+            for sm in (STORE_RE.match(x.text) for x in ins if x.op == "store"):
+                if sm and sm.group(2) == i.result and any(lv in stro for lv in loads.get(sm.group(4), [])):
+                    hit = True
+            if hit:
+                kinds[name] = "str"
+            else:
+                kinds.setdefault(name, "null")
+    return kinds
+
+
+NATIVE_SYMS = set()    # symbols the module declares that are not in the runtime prelude; refilled by infer_returns
 TAG_NAMES = set()     # tag (enum) names of the module being emitted; refilled by infer_returns
 MODULE_FUNCS = {}     # function name -> Function of the module being emitted; refilled by infer_returns
 FIELD_TYPES = {}      # (struct name, field index) -> Mocha type, from tuple literals stored into class fields
 FIELD_NAMES = {}      # (struct name, field index) -> field name, from every GEP in the module that carries a '; field NAME' comment
 _FWD_DEPTH = [0]      # guard against forwarding chains that loop
+def _warn(msg, file=None):
+    """A warning on stderr: with the warning sign in a terminal, plain text when redirected (a Windows pipe cannot encode the emoji)."""
+    print(("⚠️  " if sys.stderr.isatty() else "warning: ") + msg, file=sys.stderr)
+
 LIB_SIGS = {}         # library return types, written by lib_sigs.py
 NATIVE_ALIAS = {}     # native callee (ink_new_line_mocha) -> source name (line), written by build_native_aliases.py
 try:
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "native_aliases.json"), encoding="utf-8") as _fh:
         NATIVE_ALIAS.update(json.load(_fh))
 except FileNotFoundError:
-    print("⚠️  native_aliases.json not found: library aliases will print as their native names "
-                "(run build_native_aliases.py from corpus_current\\)", file=sys.stderr)
+    _warn("native_aliases.json not found: library aliases will print as their native names "
+                "(run: mocha update)", file=sys.stderr)
 NATIVE_RET = {}       # native callee -> declared return type, written by build_native_aliases.py
 try:
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "native_rets.json"), encoding="utf-8") as _fh:
@@ -136,8 +176,8 @@ try:
     with open(_lib_path, encoding="utf-8") as _fh:
         LIB_SIGS.update(json.load(_fh))
 except FileNotFoundError:
-    print(f"⚠️  {_lib_path} not found: library return types will be unknown "
-          f"(run lib_sigs.py from corpus_current\\)", file=sys.stderr)
+    _warn(f"{_lib_path} not found: library return types will be unknown "
+          "(run: mocha update)", file=sys.stderr)
 
 
 class EmitError(Exception):
@@ -307,8 +347,8 @@ def infer_collections(fn):
                     continue
                 sl_ = [q.split()[-1] for q in split_top_level(tm_.group(3))][2]
                 bc_ = next((BITCAST_RE.match(z_.text) for z_ in instrs if z_.op == "bitcast" and z_.result
-                            and BITCAST_RE.match(z_.text) and BITCAST_RE.match(z_.text).group(1) == "i8*"
-                            and BITCAST_RE.match(z_.text).group(2) == sl_), None)
+                            and BITCAST_RE.match(z_.text) and BITCAST_RE.match(z_.text).group(1) == "i8*" # type: ignore
+                            and BITCAST_RE.match(z_.text).group(2) == sl_), None) # type: ignore
                 etys0.add(slot_ty.get(bc_.group(3).rstrip("*")) if bc_ else None)
             ety0 = next(iter(etys0)) if len(etys0) == 1 and None not in etys0 else "int"
             return f"({ety0}, {a[0]})", f"creation:{callee}"
@@ -724,6 +764,10 @@ def infer_returns(funcs, g):
     RET_MAP.update(LIB_SIGS)
     TAG_NAMES.clear()
     TAG_NAMES.update(g.tags)
+    NATIVE_SYMS.clear()
+    NATIVE_SYMS.update(g.natives)
+    NATIVE_RET_MOD.clear()
+    NATIVE_RET_MOD.update(native_ret_kinds(funcs, g))
     MODULE_FUNCS.clear()
     MODULE_FUNCS.update(funcs)
     FIELD_TYPES.clear()
@@ -1066,6 +1110,8 @@ def emit_function(fn, g):
             lc_var_name[st_.group(2)] = f"lcv{lp_['id']}"
     all_i = [x for l_ in fn.block_order for x in fn.blocks[l_].instrs]
     d0 = {x.result: x for x in all_i if x.result}
+    ord_ = {x.result: k_ for k_, x in enumerate(all_i) if x.result}     # position of each result in the function, to tell float(i) * 0.1 from i * 0.1
+    ipos_ = {id(x): k_ for k_, x in enumerate(all_i)}      # position of each instruction, to tell print(a, b) from print(a); print(b)
     old_rel = set()                    # reading a cell's old value just to release it (a[i][j] = obj): compiler plumbing, not in the source
     for x in all_i:
         gm_ = CALL_RE.match(x.text) if x.op == "call" else None
@@ -1214,7 +1260,8 @@ def emit_function(fn, g):
             return rt_ + "[]", 9                   # t[0][] gives a row that the compiler casts to the class: the [] is what marks it in the source
         if m and m.group(1) == m.group(3) == "double":
             once(t, d)
-            return operand(m.group(2))             # float(x): an explicit cast to the same type, invisible in the IR
+            inner_, _pi = operand(m.group(2))
+            return f"float({inner_})", 9             # float(x) on a float leaves a bitcast double to double in the IR
         if m and m.group(3).startswith("%struct.") and (m.group(1).startswith("%struct.") or m.group(1) == "i8*"):
             return operand(m.group(2))             # upcast to a parent class: invisible in the source
         if m and m.group(1) == "i8**" and m.group(3).startswith("%struct."):
@@ -1428,6 +1475,10 @@ def emit_function(fn, g):
                     raise EmitError(f"{fn.name}: {cm.group(2)} with {len(ftoks)} arguments")
                 sym, p = FLOAT_OPS[cm.group(2)]
                 (la, pa), (lb, pb) = operand(ftoks[0]), operand(ftoks[1])
+                fd0_ = defs.get(ftoks[0])
+                if fd0_ is not None and fd0_.text.startswith("sitofp i32 ") and ftoks[1].startswith("%") \
+                        and ord_.get(ftoks[0], 0) < ord_.get(ftoks[1], 0):
+                    la, pa = f"float({la})", 9       # the int was converted before the right operand was built: an explicit float(x), not implicit promotion
                 if pa < p:
                     la = f"({la})"
                 if pb <= p or lb.startswith("-"):
@@ -1489,7 +1540,7 @@ def emit_function(fn, g):
                 raise EmitError(f"{fn.name}: string literal from an unknown source: {d.raw[:90]}")
             return quote(g.strings[gm.group(1)])
         if callee == "mocha_array2d_new":
-            if ilit(toks[3]) != 1 and ilit(toks[0]) == 0 and ilit(toks[1]) == 0:
+            if ilit(toks[3]) != 1 and toks[0] == "0" and toks[1] == "0":      # immediate zeros: a [[]] literal; zeros built as temps are alloc T[0][0]
                 return "[[]]"                  # an empty 2D array needs no element type
             if ilit(toks[3]) != 1 and not var_types.get(stored_to.get(d.result) or "", "").endswith("[][]"):
                 fslot, fcls = None, None       # an alloc stored into a class field: the old value's release_objs names the element class
@@ -1525,9 +1576,9 @@ def emit_function(fn, g):
                 if r is None or c is None or any((x, y) not in cells for x in range(r) for y in range(c)):
                     raise EmitError(f"{fn.name}: a 2D array literal I can't rebuild")
                 return "[" + ", ".join("[" + ", ".join(cells[(x, y)] for y in range(c)) + "]" for x in range(r)) + "]"
-            if ilit(toks[0]) == 0 and ilit(toks[1]) == 0:
+            if toks[0] == "0" and toks[1] == "0":
                 return "[[]]"
-            return f"alloc {ty[:-4]}[{value(toks[0])}][{value(toks[1])}]"
+            return f"alloc {ty[:-4]}[{value(toks[0])}][{value(toks[1])}]" # type: ignore
         if callee == "mocha_array2d_from_rows":   # [[...] for each y in ys]: the rows array is the outer comprehension, the two ints are bookkeeping
             return value(toks[0])
         if callee == "mocha_array2d_rows":
@@ -1613,6 +1664,8 @@ def emit_function(fn, g):
         if callee == "mocha_dict_allvalues":   # d.allValues()
             return f"{value(toks[0])}.allValues()"
         if callee == "mocha_set_subset":       # a.subset(b); b.superset(a) compiles to the same call
+            if ord_.get(toks[1], 0) < ord_.get(toks[0], 0):    # the second operand was produced first: b.superset(a)
+                return f"{value(toks[1])}.superset({value(toks[0])})"
             return f"{value(toks[0])}.subset({value(toks[1])})"
         if callee == "mocha_set_jaccard":      # a.jaccard(b)
             return f"{value(toks[0])}.jaccard({value(toks[1])})"
@@ -1777,6 +1830,8 @@ def emit_function(fn, g):
             return f"{r_}.{cxm_.group(1)}({', '.join(value(t) for t in toks[1:])})"
         if callee.startswith("mocha_tensor_"):  # the source calls these runtime functions by their IR name: mocha_tensor_softmax_grad(d.ptr, w.ptr)
             return f"{callee}({', '.join(value(t) for t in toks)})"
+        if callee.startswith("mocha_") and callee in NATIVE_SYMS:   # a native the file declares itself: the source calls it by its symbol
+            return f"{callee}({', '.join(value(t) for t in toks)})"
         if callee.startswith("mocha_"):
             raise EmitError(f"{fn.name}: no rule yet for the call to {callee}")
         ats = arg_types(d)
@@ -1813,6 +1868,9 @@ def emit_function(fn, g):
     for label in fn.block_order:
         for tgt in re.findall(r'label %([\w.$]+)', fn.blocks[label].instrs[-1].text):
             has_pred.add(tgt)
+    for tr_ in try_site.values():      # code after a try is reachable by construction, even when the try body ends in fail (the br after that unreachable is dead IR)
+        if tr_.get("after"):
+            has_pred.add(tr_["after"])
 
     entries, declared, state = [], set(), {"cur": None}
 
@@ -1941,6 +1999,9 @@ def emit_function(fn, g):
                 if callee == "mocha_ex_throw":         # fail "msg";
                     entries.append((cur, "stmt", f"fail {value(toks[0])};", ind))
                     continue
+                if callee == "mocha_file_free":        # f.free();  the compiler never inserts this itself
+                    entries.append((cur, "stmt", f"{value(toks[0])}.free();", ind))
+                    continue
                 if callee == "mocha_dict_remove":      # d.remove("k"): the key is a plain string, no value slot
                     entries.append((cur, "stmt", f"{value(toks[0])}.remove({value(toks[1])});", ind))
                     continue
@@ -1974,7 +2035,7 @@ def emit_function(fn, g):
                 elif callee in ("mocha_dict_print", "mocha_print_complex"):         # print(d): the whole dict, second argument is the newline flag
                     entries.append((cur, "print", (value(toks[0]), toks[1]), ind))
                 elif callee in PRINTS:
-                    entries.append((cur, "print", (value(toks[0]), toks[1]), ind))
+                    entries.append((cur, "print", (value(toks[0]), toks[1], ipos_[id(i)]), ind))
                 elif i.result and uses.get(i.result, 0) == 0 and callee in (
                         "mocha_set_new", "mocha_dict_new", "mocha_array_new", "mocha_array2d_new", "mocha_dict_get"):
                     pass                       # an unused collection temp is compiler waste, not a statement
@@ -1995,7 +2056,17 @@ def emit_function(fn, g):
                     if cur is None:
                         continue                   # prologue: every field is zeroed before the first source line
                     obj, fname = fld[sm2.group(2)]
-                    entries.append((cur, "stmt", f"{value(obj)}.{fname} = {value(sm2.group(1))};", ind))
+                    lhs_ = f"{value(obj)}.{fname}"
+                    rhs_ = value(sm2.group(1))
+                    cm_ = re.match(r'^' + re.escape(lhs_) + r' ([-+*/%]) (.+)$', rhs_)
+                    sd_ = defs.get(sm2.group(1))
+                    one_gep_ = sd_ is not None and any(
+                        (y_.op == "load" and SLOT_ANY_LOAD_RE.match(y_.text) and SLOT_ANY_LOAD_RE.match(y_.text).group(1) == sm2.group(2)) # type: ignore
+                        for y_ in all_i)
+                    if cm_ and one_gep_:
+                        entries.append((cur, "stmt", f"{lhs_} {cm_.group(1)}= {cm_.group(2)};", ind))
+                    else:
+                        entries.append((cur, "stmt", f"{lhs_} = {rhs_};", ind))
                     continue
                 if sm2:
                     slot_val[sm2.group(2)] = sm2.group(1)    # remembered; the array call that uses it prints it
@@ -2004,7 +2075,7 @@ def emit_function(fn, g):
                 if not m or m.group(4) not in var_types:
                     raise EmitError(f"{fn.name}: unsupported store: {i.raw[:90]}")
                 ptr = m.group(4)
-                if ptr.startswith("lc_"):
+                if re.fullmatch(r'lc_\w+?_\d+', ptr):
                     continue                   # a comprehension's loop variable is set up by the loop itself
                 if m.group(2) == "null" and cur is None:
                     continue                   # prologue: pointer locals start out as null
@@ -2023,7 +2094,14 @@ def emit_function(fn, g):
                     declared.add(ptr)              # lambda plumbing: unboxing a param or copying a captured value into its local
                     continue
                 name, rhs = var_name(ptr), value(m.group(2))
-                if ptr in declared:
+                id_ = defs.get(m.group(2))
+                ib_ = BIN_RE.match(id_.text) if id_ is not None else None
+                il_ = defs.get(ib_.group(3)) if ib_ else None
+                ilm_ = LOAD_RE.match(il_.text) if il_ is not None else None
+                if ptr in declared and ib_ and ib_.group(1) in ("add", "sub") and ib_.group(2) == "i32" \
+                        and ib_.group(4) == "1" and ilm_ and ilm_.group(3) == ptr:
+                    entries.append((cur, "stmt", f"{name}{'++' if ib_.group(1) == 'add' else '--'};", ind))   # an immediate 1 is i++ / i--: i = i + 1 builds a literal temp first
+                elif ptr in declared:
                     entries.append((cur, "stmt", f"{name} = {rhs};", ind))
                 else:
                     declared.add(ptr)
@@ -2041,9 +2119,28 @@ def emit_function(fn, g):
                         ty = RET_MAP[cm.group(2)]   # an i32 returned by a function declared -> Enum
                     if ty == "str" and rhs == "null":
                         ty = "null"                 # a literal null in an i8* local: no str is ever initialised to null in the corpus, so it's the opaque handle type
-                    if ty == "str" and cm and (NATIVE_RET.get(cm.group(2)) == "null" or LIB_SIGS.get(cm.group(2)) == "null" or cm.group(2) == "fopen"):
+                    if ty == "str" and cm and (NATIVE_RET.get(cm.group(2)) == "null" or LIB_SIGS.get(cm.group(2)) == "null" or cm.group(2) == "fopen" or NATIVE_RET_MOD.get(cm.group(2)) == "null"):
                         ty = "null"                 # an opaque handle: the lib says -> null, the IR only says i8*
                     entries.append((cur, "stmt", f"var {name}: {ty} = {rhs};", ind))
+                continue
+            lm0_ = LIT_INT_RE.match(i.text)
+            if lm0_ and lm0_.group(1) == "i8" and lm0_.group(2) == "1" and i.result and uses.get(i.result, 0) == 0 \
+                    and cur is not None:       # print(newLine=true);: a dead flag temp and no print call after it
+                bl_ = fn.blocks[label].instrs
+                k0_ = next(j for j, x_ in enumerate(bl_) if x_ is i)
+                seen_marker_, has_print_ = False, False
+                for x_ in bl_[k0_ + 1:]:
+                    if "@mocha_stack_update_line" in x_.raw:
+                        seen_marker_ = True
+                        break
+                    cm3_ = CALL_RE.match(x_.text) if x_.op == "call" else None
+                    if cm3_ and (cm3_.group(2) in PRINTS or cm3_.group(2) in (
+                            "mocha_dict_print_value", "mocha_array_print", "mocha_array2d_print",
+                            "mocha_tuple_print", "mocha_dict_print", "mocha_print_complex")):
+                        has_print_ = True
+                        break
+                if not has_print_ and (seen_marker_ or bl_[-1].op == "ret"):
+                    entries.append((cur, "stmt", "print(newLine=true);", ind))
                 continue
             if (LIT_INT_RE.match(i.text) or LIT_FLT_RE.match(i.text) or GEP_STR_RE.match(i.text)
                     or i.op in ("load", "icmp", "fcmp", "trunc", "fneg", "zext", "sext", "sitofp", "fptosi", "getelementptr") or BIN_RE.match(i.text)):
@@ -2243,7 +2340,16 @@ def emit_function(fn, g):
         """try { ... } rescue { ... };  the handler setup in the site block is plumbing."""
         entries.append((state["cur"], "stmt", "try {", ind))
         emit_from(tr["try_block"], ind + 1, tr["after"])
-        entries.append((None, "stmt", "} rescue, " + tr["binding"] + " {" if tr["binding"] else "} rescue {", ind))
+        bind_ = tr["binding"]
+        if not bind_:                              # the classifier found no binding, but the rescue block may still store the caught message into a local
+            for i_ in fn.blocks[tr["rescue_block"]].instrs:
+                sm_ = STORE_RE.match(i_.text) if i_.op == "store" else None
+                pd_ = defs.get(sm_.group(2)) if sm_ else None
+                if pd_ is not None and pd_.op == "call" and "@mocha_ex_pop" in pd_.text:
+                    assert sm_ is not None
+                    bind_ = var_name(sm_.group(4))
+                    break
+        entries.append((None, "stmt", f"}} rescue, {bind_} {{" if bind_ else "} rescue {", ind))
         emit_from(tr["rescue_block"], ind + 1, tr["after"])
         entries.append((None, "stmt", "};", ind))
         return tr["after"]
@@ -2268,7 +2374,7 @@ def emit_function(fn, g):
                 arms.append((c["body_block"], f"case ({value(ld.result)}):"))
                 continue
             ic_ = next((CMP_RE.match(i.text) for i in fn.blocks[c["test_block"]].instrs
-                        if i.op == "icmp" and CMP_RE.match(i.text) and CMP_RE.match(i.text).group(1) == "eq"), None)
+                        if i.op == "icmp" and CMP_RE.match(i.text) and CMP_RE.match(i.text).group(1) == "eq"), None) # type: ignore
             il_ = ilit(ic_.group(4)) if ic_ else None
             if il_ is not None:
                 arms.append((c["body_block"], f"case {il_}:"))     # case 0: an integer literal compared with the subject
@@ -2323,10 +2429,13 @@ def emit_function(fn, g):
             if term.op == "unreachable":
                 return                     # a block that ends in a throw: the walk stops here
             if term.op == "ret":
+                if stop is None and term.text.strip() == "ret void" and state["cur"] is not None \
+                        and not any(e[0] == state["cur"] for e in entries):
+                    entries.append((state["cur"], "stmt", "return null;", ind))     # a final line marker with no statement on it: the source said return null; (no IR, only the marker)
                 if stop is not None and term.text.strip() == "ret void":
                     rline = state["cur"]
                     if entries and rline is not None and entries[-1][0] == rline \
-                            and entries[-1][1] == "stmt" and not entries[-1][2].endswith("{"):
+                            and (entries[-1][1] == "print" or (entries[-1][1] == "stmt" and not entries[-1][2].endswith("{"))):
                         rline += 1             # the compiler gives a bare return no line marker: it sits on the line after
                     entries.append((rline, "stmt", "return;", ind))   # early return; a value return is printed by process_block
                 return
@@ -2356,10 +2465,14 @@ def emit_function(fn, g):
             out.append((line, pad + payload))
             continue
         args, flag = [payload[0]], payload[1]
+        lastpos = payload[2] if len(payload) > 2 else None
         while (flag == "0" and k < len(entries) and entries[k][1] == "print"
-               and entries[k][0] == line and entries[k][3] == ind):
+               and entries[k][0] == line and entries[k][3] == ind
+               and not (lastpos is not None and len(entries[k][2]) > 2
+                        and any(x_.op != "zext" for x_ in all_i[lastpos + 1:entries[k][2][2]]))):
             args.append(entries[k][2][0])
             flag = entries[k][2][1]
+            lastpos = entries[k][2][2] if len(entries[k][2]) > 2 else None
             k += 1
         out.append((line, pad + "print(" + ", ".join(args)
                     + (", newLine=true);" if flag == "1" else ");")))
@@ -2529,7 +2642,7 @@ def header_matches(src, head, owner=None):
     n, text = source_header(src, re.match(r'function\s+(\w+)\s*\(', head).group(1), owner) # type: ignore
     if n is None:
         return None, None, None
-    th_ = re.sub(r'\};?$', '', norm(text))
+    th_ = re.sub(r'\};?$', '', norm(text)) # type: ignore
     if th_ != norm(head) and th_.startswith(norm(head)):       # a one-line function: the header is the part up to the first {
         return True, n, text # type: ignore
     return th_ == norm(head), n, text # type: ignore

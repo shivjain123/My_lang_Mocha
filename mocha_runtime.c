@@ -512,6 +512,46 @@ static void mocha_print_backtrace(int skip) {
 #endif
 }
 
+void mocha_signal_handlers_init() {
+#ifdef _WIN32
+    /* Keep 64 KB of stack free for the crash handler, so it can still
+     * print its message when the program has used up all its stack */
+    ULONG guarantee = 64 * 1024;
+    SetThreadStackGuarantee(&guarantee);
+    AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
+#endif
+#ifndef MOCHA_WASM
+#ifdef _WIN32
+    signal(SIGSEGV, mocha_crash_handler);
+    signal(SIGILL,  mocha_crash_handler);
+#else
+    /* A spare stack for the crash handler (main thread) */
+    static char altstack[65536];
+    stack_t ss;
+    ss.ss_sp    = altstack;
+    ss.ss_size  = sizeof(altstack);
+    ss.ss_flags = 0;
+    sigaltstack(&ss, NULL);
+
+    /* Remember where the stack starts and how big it may grow */
+    int marker = 0;
+    mocha_stack_top = (uintptr_t)&marker;
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_STACK, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
+        mocha_stack_size = (uintptr_t)rl.rlim_cur;
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sa.sa_sigaction = mocha_posix_crash_handler;
+    sigaction(SIGSEGV, &sa, NULL);
+
+    signal(SIGILL, mocha_crash_handler);
+#endif
+#endif
+}
+
 /* ===============================================================
    Mocha Reference Counting
    =============================================================== */
@@ -647,46 +687,6 @@ char* mocha_ffi_str_copy(const char* s) {
     return mocha_rc_copy(s);
 }
 
-void mocha_signal_handlers_init() {
-#ifdef _WIN32
-    /* Keep 64 KB of stack free for the crash handler, so it can still
-     * print its message when the program has used up all its stack */
-    ULONG guarantee = 64 * 1024;
-    SetThreadStackGuarantee(&guarantee);
-    AddVectoredExceptionHandler(1, mocha_seh_crash_handler);
-#endif
-#ifndef MOCHA_WASM
-#ifdef _WIN32
-    signal(SIGSEGV, mocha_crash_handler);
-    signal(SIGILL,  mocha_crash_handler);
-#else
-    /* A spare stack for the crash handler (main thread) */
-    static char altstack[65536];
-    stack_t ss;
-    ss.ss_sp    = altstack;
-    ss.ss_size  = sizeof(altstack);
-    ss.ss_flags = 0;
-    sigaltstack(&ss, NULL);
-
-    /* Remember where the stack starts and how big it may grow */
-    int marker = 0;
-    mocha_stack_top = (uintptr_t)&marker;
-    struct rlimit rl;
-    if (getrlimit(RLIMIT_STACK, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
-        mocha_stack_size = (uintptr_t)rl.rlim_cur;
-
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
-    sa.sa_sigaction = mocha_posix_crash_handler;
-    sigaction(SIGSEGV, &sa, NULL);
-
-    signal(SIGILL, mocha_crash_handler);
-#endif
-#endif
-}
-
 void mocha_rc_shutdown() {
     MochaRCNode *node = rc_head;
     while (node) {
@@ -697,7 +697,7 @@ void mocha_rc_shutdown() {
     rc_head = NULL;
 }
 
-static char* rc_alloc_string(size_t len) {
+char* rc_alloc_string(size_t len) {
     return (char*)rc_alloc(len + 1);
 }
 
@@ -1742,6 +1742,22 @@ static void ensure_capacity(MochaArray *arr) {
 
 
 int32_t mocha_array_length(MochaArray *arr) { return arr->length; }
+
+/* FFI: raw data address of a fixed-size array, for native code that wants a double*, int*, ...
+ * Only fixed-size arrays (made with alloc) are allowed: a growing array can move in memory
+ * when it grows, which would leave the native code holding a stale address. */
+int64_t mocha_ffi_ptr_of(MochaArray *arr) {
+    if (!arr) {
+        fprintf(stderr, "MochaRuntimeError: ptr_of() got a null array\n");
+        exit(2);
+    }
+    if (!arr->fixed) {
+        fprintf(stderr, "MochaRuntimeError: ptr_of() needs a fixed-size array (created with 'alloc'). "
+                        "A growing array can move in memory, which would leave the native code with a stale address.\n");
+        exit(2);
+    }
+    return (int64_t)(intptr_t)arr->data;
+}
 
 MochaArray* mocha_array_new(int32_t capacity, int32_t elem_size, int32_t fixed) {
     MochaArray *arr = (MochaArray *)rc_alloc(sizeof(MochaArray));  // was malloc
@@ -4645,10 +4661,10 @@ void mocha_stopwatch_wait(double ms) {
     LARGE_INTEGER freq, start, now;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start);
-    double target_counts = ms * 0.001 * (double)freq.QuadPart;
+    long long target_counts = (long long)(ms * 0.001 * (double)freq.QuadPart);
     while (1) {
         QueryPerformanceCounter(&now);
-        if ((double)(now.QuadPart - start.QuadPart) >= target_counts) break;
+        if ((now.QuadPart - start.QuadPart) >= target_counts) break;
     }
 #else
     struct timespec start, now;
@@ -4697,7 +4713,7 @@ int mocha_wrap_system(const char *cmd) {
     if (!_system_warning_shown) {
         fprintf(stderr, "\n⚠️  WARNING: system() is dangerous. It can install malware, delete software, or corrupt the system. Do you wanna Continue? [y/N]: ");
         fflush(stderr);
-        
+    
         char response[10];
         if (!fgets(response, sizeof(response), stdin)) {
             return -1;  // No input = abort
@@ -6266,6 +6282,10 @@ char* mocha_file_read(MochaFile *f) {
     char *buf = rc_alloc_string(size);   // was malloc(size + 1)
     size_t read_bytes = fread(buf, 1, size, f->handle);
     buf[read_bytes] = '\0';
+    if (read_bytes != strlen(buf)) {
+        fprintf(stderr, "MochaRuntimeError: File appears to be binary. Mocha only reads text.\n");
+        exit(2);
+    }
     if (read_bytes < size && ferror(f->handle)) {
         fprintf(stderr, "MochaRuntimeError: File read failed for '%s'.\n", f->path);
         exit(2);

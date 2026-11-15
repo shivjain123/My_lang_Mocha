@@ -17,6 +17,7 @@ show_help() {
     echo "  mocha execute <file.mch>         Compile and run immediately"
     echo "  mocha --lib <libfile.mch>        Compile a library"
     echo "  mocha doc <file.mch>             Generate documentation"
+    echo "  mocha reverse <file.ll> [-o out.mch] [--force]   Turn a compiled .ll back into Mocha source"
     echo "  mocha repl                       Launch interactive REPL"
     echo "  mocha wasm <file.mch> [fn ...]   Build a WebAssembly module"
     echo "  mocha help                       Show this message"
@@ -52,6 +53,11 @@ fi
 if [ "$1" = "repl" ]; then
     python3 "$REPL"
     exit 0
+fi
+
+if [ "$1" = "reverse" ]; then
+    shift
+    exec python3 "$SCRIPT_DIR/mocha_reverse.py" "$@"
 fi
 
 if [ "$1" = "doc" ]; then

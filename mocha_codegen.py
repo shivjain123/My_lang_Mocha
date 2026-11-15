@@ -178,7 +178,7 @@ class CodeGen:
         self.entry_allocas = []
         self.class_mocha_fields = {}  # class_name -> [(field_name, mocha_type_str)]
         self.local_name_counts = {}  # tracks how many times a name has been used
-        self.lib_tag_names = set()  # tags imported from libs, don't re-emit
+        self.lib_tag_names = set()  # tags imported from libs, do not re-emit
         self.target_os = platform.system()  # "Windows", "Linux", "Darwin"
         self.rc_classes = set()  # classes with a body in THIS compilation unit: RC-allocated, safe to drop
 
@@ -639,6 +639,15 @@ class CodeGen:
     def is_borrowed_expr(self, node):
         """True if the expression yields a pointer still owned by something else (a variable, a field, an array slot)."""
         return isinstance(node, (Identifier, MemberAccess, IndexAccess, Index2DAccess, TupleAccess))
+
+    def is_ht_get_call(self, node):
+        """True for ht.get(k) on a builtin HashTable: the table does not own its values, so the result is borrowed."""
+        if not isinstance(node, FunctionCall):
+            return False
+        callee = node.name
+        if not isinstance(callee, MemberAccess) or callee.member != "get":
+            return False
+        return self.infer_mocha_type(callee.obj) == "HashTable"
 
     def emit_release_owned_arr2d_locals(self):
         for ptr in self.owned_arr2d_locals:
@@ -4557,7 +4566,7 @@ class CodeGen:
         # RC: protect a returned string before we release the function's own locals —
         # if it's borrowed from a local, retain it first so it survives the cleanup below.
         if self.current_return_type == "i8*" and val_type == "i8*" and self.current_mocha_return_type == "str":
-            if self.is_borrowed_expr(node.value):
+            if self.is_borrowed_expr(node.value) or self.is_ht_get_call(node.value):
                 self.emit(f"  call void @rc_retain(i8* {val_reg})")
 
         # RC: same protection for a returned array — retain before we release

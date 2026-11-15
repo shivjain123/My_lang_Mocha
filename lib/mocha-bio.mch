@@ -10,6 +10,8 @@
     Always check important results against the original source and your
     local clinical protocols before acting on them.
 
+    IT IS NOT FOR PEDRIATIC USAGE
+
     Sections:
     1.  Cardiovascular
     2.  Pulmonary

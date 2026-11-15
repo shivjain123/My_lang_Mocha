@@ -1,0 +1,20 @@
+// Auto-generated manifest for mocha-blas.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+// mocha-lib-deps: mocha-ptr
+
+local function blas_raw_ddot(n: vast, x: vast, incx: vast, y: vast, incy: vast) -> float;
+local function blas_raw_dnrm2(n: vast, x: vast, incx: vast) -> float;
+local function blas_raw_daxpy(n: vast, a: vast, x: vast, incx: vast, y: vast, incy: vast) -> null;
+local function blas_raw_dscal(n: vast, a: vast, x: vast, incx: vast) -> null;
+local function blas_raw_dgemm(ta: str, tb: str, m: vast, n: vast, k: vast, alpha: vast, a: vast, lda: vast, b: vast, ldb: vast, beta: vast, c: vast, ldc: vast) -> null;
+local function blas_one_int(v: int) -> int[];
+local function blas_one_float(v: float) -> float[];
+local function blas_fixed(x: float[]) -> float[];
+function blas_dot(x: float[], y: float[]) -> float;
+function blas_norm(x: float[]) -> float;
+function blas_axpy(alpha: float, x: float[], y: float[]) -> float[];
+function blas_scale(alpha: float, x: float[]) -> float[];
+function blas_matmul(a: float[][], b: float[][]) -> float[][];

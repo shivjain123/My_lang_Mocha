@@ -31,6 +31,7 @@ echo   mocha execute ^<file.mch^> --portable   Same, then run it
 echo   mocha execute ^<file.mch^>         Compile and run immediately
 echo   mocha --lib ^<libfile.mch^>        Compile a library
 echo   mocha doc ^<file.mch^>             Generate documentation
+echo   mocha reverse ^<file.ll^> [-o out.mch] [--force]   Turn a compiled .ll back into Mocha source
 echo   mocha repl                       Launch interactive REPL
 echo   mocha wasm ^<file.mch^> [fn ...]   Build a WebAssembly module
 echo   mocha help                       Show this message
@@ -57,6 +58,11 @@ if "%1"=="libs" (
 
 if "%1"=="repl" (
     python "%REPL%"
+    exit /b
+)
+
+if "%1"=="reverse" (
+    python "%MOCHA_DIR%mocha_reverse.py" "%~2" "%~3" "%~4" "%~5" "%~6"
     exit /b
 )
 

@@ -1,0 +1,11 @@
+// Auto-generated manifest for mocha-ptr.mch
+// Warning: Do not edit manually; regenerate with --lib
+
+// mocha-lib-type: compiled
+
+function ptr_of_float(a: float[]) -> vast native mocha_ffi_ptr_of;
+function ptr_of_int(a: int[]) -> vast native mocha_ffi_ptr_of;
+function ptr_of_vast(a: vast[]) -> vast native mocha_ffi_ptr_of;
+function ptr_of_bool(a: bool[]) -> vast native mocha_ffi_ptr_of;
+function flatten(m: float[][]) -> float[];
+function unflatten(flat: float[], rows: int, cols: int) -> float[][];

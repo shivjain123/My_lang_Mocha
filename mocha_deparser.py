@@ -119,6 +119,8 @@ class Globals:
     tags: dict = field(default_factory=dict)        # enum -> {tag: value, or None if external}
     types: dict = field(default_factory=dict)       # "struct.T" -> [field llvm types]
     str_errors: list = field(default_factory=list)  # strings whose length/NUL didn't match
+    declares: dict = field(default_factory=dict)    # declared symbol -> return llvm type
+    natives: set = field(default_factory=set)       # declared symbols that are not in the runtime prelude
 
 
 def decode_llvm_string(body: str) -> bytes:
@@ -167,6 +169,10 @@ def parse_globals(ll_text: str) -> Globals:
             if s.strip() == "}":
                 inside = False
             continue
+        dm_ = re.match(r'^declare (\S+) @([\w.$]+)\(', s)
+        if dm_:
+            g.declares[dm_.group(2)] = dm_.group(1)
+            continue
         m = STR_DEF_RE.match(s)
         if m:
             name, n, body = m.group(1), int(m.group(2)), m.group(3)
@@ -188,7 +194,22 @@ def parse_globals(ll_text: str) -> Globals:
                 g.types[m.group(1)] = split_top_level(body[1:-1])
             else:
                 g.types[m.group(1)] = None          # opaque
+    pre_ = runtime_prelude()
+    g.natives = {n for n in g.declares if n not in pre_}
     return g
+
+_PRE = []
+
+def runtime_prelude():
+    """Symbols every module declares (taken from a file that uses nothing): anything else declared is a library or native."""
+    if not _PRE:
+        import os as _os
+        p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "runtime_prelude.json")
+        if not _os.path.exists(p):
+            raise SystemExit("mocha reverse: runtime_prelude.json is missing next to the decompiler (run: mocha update)")
+        import json as _json
+        _PRE.append(set(_json.load(open(p, encoding="utf-8"))))
+    return _PRE[0]
 
 if __name__ == "__main__":
     with open("geo_seisimo.ll", "r", encoding="utf-8") as f:

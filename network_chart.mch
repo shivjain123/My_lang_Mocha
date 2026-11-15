@@ -110,7 +110,7 @@ function main(didLoad) -> null {
     g6.edgeweight("a", "b", 2.0);
     g6.edgeweight("b", "c", 3.0);
     g6.edgeweight("c", "a", 1.0);
-    g6.labels(false);
+    g6.weight_labels(false);
     g6.save("test_net_nolabels.svg");
 
 };
