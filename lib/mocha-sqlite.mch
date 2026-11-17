@@ -29,49 +29,58 @@ function sqlite3_query(db: null, sql: str) -> int native mocha_sqlite3_query;
 function sqlite3_close(db: null) -> null native mocha_sqlite3_close;
 
 ~~ ── Reading query results ──
-~~ 1. Call sqlite3_query_run(db, sql) to run a SELECT and cache the whole result.
-~~ 2. Ask for the size with sqlite3_query_rows(db) and sqlite3_query_cols(db).
-~~ 3. Read values with sqlite3_query_cell(db, row, col) and column names with sqlite3_query_colname(db, col).
+~~ 1. Call sqlite3_query_run(db, sql) to run a SELECT. It returns a result handle (an int, 1 or more),
+~~    or 0 if the query failed.
+~~ 2. Ask for the size with sqlite3_query_rows(res) and sqlite3_query_cols(res).
+~~ 3. Read values with sqlite3_query_cell(res, row, col) and column names with sqlite3_query_colname(res, col).
+~~ 4. When you are done, call sqlite3_query_free(res). Every result from sqlite3_query_run() must be freed.
+~~ Each sqlite3_query_run() gives its own handle, so you can run another query while still reading an earlier result.
 ~~ Rows and columns are zero-based. An index that is out of range returns an empty string.
-~~ The cache belongs to the last sqlite3_query_run() call: running a new query replaces it.
 ~~ A SQL NULL is returned by sqlite3_query_cell as the text "NULL". To tell it apart from a real
 ~~ "NULL" string, use sqlite3_query_is_null().
 ~~ If the query returns no rows, rows and cols are both 0 and column names are not available.
 ~~ All statements in one sqlite3_query_run() must return the same number of columns.
-~~ If the query fails, the cache is left empty.
+~~ If the query fails, sqlite3_query_run() returns 0 and the error is printed. Reading from handle 0
+~~ gives 0 rows, 0 columns and empty text, and freeing it does nothing.
 
-~~ Runs a SQL query and caches all results for row/cell access.
-~~ Returns 0 on success, otherwise a SQLite error code (-1 for a null handle).
-~~ The error message is printed, and sqlite3_errmsg() gives it again. 
-~~ Use sqlite3_query_rows() and sqlite3_query_cell() after this.
+~~ Runs a SQL query and keeps its whole result for row/cell access.
+~~ Returns a result handle (1 or more), or 0 if the query failed.
+~~ The error message is printed, and sqlite3_errmsg() gives it again.
+~~ Free the handle with sqlite3_query_free() when you are done.
 ~~ @param db   the database handle
 ~~ @param sql  SQL SELECT statement
 function sqlite3_query_run(db: null, sql: str) -> int native mocha_sqlite3_query_run;
 
-~~ Returns the number of rows in the last sqlite3_query_run() result.
-~~ @param db  the database handle
-function sqlite3_query_rows(db: null) -> int native mocha_sqlite3_query_rows;
+~~ Returns the number of rows in a query result.
+~~ @param res  the result handle from sqlite3_query_run()
+function sqlite3_query_rows(res: int) -> int native mocha_sqlite3_query_rows;
 
-~~ Returns the number of columns in the last sqlite3_query_run() result.
-~~ @param db  the database handle
-function sqlite3_query_cols(db: null) -> int native mocha_sqlite3_query_cols;
+~~ Returns the number of columns in a query result.
+~~ @param res  the result handle from sqlite3_query_run()
+function sqlite3_query_cols(res: int) -> int native mocha_sqlite3_query_cols;
 
-~~ Returns the value of a cell from the last sqlite3_query_run() result.
-~~ @param db   the database handle
+~~ Returns the value of a cell from a query result.
+~~ @param res  the result handle from sqlite3_query_run()
 ~~ @param row  zero-based row index
 ~~ @param col  zero-based column index
-function sqlite3_query_cell(db: null, row: int, col: int) -> str native mocha_sqlite3_query_cell;
+function sqlite3_query_cell(res: int, row: int, col: int) -> str native mocha_sqlite3_query_cell;
 
 ~~ Returns 1 if the cell is a SQL NULL, 0 otherwise (also 0 for an out-of-range index).
-~~ @param db   the database handle
+~~ @param res  the result handle from sqlite3_query_run()
 ~~ @param row  zero-based row index
 ~~ @param col  zero-based column index
-function sqlite3_query_is_null(db: null, row: int, col: int) -> int native mocha_sqlite3_query_is_null;
+function sqlite3_query_is_null(res: int, row: int, col: int) -> int native mocha_sqlite3_query_is_null;
 
-~~ Returns the column name at the given index from the last sqlite3_query_run() result.
-~~ @param db   the database handle
+~~ Returns the column name at the given index from a query result.
+~~ @param res  the result handle from sqlite3_query_run()
 ~~ @param col  zero-based column index
-function sqlite3_query_colname(db: null, col: int) -> str native mocha_sqlite3_query_colname;
+function sqlite3_query_colname(res: int, col: int) -> str native mocha_sqlite3_query_colname;
+
+~~ Frees a query result.
+~~ Freeing the same handle twice is safe: the second free prints a warning and is ignored.
+~~ Freeing 0 (a failed sqlite3_query_run) does nothing.
+~~ @param res  the result handle from sqlite3_query_run()
+function sqlite3_query_free(res: int) -> null native mocha_sqlite3_query_free;
 
 ~~ Returns the error message from the last failed operation.
 ~~ @param db  the database handle

@@ -10,7 +10,7 @@ _DEF = re.compile(r'^define\b.*@([\w.$]+)\(')
 _DEFG = re.compile(r'^@([A-Za-z_][\w.$]*) = (?!external)')
 _DECL = re.compile(r'^declare\b.*@([\w.$]+)\(')
 _DECLG = re.compile(r'^@([A-Za-z_][\w.$]*) = external')
-_NATIVE = re.compile(r'\bfunction\s+(\w+)\s*\([^)]*\)[^;{]*?\bnative\s+(\w+)\s*;')
+_NATIVE = re.compile(r'(?m)^(?!\s*local\s)[^\n]*?\bfunction\s+(\w+)\s*\([^)]*\)[^;{]*?\bnative\s+(\w+)\s*;')
 _IMP = re.compile(r'from\s+"mocha-(\w+)"\s+import')
 _LIB = {}
 
@@ -48,11 +48,12 @@ def _closure(lib, seen=None):
 
 
 def import_lines(text):
+    from mocha_deparser import runtime_prelude
     _load_libs()
     pred, gl_ = set(), set()
     for l in text.splitlines():
         m = _DECL.match(l) or _DECLG.match(l)
-        if m and m.group(1) in _LIB["index"]:
+        if m and m.group(1) in _LIB["index"] and m.group(1) not in runtime_prelude():    # every file declares these: no evidence of an import
             pred.add(_LIB["index"][m.group(1)])
             if _DECLG.match(l):
                 gl_.add(_LIB["index"][m.group(1)])
@@ -146,24 +147,6 @@ def lib_consts():
         _LIB["consts"] = s
     return _LIB["consts"]
 
-def native_lines(text, imports):
-    """declares that are not in the runtime prelude, and whose lib was not imported: the file declared them itself."""
-    _load_libs()
-    from mocha_deparser import runtime_prelude
-    pre = runtime_prelude()
-    imp = {re.sub(r'^from "mocha-(\w+)".*', r'\1', x) for x in imports if x.startswith("from ")}
-    tmap = {"i32": "int", "i64": "vast", "double": "float", "void": "null", "i8*": "null", "i8": "bool"}
-    out = []
-    for ret, name, args in re.findall(r'^declare (\S+) @([\w.$]+)\(([^)]*)\)', text, re.M):
-        lib = _LIB["index"].get(name)
-        if name in pre or lib is None or lib in imp or not re.search(r'call [^@\n]*@' + re.escape(name) + r'\(', text):
-            continue
-        ps = [a.strip() for a in args.split(",") if a.strip()]
-        if ret not in tmap or any(a not in tmap for a in ps):
-            continue
-        out.append(f"function {name}({', '.join(f'p{k}: {tmap[a]}' for k, a in enumerate(ps))}) -> {tmap[ret]} native {name};")
-    return out + ([""] if out else [])
-
 def native_lines2(text, imports, g):
     """A declared non-runtime symbol that is called, and whose lib (if any) was not imported: the file declared it as native."""
     _load_libs()
@@ -208,7 +191,10 @@ def native_lines2(text, imports, g):
         import mocha_emitter as _me
         rt = _me.NATIVE_RET_MOD.get(name, "str" if rstr else "null") if ret == "i8*" else tmap[ret]
         out.append(f"function {name}({', '.join(f'p{k}: {t}' for k, t in enumerate(pt))}) -> {rt} native {name};")
-    return sorted(out) + ([""] if out else [])
+    own = [x for x in out if not re.match(r'function (mocha_tensor_|mocha_cuda_)', x)]
+    note = ["// NOTE (mocha reverse): the compiled .ll does not keep the original '// mocha-native: <library>' line.",
+            "// Add it above (path to your static library) before recompiling; otherwise the compiler may link its built-in fallback library, whose functions can differ."] if own else []
+    return note + sorted(out) + ([""] if out else [])
 
 def lib_defined():
     """Every function a lib .ll defines, however many libs share the name: those are library code, never a user native."""

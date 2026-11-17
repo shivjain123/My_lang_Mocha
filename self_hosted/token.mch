@@ -32,7 +32,6 @@ tag TokenType {
     TYPE_FLOAT,
     TYPE_STR,
     TYPE_BOOL,
-    TYPE_RESULT,
     TYPE_DICT,
     TYPE_SET,
 
@@ -78,10 +77,6 @@ tag TokenType {
     IMPORT,
     FROM,
     AS,
-
-    // --- Result ---
-    OK,
-    ERROR,
 
     // --- Print ---
     PRINT,

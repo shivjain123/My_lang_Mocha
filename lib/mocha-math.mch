@@ -1,9 +1,11 @@
 """
    MochaMath v0.7 — Mocha Standard Math Library
    Save as: lib/mocha-math.mch
-   Compile with: mocha --lib lib/mocha-math.mch
+   Compile with: mocha libs math
 """
 //FFI
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 function mocha_ext_float_cosec_ffi(x: float, mes: int) -> float native mocha_ext_float_cosec_impl;
 function mocha_ext_float_sec_ffi(x: float, mes: int) -> float native mocha_ext_float_sec_impl;
 function mocha_ext_float_cot_ffi(x: float, mes: int) -> float native mocha_ext_float_cot_impl;
@@ -70,6 +72,41 @@ function round(x: float) -> float {
         return rdown(x + 0.5);
     };
     return rup(x - 0.5);
+};
+
+~~ Round half to even (Banker's rounding). 
+~~ If exactly 0.5, rounds to the nearest even integer to prevent statistical bias.
+function round_even(x: float) -> float {
+    if (x > 2147483646.0 || x < -2147483646.0) {
+        c_print_err("MochaLibError (mocha-math): round_even input is out of 32-bit int range.");
+        c_exit(2);
+    };
+    var is_neg: bool = false;
+    var val: float = x;
+    
+    if (x < 0.0) {
+        is_neg = true;
+        val = abs(x);
+    };
+
+    var truncated: float = rdown(val);
+    var frac: float = val - truncated;
+    
+    if (frac == 0.5) {
+        // Check if the integer part is even
+        if ((truncated / 2.0) == rdown(truncated / 2.0)) {
+            // Truncated is even, so keep it (e.g., 2.5 -> 2.0)
+            if (is_neg) { return -truncated; };
+            return truncated;
+        } else {
+            // Truncated is odd, round to next even (e.g., 3.5 -> 4.0)
+            if (is_neg) { return -(truncated + 1.0); };
+            return truncated + 1.0;
+        };
+    };
+    
+    // If it's not exactly .5, just use your existing standard round
+    return round(x);
 };
 
 // =============================================

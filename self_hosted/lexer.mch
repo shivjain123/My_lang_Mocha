@@ -307,8 +307,6 @@ class Lexer {
         if (word == "import")     { return this.make_token(TokenType.IMPORT,     word, l, c); };
         if (word == "from")       { return this.make_token(TokenType.FROM,       word, l, c); };
         if (word == "as")         { return this.make_token(TokenType.AS,         word, l, c); };
-        if (word == "ok")         { return this.make_token(TokenType.OK,         word, l, c); };
-        if (word == "error")      { return this.make_token(TokenType.ERROR,      word, l, c); };
         if (word == "print")      { return this.make_token(TokenType.PRINT,      word, l, c); };
         if (word == "true")       { return this.make_token(TokenType.BOOL_LIT,   word, l, c); };
         if (word == "false")      { return this.make_token(TokenType.BOOL_LIT,   word, l, c); };
@@ -318,7 +316,6 @@ class Lexer {
         if (word == "float")      { return this.make_token(TokenType.TYPE_FLOAT, word, l, c); };
         if (word == "str")        { return this.make_token(TokenType.TYPE_STR,   word, l, c); };
         if (word == "bool")       { return this.make_token(TokenType.TYPE_BOOL,  word, l, c); };
-        if (word == "Result")     { return this.make_token(TokenType.TYPE_RESULT,word, l, c); };
         if (word == "newLine")    { return this.make_token(TokenType.NEWLINE_ARG,word, l, c); };
         if (word == "start")      { return this.make_token(TokenType.START_ARG,  word, l, c); };
         if (word == "dict")       { return this.make_token(TokenType.TYPE_DICT,  word, l, c); };

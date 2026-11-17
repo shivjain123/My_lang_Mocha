@@ -28,7 +28,7 @@
 #
 #   ── Type Parsing ────────────────────────────────────────
 #   Handles all Mocha types:
-#     - Primitives: int, vast, float, str, bool, Result, null
+#     - Primitives: int, vast, float, str, bool, null
 #     - Tuples: (T, N) where N is a literal int count (the count
 #       may be omitted: (T))
 #     - Arrays: T[], T[N], T[][N], etc. (the parser accepts any
@@ -84,7 +84,6 @@
 #     - Sets: set<T> (type-parameterized); set<null, T> declares
 #       an empty typed set
 #     - lambda: the type of a lambda value
-#   - ok(value), error(value) — Result type constructors
 #   - await expr — async operation suspension
 #
 #   ── Collections & Literals ──────────────────────────────
@@ -254,7 +253,6 @@ class Parser:
         TokenType.TYPE_FLOAT:  "float",
         TokenType.TYPE_STR:    "str",
         TokenType.TYPE_BOOL:   "bool",
-        TokenType.TYPE_RESULT: "Result",
         TokenType.NULL:    "null", #unified Null
     }
 
@@ -948,27 +946,6 @@ class Parser:
             value = self.parse_expression()
             self.expect(TokenType.RPAREN, "Expected ')' to close type cast")
             node = TypeCast(to_type=type_name, value=value)
-            node.line = tok.line
-            node.col  = tok.column
-            return node
-
-        # ok(value) and error(value) - Result constructors
-        if self.check(TokenType.OK):
-            self.advance()
-            self.expect(TokenType.LPAREN, "Expected '(' after 'ok'")
-            value = self.parse_expression()
-            self.expect(TokenType.RPAREN, "Expected ')' to close 'ok'")
-            node = OkExpr(value=value)
-            node.line = tok.line
-            node.col  = tok.column
-            return node
-
-        if self.check(TokenType.ERROR):
-            self.advance()
-            self.expect(TokenType.LPAREN, "Expected '(' after 'error'")
-            value = self.parse_expression()
-            self.expect(TokenType.RPAREN, "Expected ')' to close 'error'")
-            node = ErrorExpr(value=value)
             node.line = tok.line
             node.col  = tok.column
             return node

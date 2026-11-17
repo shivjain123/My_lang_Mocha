@@ -263,8 +263,10 @@ function neuron_db_write_meta(db: null, key: str, value: str) -> null {
 };
 
 function neuron_db_read_meta(db: null, key: str) -> str {
-    sqlite3_query_run(db, "SELECT value FROM meta WHERE key = '" + key + "';");
-    return sqlite3_query_cell(db, 0, 0);
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM meta WHERE key = '" + key + "';");
+    var qval: str = sqlite3_query_cell(qres, 0, 0);
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 function neuron_db_write_array(db: null, name: str, idx: int, value: str) -> null {
@@ -272,8 +274,10 @@ function neuron_db_write_array(db: null, name: str, idx: int, value: str) -> nul
 };
 
 function neuron_db_read_array_cell(db: null, name: str, idx: int) -> str {
-    sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' AND idx = " + str(idx) + ";");
-    return sqlite3_query_cell(db, 0, 0);
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' AND idx = " + str(idx) + ";");
+    var qval: str = sqlite3_query_cell(qres, 0, 0);
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 function neuron_save_tensor(db: null, name: str, t: Tensor) -> null {
@@ -303,9 +307,9 @@ function neuron_load_tensor(db: null, name: str) -> Tensor {
     var total: int = rows * cols;
 
     // one query for the whole tensor, in index order
-    sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' ORDER BY idx;");
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' ORDER BY idx;");
     var fast: int = 0;
-    if (sqlite3_query_rows(db) == total) {
+    if (sqlite3_query_rows(qres) == total) {
         fast = 1;
     };
 
@@ -317,7 +321,7 @@ function neuron_load_tensor(db: null, name: str) -> Tensor {
             var val: float = 0.0;
             var cell: str = "";
             if (fast == 1) {
-                cell = sqlite3_query_cell(db, k, 0);
+                cell = sqlite3_query_cell(qres, k, 0);
             } else {
                 cell = neuron_db_read_array_cell(db, name, k);
             };
@@ -327,6 +331,7 @@ function neuron_load_tensor(db: null, name: str) -> Tensor {
         };
         i++;
     };
+    sqlite3_query_free(qres);
     mocha_tensor_upload(t.ptr);
     return t;
 };

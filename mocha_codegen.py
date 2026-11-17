@@ -40,7 +40,6 @@ LLVM_TYPES = {
     "bool":    "i8",
     "str":     "i8*",
     "null":    "void",
-    "Result":  "i32",
     "StringBuilder": "%struct.MochaStringBuilder*",
     "Complex": "%struct.MochaComplex*",
     "File": "%struct.MochaFile*",
@@ -1333,7 +1332,6 @@ class CodeGen:
         if isinstance(node, TypeCast):      return self.gen_type_cast(node)
         if isinstance(node, FunctionCall):  return self.gen_function_call(node)
         if isinstance(node, QualifiedMethodCall): return self.gen_qualified_method_call(node)
-        if isinstance(node, OkExpr):        return self.gen_expr(node.value)  # Result type is abandoned; kept for old code
         if isinstance(node, MemberAccess):  return self.gen_member_access(node)
         if isinstance(node, ArrayLiteral):  return self.gen_array_literal(node)
         if isinstance(node, IndexAccess):   return self.gen_index_access(node)
@@ -1355,10 +1353,6 @@ class CodeGen:
                 self.emit(f"  {tmp} = load i32, i32* {global_name}")
                 return (tmp, "i32")
             return ("0", "i32")
-        if isinstance(node, ErrorExpr):
-            tmp = self.fresh_temp()
-            self.emit(f"  {tmp} = add i32 0, -1")
-            return (tmp, "i32")
         raise MochaCodeGenError(f"Cannot generate code for: {type(node).__name__}", node.line, node.col)
     
     #=======================
@@ -3457,6 +3451,10 @@ class CodeGen:
         arg_str  = ", ".join(f"{t} {r}" for r, t in args)
         # Try bare name first
         ret_type = self.method_return_types.get(func_name)
+        # Same-file function whose name collides with a C name (abs, round...):
+        # definitions are emitted mangled, so the call must use the same symbol
+        if ret_type is not None:
+            func_name = mangle_function_name(func_name) # type: ignore
 
         # If inside a class, try mangled name
         if ret_type is None and self.current_class:
@@ -3487,14 +3485,15 @@ class CodeGen:
                         new_line = 1 if arg.value.value else 0
 
         if not args:
+            if new_line:
+                self.emit("  call void @mocha_print_str(i8* null, i8 1)")
             return ("void", "void")
 
         # filter out keyword args from node.args to get positional count
         positional_nodes = [a for a in node.args if not isinstance(a, Assignment)]
 
         for i, (val_reg, val_type) in enumerate(args):
-            is_last = (i == len(args) - 1)
-            nl = new_line if is_last else 0
+            nl = new_line if i == 0 else 0
 
             # dict access special case for ALL args, not just first
             print_arg = positional_nodes[i]

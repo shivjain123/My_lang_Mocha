@@ -1285,7 +1285,6 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
     with open(mchi_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
 
-
 def parse_native_decls(source: str, source_file: str) -> list:
     """Reads '// mocha-native: path, path' lines; paths are relative to the .mch file."""
     base = os.path.dirname(os.path.abspath(source_file))
@@ -1297,7 +1296,14 @@ def parse_native_decls(source: str, source_file: str) -> list:
                 item = item.strip()
                 if not item:
                     continue
-                if item.startswith("@"):
+                item = os.path.expandvars(item)
+                if item.startswith("-I") or item.startswith("-L"):
+                    d = item[2:].strip()
+                    if d and not os.path.isabs(d):
+                        d = os.path.normpath(os.path.join(base, d))
+                    paths.append(item[:2] + d)
+                    continue
+                if item.startswith("-l") or item.startswith("@"):
                     paths.append(item)
                     continue
                 p = item if os.path.isabs(item) else os.path.join(base, item)
@@ -1363,7 +1369,16 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     user_native_libs = []
     user_native_cpp = []
     user_native_tail = []
+    user_native_inc = []
+    user_native_ldflags = []
     for _p in user_native:
+        if _p.startswith("-I"):
+            user_native_inc.append(_p[2:])
+            continue
+        if _p.startswith("-L") or _p.startswith("-l"):
+            user_native_ldflags.append(_p)
+            print(f"  🔗 Native ({_p})", flush=True)
+            continue
         if _p.startswith("@"):
             if _p.lower() != "@fortran":
                 print(f"  ❌ mocha-native: unknown shorthand '{_p}' (only @fortran exists)")
@@ -1388,9 +1403,9 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
         if _ext in (".a", ".lib", ".o", ".obj"):
             user_native_libs.append(_p)
             print(f"  🔗 Native: {_p}", flush=True)
-        elif _ext in (".cpp", ".cc", ".cxx"):
+        elif _ext in (".c", ".cpp", ".cc", ".cxx"):
             user_native_cpp.append(_p)
-            print(f"  🔗 Native (C++): {_p}", flush=True)
+            print(f"  🔗 Native ({'C' if _ext == '.c' else 'C++'}): {_p}", flush=True)
         else:
             print(f"  ❌ mocha-native: '{_ext}' files are not supported yet ({_p})")
             return False
@@ -1618,20 +1633,21 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     # Compile user C++ files from // mocha-native: lines
     for _src in user_native_cpp:
         import hashlib
-        _tag = hashlib.md5(_src.lower().encode("utf-8")).hexdigest()[:10]
+        _tag = hashlib.md5((_src.lower() + "|" + "|".join(user_native_inc).lower()).encode("utf-8")).hexdigest()[:10]
         os.makedirs(os.path.join(SCRIPT_DIR, "build"), exist_ok=True)
         _uobj = os.path.join(SCRIPT_DIR, "build", f"user_native_{_tag}.o")
         if needs_recompile(_src, _uobj):
-            _clangpp = CLANG_PATH.replace("clang.exe", "clang++.exe") if IS_WINDOWS else CLANG_PATH.replace("clang", "clang++")
+            _is_c = _src.lower().endswith(".c")
+            _cc = CLANG_PATH if _is_c else (CLANG_PATH.replace("clang.exe", "clang++.exe") if IS_WINDOWS else CLANG_PATH.replace("clang", "clang++"))
             result = subprocess.run(
-                [_clangpp] + base_clang_flags() + ["-c", _src, "-o", _uobj],
+                [_cc] + base_clang_flags() + [f"-I{_d}" for _d in user_native_inc] + ["-c", _src, "-o", _uobj],
                 capture_output=True, text=True, encoding='utf-8'
             )
             if result.returncode != 0:
                 print(f"  ❌ C++ compile failed ({_src}):\n{result.stderr}")
                 return False
         else:
-            print("  ⚡ user C++ cached", flush=True)
+            print("  ⚡ user native source cached", flush=True)
         user_native_libs.append(_uobj)
 
     # Compile sqlite3
@@ -1716,7 +1732,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     exe_file = f"{output_name}{EXE_EXT}"
 
     if needs_cuda:
-        if user_native_libs or user_native_tail:
+        if user_native_libs or user_native_tail or user_native_ldflags:
             print("  ❌ // mocha-native: is not supported together with CUDA (mocha-neuron GPU) programs yet.")
             print("     The CUDA link path builds its own objects, so your native files would be ignored.")
             return False
@@ -1885,6 +1901,9 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
             link_cmd.append(LUA_LIB)
         if needs_wren:
             link_cmd.append(WREN_OBJ)
+        # The program's own native libs (// mocha-native:) go before the built-in
+        # rust_ffi.a, so their symbols win over its older copies
+        link_cmd += user_native_libs
         if needs_rust:
             link_cmd.append(RUST_LIB)
         if needs_rust and IS_WINDOWS:
@@ -1897,8 +1916,9 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
             ]
         if needs_zig:
             link_cmd.append(ZIG_LIB)
-        for _p in user_native_libs + user_native_tail:
+        for _p in user_native_tail:
             link_cmd.append(_p)
+        link_cmd += user_native_ldflags
         if user_native_libs and IS_WINDOWS:
             link_cmd += ["-lntdll", "-lws2_32", "-luserenv", "-ladvapi32", "-ldbghelp"]
 

@@ -13,6 +13,8 @@ for p in sorted(glob.glob(os.path.join(HERE, "lib", "*.mch"))):
         if class_rx.match(line):
             stack.append([depth, False])
         m = pat.search(line)
+        if m and line.lstrip().startswith("local "):
+            m = None                      # a local native can only be called from its own file: user code never carries its symbol
         if m:
             inside = bool(stack) and stack[-1][1]
             names[m.group(3)].add(("." if inside else "") + m.group(1))

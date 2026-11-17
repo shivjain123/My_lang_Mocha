@@ -1,4 +1,3 @@
-// mocha-lib-deps: mocha-string
 from "./typechecker.mch" import *;
 
 function check(label: str, expected: str, actual: str) -> null {
@@ -267,6 +266,97 @@ function main(didLoad) -> null {
     print("--- TEST 41: local vs native function ---", newLine=true);
     var tc41: TypeChecker = run_tc("local function f() -> int { var x: int = true; return 1; }; function ext(a: int) -> int native c_ext; function main(didLoad) -> null { };");
     check_int("1 error (local body checked, native has no body)", 1, tc41.errors.length);
+
+    // ─── TEST 42: duplicate function shows both signatures ──
+    print("--- TEST 42: function overloading ---", newLine=true);
+    var tc42: TypeChecker = run_tc("function f(a: int) -> int { return a; }; function f(a: int, b: str) -> null { }; function main(didLoad) -> null { };");
+    check_int("1 error", 1, tc42.errors.length);
+    check("message starts right", "Illegal redefinition", tc42.errors[0].message.substring(0, 19));
+
+    // ─── TEST 43: members from ALL parents ──────────────────
+    print("--- TEST 43: multiple parents ---", newLine=true);
+    var tc43: TypeChecker = run_tc("class A { var x: int; function constructor() -> null { this.x = 0; }; }; class B { var y: int; function constructor() -> null { this.y = 0; }; }; class C extends A, B { function constructor() -> null { this.x = 0; }; }; function main(didLoad) -> null { var c: C = C(); var a: int = c.x; var s: str = c.y; };");
+    check_int("1 error (c.y is int, from the SECOND parent)", 1, tc43.errors.length);
+    var tc43b: TypeChecker = run_tc("class A { var x: int; function constructor() -> null { this.x = 0; }; }; class B { protected var y: int; function constructor() -> null { this.y = 0; }; }; class C extends A, B { function constructor() -> null { this.x = 0; }; function getY() -> int { return this.y; }; }; function main(didLoad) -> null { };");
+    check_int("no errors (protected y reachable from a subclass)", 0, tc43b.errors.length);
+
+    // ─── TEST 44: member access on unknown, dict members ────
+    print("--- TEST 44: member access basics ---", newLine=true);
+    var tc44: TypeChecker = run_tc("function f(d: dict) -> null { var a: int = zzz.foo; var s: str = d.jsonify; var c: dict = d.copy; var b: int = d.bogus; }; function main(didLoad) -> null { };");
+    check_int("2 errors (zzz undeclared once, d.bogus)", 2, tc44.errors.length);
+
+    // ─── TEST 45: set methods, tag .name, unknown member ────
+    print("--- TEST 45: member access rest ---", newLine=true);
+    var tc45: TypeChecker = run_tc("tag Color { RED, GREEN }; class Dog { var name: str; function constructor() -> null { this.name = \"\"; }; }; function f(c: Color, s: set<int>, b: set<bool>, d: Dog) -> null { var n: str = c.name; var x: int = c.bogus; var m: int = s.min; var j: float = s.jaccard; var q: bool = b.min; var z: int = d.nothing; }; function main(didLoad) -> null { };");
+    check_int("3 errors (c.bogus, b.min, d.nothing)", 3, tc45.errors.length);
+    check("set<bool> min message", "min()/max() not defined", tc45.errors[1].message.substring(0, 22));
+
+    // ─── TEST 46: too many arguments ────────────────────────
+    print("--- TEST 46: too many arguments ---", newLine=true);
+    var tc46: TypeChecker = run_tc("class Dog { function constructor(n: int) -> null { }; function bark(a: int) -> null { }; }; function g(a: int) -> int { return a; }; function main(didLoad) -> null { var x: int = g(1, 2); var d: Dog = Dog(1, 2); d.bark(1, 2); var y: int = g(1); var d2: Dog = Dog(1); d2.bark(1); };");
+    check_int("3 errors (function, constructor, method)", 3, tc46.errors.length);
+    var tc46b: TypeChecker = run_tc("class Dog { function constructor(n: int) -> null { }; }; class Puppy extends Dog { var age: int; }; function main(didLoad) -> null { var p: Puppy = Puppy(1, 2); };");
+    check_int("1 error (inherited constructor)", 1, tc46b.errors.length);
+
+    // ─── TEST 47: Complex(a, b) arguments ───────────────────
+    print("--- TEST 47: Complex arguments ---", newLine=true);
+    var tc47: TypeChecker = run_tc("function main(didLoad) -> null { var a: Complex = Complex(1, 2); var b: Complex = Complex(1, 2, 3); var c: Complex = Complex(\"x\", 2.5); };");
+    check_int("2 errors (3 arguments, str argument)", 2, tc47.errors.length);
+
+    // ─── TEST 48: dict merge / jsonify / copy calls ─────────
+    print("--- TEST 48: dict method calls ---", newLine=true);
+    var tc48: TypeChecker = run_tc("function f(d: dict, e: dict) -> null { d.merge(e); d.merge(e, override=true); var j: str = d.jsonify(); var c: dict = d.copy(); d.merge(5); d.merge(e, override=1); d.merge(e, force=true); d.bogus(); }; function main(didLoad) -> null { };");
+    check_int("4 errors", 4, tc48.errors.length);
+
+    // ─── TEST 49: 2D occs/push, set retype/subset, tag call ─
+    print("--- TEST 49: more method calls ---", newLine=true);
+    var tc49: TypeChecker = run_tc("tag Color { RED, GREEN }; function f(m: int[][], r: int[], s: set<int>, t: set<str>, c: Color) -> null { var a: int = m.occs(1, row=0); var b: int = m.occs(1); m.push(r); m.push(r, col=true); m.push(r, r); s.retype(float); s.retype(foo); var x: bool = s.subset(s); var y: bool = s.subset(t); var n: str = c.name(); var z: str = c.nope(); }; function main(didLoad) -> null { };");
+    check_int("5 errors", 5, tc49.errors.length);
+
+    // ─── TEST 50: array copy and str dictify ────────────────
+    print("--- TEST 50: array copy, str dictify ---", newLine=true);
+    var tc50: TypeChecker = run_tc("function f(a: int[], s: str) -> null { var b: int[] = a.copy(); var d: dict = s.dictify(); var c: str[] = a.copy(); }; function main(didLoad) -> null { };");
+    check_int("1 error (a.copy() is int[], not str[])", 1, tc50.errors.length);
+
+    // ─── TEST 51: private/protected method calls ────────────
+    print("--- TEST 51: method visibility ---", newLine=true);
+    var tc51: TypeChecker = run_tc("class Dog { private function secret() -> int { return 1; }; protected function guarded() -> int { return 2; }; function open() -> int { return this.secret() + this.guarded(); }; }; class Puppy extends Dog { function fine() -> int { return this.guarded(); }; }; function main(didLoad) -> null { var d: Dog = Dog(); var a: int = d.open(); var b: int = d.secret(); var c: int = d.guarded(); };");
+    check_int("2 errors (secret and guarded from outside; calls inside classes are fine)", 2, tc51.errors.length);
+
+    // ─── TEST 52: set jaccard / dice / overlap ──────────────
+    print("--- TEST 52: set similarity calls ---", newLine=true);
+    var tc52: TypeChecker = run_tc("function f(s: set<int>, t: set<str>) -> null { var a: float = s.jaccard(s); var b: float = s.overlap(t); var c: int = s.dice(s); }; function main(didLoad) -> null { };");
+    check_int("2 errors (overlap with set<str>, dice returns float not int)", 2, tc52.errors.length);
+
+    // ─── TEST 53: interface registry ────────────────────────
+    print("--- TEST 53: interface implements ---", newLine=true);
+    var tc53: TypeChecker = run_tc("interface Shape { function area() -> int; }; class Sq implements Shape { function constructor() -> null { }; function area() -> int { return 1; }; }; class Bad implements Shape { function constructor() -> null { }; }; function main(didLoad) -> null { };");
+    check_int("1 error (Bad is missing area; Sq is fine)", 1, tc53.errors.length);
+
+    // ─── TEST 54: interface signatures ──────────────────────
+    print("--- TEST 54: interface conformance ---", newLine=true);
+    var tc54: TypeChecker = run_tc("interface Shape { function area(a: int) -> int; function label(a: int) -> str; function size(a: int, b: int) -> int; }; class Bad implements Shape { function constructor() -> null { }; function area(a: str) -> int { return 1; }; function label(a: int) -> int { return 1; }; function size(a: int) -> int { return 1; }; }; class Good implements Shape { function constructor() -> null { }; function area(a: int) -> int { return 1; }; function label(a: int) -> str { return \"\"; }; function size(a: int, b: int) -> int { return 1; }; }; function main(didLoad) -> null { };");
+    check_int("3 errors (Bad: param type, return type, param count; Good is fine)", 3, tc54.errors.length);
+
+    // ─── TEST 55: diamond fields ────────────────────────────
+    print("--- TEST 55: diamond problem ---", newLine=true);
+    var tc55: TypeChecker = run_tc("class A { var x: int; function hi() -> int { return 1; }; function constructor() -> null { this.x = 0; }; }; class B { var x: int; function hi() -> int { return 2; }; function constructor() -> null { this.x = 0; }; }; class C extends A, B { function constructor() -> null { }; }; function main(didLoad) -> null { };");
+    check_int("1 error (field x from A and B; the shared method hi is only recorded)", 1, tc55.errors.length);
+
+    // ─── TEST 56: diamond method call ───────────────────────
+    print("--- TEST 56: diamond call site ---", newLine=true);
+    var tc56: TypeChecker = run_tc("class A { function hi() -> int { return 1; }; function constructor() -> null { }; }; class B { function hi() -> int { return 2; }; function only() -> int { return 3; }; function constructor() -> null { }; }; class C extends A, B { function constructor() -> null { }; }; function main(didLoad) -> null { var c: C = C(); var a: int = c.hi(); var b: int = c.only(); };");
+    check_int("1 error (c.hi() is ambiguous; c.only() is fine)", 1, tc56.errors.length);
+
+    // ─── TEST 57: didLoad not allowed on a method ───────────
+    print("--- TEST 57: didLoad on a method ---", newLine=true);
+    var tc57: TypeChecker = run_tc("class App { function constructor() -> null { }; function runApp(didLoad) -> null { }; }; function main(didLoad) -> null { };");
+    check_int("1 error (didLoad on App.runApp; main is the only entry point)", 1, tc57.errors.length);
+
+    // ─── TEST 58: shared field ──────────────────────────────
+    print("--- TEST 58: shared field ---", newLine=true);
+    var tc58: TypeChecker = run_tc("class A { shared var x: int; var y: int; function constructor() -> null { this.y = 0; }; }; function main(didLoad) -> null { };");
+    check_int("1 error (shared var x; plain var y is fine)", 1, tc58.errors.length);
 
     print("--- ALL TESTS DONE ---", newLine=true);
 };

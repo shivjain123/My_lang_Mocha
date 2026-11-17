@@ -13,7 +13,7 @@
 #     - Identifiers: IDENTIFIER, CONST_IDENT (SCREAMING_CASE),
 #     - Keywords: 50+ reserved words (var, function, class,
 #       if, while, for, import, try, etc.)
-#     - Types: int, vast, float, str, bool, null, Result, dict, set
+#     - Types: int, vast, float, str, bool, null, dict, set
 #     - Operators: arithmetic, comparison, logical, bitwise,
 #       compound assignment (+=, -=, etc.), increment/decrement
 #     - Delimiters: (), {}, [], comma, colon, semicolon, dot,
@@ -131,7 +131,6 @@ class TokenType(Enum):
     TYPE_FLOAT   = auto()
     TYPE_STR     = auto()
     TYPE_BOOL    = auto()
-    TYPE_RESULT  = auto()
     TYPE_DICT    = auto()
     TYPE_SET = auto()
 
@@ -178,10 +177,6 @@ class TokenType(Enum):
     IMPORT       = auto()
     FROM         = auto()
     AS           = auto()
-
-    # --- Result ---
-    OK           = auto()
-    ERROR        = auto()
 
     # --- Print ---
     PRINT        = auto()
@@ -290,8 +285,6 @@ KEYWORDS = {
     "import":     TokenType.IMPORT,
     "from":       TokenType.FROM,
     "as":         TokenType.AS,
-    "ok":         TokenType.OK,
-    "error":      TokenType.ERROR,
     "print":      TokenType.PRINT,
     "true":       TokenType.BOOL_LIT,
     "false":      TokenType.BOOL_LIT,
@@ -301,7 +294,6 @@ KEYWORDS = {
     "float":      TokenType.TYPE_FLOAT,
     "str":        TokenType.TYPE_STR,
     "bool":       TokenType.TYPE_BOOL,
-    "Result":     TokenType.TYPE_RESULT,
     "newLine":    TokenType.NEWLINE_ARG,
     "start":      TokenType.START_ARG,
     "dict":       TokenType.TYPE_DICT,

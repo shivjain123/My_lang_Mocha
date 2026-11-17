@@ -296,15 +296,6 @@ class LibQualifiedCall(Node):
     method:  str   # "cos"
     args:    list
 
-# --- Ok / Error Result ---
-@dataclass
-class OkExpr(Node):
-    value: Node
-
-@dataclass
-class ErrorExpr(Node):
-    value: Node
-
 # --- Arrays ---
 @dataclass
 class ArrayLiteral(Node):

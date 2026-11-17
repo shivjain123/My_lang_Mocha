@@ -6,7 +6,7 @@ import json
 import struct
 import collections
 from decimal import Decimal
-from mocha_deparser import parse_module, parse_globals, split_top_level, PRELUDE_TYPES
+from mocha_deparser import parse_module, parse_globals, split_top_level
 from mocha_classifier import classify_function, find_loops, find_ifs, describe_lc, find_matches, find_trys
 
 # ---------------------------------------------------------------- regexes
@@ -133,7 +133,7 @@ def native_ret_kinds(funcs, g):
             cm = CALL_RE.match(i.text) if i.op == "call" else None
             name = cm.group(2) if cm else None
             if not cm or not i.result or name not in g.natives or g.declares.get(name) != "i8*" or name in NATIVE_RET or name in LIB_SIGS \
-                    or re.match(r'mocha_ext_|rc_|__mocha|.*_(release|drop)$', name):
+                    or re.match(r'mocha_ext_|rc_|__mocha|.*_(release|drop)$', name): # type: ignore
                 continue
             hit = i.result in stro
             for sm in (STORE_RE.match(x.text) for x in ins if x.op == "store"):

@@ -58,7 +58,7 @@ function tested(didLoad) -> null {
     var rl: null = file_open("graceful_test.txt", "read");
     var count: int = 0;
     while (file_eof(rl) == 0) {
-        file_read_line(rl); // We call it, but don't assign it to a variable.
+        var line: str = file_read_line(rl);
         count++;
     };
     file_free(rl);

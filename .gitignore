@@ -60,7 +60,6 @@ builtin_examples.py
 call_groups.py
 callee_where.py
 coll_evidence.py
-coverage_run.py
 finder_probe.py
 if_probe.py
 plain_probe.py
@@ -70,7 +69,6 @@ size_*.wasm.gz
 
 # scratch: new RC tests
 test_[a-z][a-z].mch
-lib_sigs.py
 type_survey2.py
 wasm_regress.ps1
 test_d[p-z].txt
@@ -105,3 +103,5 @@ leak_*.mch
 _old_build/
 corpus_current/try_*.py
 decomp_out/
+decompiler_dev/
+decomp_out_baseline/

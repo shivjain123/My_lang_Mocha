@@ -411,14 +411,6 @@ class TypeChecker {
             case "AllocArray":
                 return this.checkAllocArray(node);
 
-            case "OkExpr":
-                this.checkExpr(node.left);
-                return "Result";
-
-            case "ErrorExpr":
-                this.checkExpr(node.left);
-                return "Result";
-
             case "AwaitExpr":
                 return this.checkExpr(node.left);
 
@@ -772,12 +764,13 @@ class TypeChecker {
         };
         return elem;
     };
+
     function checkMemberAccess(node: ASTNode) -> str {
         var obj_type: str = this.checkExpr(node.left);
         var member:   str = node.value;
 
+        // If the inner chain already failed, that error is already reported: stay quiet
         if (obj_type == "unknown") {
-            this.addErrorAt("Cannot access '." + member + "' on unresolved type. Check the preceding expression for errors.", node);
             return "unknown";
         };
 
@@ -787,14 +780,16 @@ class TypeChecker {
             if (member == "has")       { return "bool"; };
             if (member == "allKeys")   { return "str[]"; };
             if (member == "allValues") { return "str[]"; };
+            if (member == "jsonify")   { return "str"; };
             if (member == "merge")     { return "dict"; };
+            if (member == "copy")      { return "dict"; };
             if (member == "remove")    { return "null"; };
             if (member == "clean")     { return "null"; };
-            this.addErrorAt("Unknown dict method '." + member + "'", node);
+            this.addErrorAt("'." + member + "' is not a method on dict. Available: .length, .has, .allKeys, .allValues, .jsonify, .remove, .clean, .merge, .copy", node);
             return "unknown";
         };
 
-        // length — arrays and str
+        // length: arrays and str
         if (member == "length") {
             if (obj_type == "str") { return "int"; };
             var le: str = this.extractElementType(obj_type);
@@ -804,7 +799,7 @@ class TypeChecker {
             return "int";
         };
 
-        // rows / cols — 2D arrays
+        // rows / cols: 2D arrays
         if (member == "rows" || member == "cols") {
             var re: str = this.extractElementType(obj_type);
             if (re != "") { re = this.extractElementType(re); };
@@ -834,12 +829,24 @@ class TypeChecker {
             if (obj_type.substring(0, 3) == "set<") {
                 if (member == "size")                        { return "int"; };
                 if (member == "has")                         { return "bool"; };
+                if (member == "subset" || member == "superset") { return "bool"; };
                 if (member == "insert" || member == "delete" ||
                     member == "clean"  || member == "negate" ||
                     member == "retype")                      { return "null"; };
                 if (member == "union"   || member == "intersect" ||
                     member == "xor"     || member == "rel_diff")  { return obj_type; };
-                this.addErrorAt("Unknown set method '." + member + "'", node);
+                if (member == "min" || member == "max") {
+                    // element type of set<T> (substring is inclusive at both ends)
+                    var set_inner: str = obj_type.substring(4, obj_type.length - 2);
+                    if (set_inner == "bool") {
+                        this.addErrorAt("min()/max() not defined for set<bool> - bools are unordered", node);
+                    } else if (set_inner != "int" && set_inner != "float" && set_inner != "vast" && set_inner != "str") {
+                        this.addErrorAt("min()/max() not supported for set<" + set_inner + ">", node);
+                    };
+                    return set_inner;
+                };
+                if (member == "jaccard" || member == "dice" || member == "overlap") { return "float"; };
+                this.addErrorAt("'." + member + "' is not a method on set. Available: .size, .has, .insert, .delete, .clean, .negate, .retype, .union, .intersect, .xor, .rel_diff, .subset, .superset, .min, .max, .jaccard, .dice, and .overlap", node);
                 return "unknown";
             };
         };
@@ -871,53 +878,164 @@ class TypeChecker {
             return "unknown";
         };
 
-        // Class member lookup — walk inheritance chain
+        // Tag values (not Tag.MEMBER on the type itself, which falls through to lookup)
+        var is_tag: bool = false;
+        var ti: int = 0;
+        while (ti < this.tag_types.length) {
+            if (this.tag_types[ti] == obj_type) { is_tag = true; };
+            ti += 1;
+        };
+        var tag_type_access: bool = false;
+        if (node.left.kind == "Identifier") {
+            if (node.left.value == obj_type) { tag_type_access = true; };
+        };
+        if (is_tag && tag_type_access == false) {
+            if (member == "name") { return "str"; };
+            this.addErrorAt("'." + member + "' is not a method on tag type '" + obj_type + "'. Available: .name()", node);
+            return "unknown";
+        };
+
+        // Class member lookup: walk ALL parents
+        if (this.findOwner(obj_type, member) == "") {
+            this.addErrorAt("'." + member + "' is not a method or property on '" + obj_type + "'", node);
+            return "unknown";
+        };
         return this.lookupMember(obj_type, member, node);
     };
 
-    function lookupMember(obj_type: str, member: str, node: ASTNode) -> str {
-        var current: str = obj_type;
-        while (current != "") {
-            var key:     str = current + "." + member;
-            var encoded: str = this.symbols.lookupEncoded(key);
-            if (encoded != "") {
-                var visibility: str = this.symbols.decodeField(encoded, 4);
-                if (visibility == "private") {
-                    if (this.current_class != current) {
-                        this.addErrorAt("'" + member + "' is private to '" + current + "' and cannot be accessed from outside", node);
-                    };
-                } else if (visibility == "protected") {
-                    if (this.current_class == "") {
-                        this.addErrorAt("'" + member + "' is protected in '" + current + "' and cannot be accessed from global scope", node);
-                    } else if (this.current_class != current) {
-                        if (this.isSubclassOf(this.current_class, current) == false) {
-                            this.addErrorAt("'" + member + "' is protected in '" + current + "' and cannot be accessed from '" + this.current_class + "'", node);
-                        };
-                    };
-                };
-                return this.symbols.decodeField(encoded, 0);
-            };
-            // Walk up inheritance chain
-            if (this.inheritance.has(current)) {
-                current = this.inheritance.get(current);
-            } else {
-                current = "";
-            };
+     // the idx-th parent of a class ("" when there is none); parents are stored as "Class#0", "Class#1", ...
+    function parentAt(cls: str, idx: int) -> str {
+        var key: str = cls + "#" + str(idx);
+        if (this.inheritance.has(key)) {
+            return this.inheritance.get(key);
         };
-        return "unknown";
+        return "";
     };
 
-    function isSubclassOf(cls: str, parent: str) -> bool {
-        var current: str = cls;
-        while (current != "") {
-            if (this.inheritance.has(current)) {
-                current = this.inheritance.get(current);
-                if (current == parent) { return true; };
-            } else {
-                current = "";
+    // the class (cls itself or any ancestor, through ALL parents) that declares this member, or ""
+    function findOwner(cls: str, member: str) -> str {
+        if (this.symbols.lookupEncoded(cls + "." + member) != "") { return cls; };
+        var idx: int = 0;
+        var parent: str = this.parentAt(cls, idx);
+        while (parent != "") {
+            if (parent != cls) {
+                var found: str = this.findOwner(parent, member);
+                if (found != "") { return found; };
+            };
+            idx += 1;
+            parent = this.parentAt(cls, idx);
+        };
+        return "";
+    };
+
+    function lookupMember(obj_type: str, member: str, node: ASTNode) -> str {
+        var current: str = this.findOwner(obj_type, member);
+        if (current == "") { return "unknown"; };
+
+        var key:     str = current + "." + member;
+        var encoded: str = this.symbols.lookupEncoded(key);
+        var visibility: str = this.symbols.decodeField(encoded, 4);
+        if (visibility == "private") {
+            if (this.current_class != current) {
+                this.addErrorAt("'" + member + "' is private to '" + current + "' and cannot be accessed from outside", node);
+            };
+        } else if (visibility == "protected") {
+            if (this.current_class == "") {
+                this.addErrorAt("'" + member + "' is protected in '" + current + "' and cannot be accessed from global scope", node);
+            } else if (this.current_class != current) {
+                if (this.isSubclassOf(this.current_class, current) == false) {
+                    this.addErrorAt("'" + member + "' is protected in '" + current + "' and cannot be accessed from '" + this.current_class + "'", node);
+                };
             };
         };
+        return this.symbols.decodeField(encoded, 0);
+    };
+
+    // true if cls descends from parent through ANY of its parents
+    function isSubclassOf(cls: str, parent: str) -> bool {
+        var idx: int = 0;
+        var p: str = this.parentAt(cls, idx);
+        while (p != "") {
+            if (p == parent) { return true; };
+            if (p != cls) {
+                if (this.isSubclassOf(p, parent)) { return true; };
+            };
+            idx += 1;
+            p = this.parentAt(cls, idx);
+        };
         return false;
+    };
+
+    // number of real parameters (didLoad not counted); -1 for variadic functions
+    function countParams(fn: ASTNode) -> int {
+        if (fn.is_variadic) { return -1; };
+        var cnt: int = 0;
+        var ck: int = 0;
+        while (ck < fn.params.length) {
+            var cp: ASTNode = fn.params[ck];
+            if (cp.value != "didLoad") { cnt += 1; };
+            ck += 1;
+        };
+        return cnt;
+    };
+
+    // remember the parameter count of every top-level function and every class method/constructor.
+    // The count lives in the KEY ("params:fn:g:1") and the value is the literal "1", so no
+    // computed string is ever stored as a table value
+    function registerParamCounts(program: ASTNode) -> null {
+        var ri: int = 0;
+        while (ri < program.children.length) {
+            var rnode: ASTNode = program.children[ri];
+            if (rnode.kind == "FunctionDecl") {
+                var fcount: int = this.countParams(rnode);
+                if (fcount >= 0) {
+                    var fkey: str = "params:fn:" + rnode.value + ":" + str(fcount);
+                    this.inheritance.put(fkey, "1");
+                };
+            } else if (rnode.kind == "ClassDecl") {
+                var rj: int = 0;
+                while (rj < rnode.body.length) {
+                    var rmember: ASTNode = rnode.body[rj];
+                    if (rmember.kind == "MethodDecl" || rmember.kind == "FunctionDecl") {
+                        var mcount: int = this.countParams(rmember);
+                        if (mcount >= 0) {
+                            var mkey: str = "params:" + rnode.value + "." + rmember.value + ":" + str(mcount);
+                            this.inheritance.put(mkey, "1");
+                        };
+                    };
+                    rj += 1;
+                };
+            };
+            ri += 1;
+        };
+    };
+
+    // max argument count stored for a key like "fn:g" or "Dog.bark"; -1 when unknown or variadic
+    function storedCount(k: str) -> int {
+        var n: int = 0;
+        while (n <= 32) {
+            var pk: str = "params:" + k + ":" + str(n);
+            if (this.inheritance.has(pk)) { return n; };
+            n += 1;
+        };
+        return -1;
+    };
+
+    // max argument count of cls.member, walking ALL parents; -1 when not found
+    function memberParamCount(cls: str, member: str) -> int {
+        var own: int = this.storedCount(cls + "." + member);
+        if (own >= 0) { return own; };
+        var pidx: int = 0;
+        var par: str = this.parentAt(cls, pidx);
+        while (par != "") {
+            if (par != cls) {
+                var up: int = this.memberParamCount(par, member);
+                if (up >= 0) { return up; };
+            };
+            pidx += 1;
+            par = this.parentAt(cls, pidx);
+        };
+        return -1;
     };
 
     function checkFunctionCall(node: ASTNode) -> str {
@@ -946,7 +1064,7 @@ class TypeChecker {
             func_name = node.left.value;
             obj_type  = "";
         } else {
-            // e.g. chained call result — check callee expr and return unknown
+            // e.g. chained call result: check callee expr and return unknown
             this.checkExpr(node.left);
             var i0: int = 0;
             while (i0 < node.args.length) {
@@ -958,13 +1076,36 @@ class TypeChecker {
             return "unknown";
         };
 
-        // Check all args
+        // Check all args (Complex(a, b) arguments must be numbers); remember the type of the
+        // first positional argument. retype's argument is a type name, not a variable: skip it
+        var is_complex_ctor: bool = false;
+        if (obj_type == "" && func_name == "Complex") { is_complex_ctor = true; };
+
+        var have_first: bool = false;
+        var first_arg_type: str = "";
+
         var i: int = 0;
         while (i < node.args.length) {
-            if (node.args[i].kind != "NamedArg") {
-                this.checkExpr(node.args[i]);
+            if (node.args[i].kind != "NamedArg" && func_name != "retype") {
+                var arg_t: str = this.checkExpr(node.args[i]);
+                if (have_first == false) {
+                    first_arg_type = arg_t;
+                    have_first = true;
+                };
+                if (is_complex_ctor) {
+                    if (arg_t != "int" && arg_t != "vast" && arg_t != "float" && arg_t != "unknown") {
+                        this.addErrorAt("Complex() arguments must be int, vast or float, not '" + arg_t + "'", node);
+                    };
+                };
             };
             i += 1;
+        };
+
+        // Complex(a, b) takes at most 2 arguments (real, imag)
+        if (is_complex_ctor) {
+            if (node.args.length > 2) {
+                this.addErrorAt("Complex() takes at most 2 arguments (real, imag), got " + str(node.args.length), node);
+            };
         };
 
         // Lambda invocation
@@ -977,13 +1118,83 @@ class TypeChecker {
             };
         };
 
+        // Too many arguments would be silently dropped (named arguments are not counted)
+        var given: int = 0;
+        var gi: int = 0;
+        while (gi < node.args.length) {
+            if (node.args[gi].kind != "NamedArg") { given += 1; };
+            gi += 1;
+        };
+        if (obj_type == "") {
+            var max_fn: int = this.storedCount("fn:" + func_name);
+            if (max_fn >= 0) {
+                if (given > max_fn) {
+                    this.addErrorAt("Function '" + func_name + "' takes at most " + str(max_fn) + " argument(s), got " + str(given), node);
+                };
+            } else {
+                var max_ctor: int = this.memberParamCount(func_name, "constructor");
+                if (max_ctor >= 0) {
+                    if (given > max_ctor) {
+                        this.addErrorAt("Constructor of '" + func_name + "' takes at most " + str(max_ctor) + " argument(s), got " + str(given), node);
+                    };
+                };
+            };
+        } else if (obj_type != "unknown") {
+            var max_method: int = this.memberParamCount(obj_type, func_name);
+            if (max_method >= 0) {
+                if (given > max_method) {
+                    this.addErrorAt("Method '" + obj_type + "." + func_name + "' takes at most " + str(max_method) + " argument(s), got " + str(given), node);
+                };
+            };
+        };
+
+        // Tag values: the only method is .name()
+        var call_is_tag: bool = false;
+        var cti: int = 0;
+        while (cti < this.tag_types.length) {
+            if (this.tag_types[cti] == obj_type) { call_is_tag = true; };
+            cti += 1;
+        };
+        if (call_is_tag && obj_type != "") {
+            if (func_name == "name") { return "str"; };
+            this.addErrorAt("'." + func_name + "()' is not a method on tag type '" + obj_type + "'. Available: .name()", node);
+            return "unknown";
+        };
+
         // Dict methods
         if (obj_type == "dict") {
             if (func_name == "has")                          { return "bool"; };
             if (func_name == "allKeys" || func_name == "allValues") { return "str[]"; };
+            if (func_name == "jsonify")                      { return "str"; };
             if (func_name == "remove"  || func_name == "clean")     { return "null"; };
             if (func_name == "length")                       { return "int"; };
-            if (func_name == "merge")                        { return "dict"; };
+            if (func_name == "copy")                         { return "dict"; };
+            if (func_name == "merge") {
+                // the positional argument must be a dict
+                if (have_first == false) {
+                    this.addErrorAt("merge() requires a dict argument", node);
+                } else if (first_arg_type != "dict") {
+                    this.addErrorAt("merge() argument must be dict, got '" + first_arg_type + "'", node);
+                };
+                // override= must be bool; any other keyword is an error
+                var mi: int = 0;
+                while (mi < node.args.length) {
+                    var marg: ASTNode = node.args[mi];
+                    if (marg.kind == "NamedArg") {
+                        if (marg.value == "override") {
+                            var kw_type: str = this.checkExpr(marg.left);
+                            if (kw_type != "bool") {
+                                this.addErrorAt("merge() override= must be bool, got '" + kw_type + "'", node);
+                            };
+                        } else {
+                            this.addErrorAt("merge() unknown keyword argument '" + marg.value + "'", node);
+                        };
+                    };
+                    mi += 1;
+                };
+                return "dict";
+            };
+            this.addErrorAt("'." + func_name + "()' is not a method on dict. Available: .length, .has, .allKeys, .allValues, .jsonify, .remove, .clean, .merge, .copy", node);
             return "unknown";
         };
 
@@ -998,24 +1209,95 @@ class TypeChecker {
             return "unknown";
         };
 
+        // File methods
+        if (obj_type == "File") {
+            if (func_name == "read" || func_name == "readLine")                           { return "str"; };
+            if (func_name == "eof")                                                       { return "bool"; };
+            if (func_name == "write" || func_name == "close" || func_name == "free")      { return "null"; };
+        };
+
+        // 2D arrays: occs needs row= or col=, push needs exactly one data argument
+        var is_2d: bool = false;
+        if (obj_type.length >= 4) {
+            if (obj_type.substring(obj_type.length - 4, obj_type.length - 1) == "[][]") { is_2d = true; };
+        };
+        if (is_2d) {
+            if (func_name == "occs") {
+                var has_row_col: bool = false;
+                var oi: int = 0;
+                while (oi < node.args.length) {
+                    var oarg: ASTNode = node.args[oi];
+                    if (oarg.kind == "NamedArg") {
+                        if (oarg.value == "row" || oarg.value == "col") { has_row_col = true; };
+                    };
+                    oi += 1;
+                };
+                if (has_row_col == false) {
+                    this.addErrorAt("occs() on a 2D array requires a 'row=' or 'col=' argument. Example: arr.occs(val, row=0) or arr.occs(val, col=2)", node);
+                };
+                return "int";
+            };
+            if (func_name == "push") {
+                if (given != 1) {
+                    this.addErrorAt("push() on a 2D array requires exactly one data argument. Example: matrix.push(row) or matrix.push(col, col=true)", node);
+                };
+                return "null";
+            };
+        };
+
         // Set methods
         if (obj_type.length >= 4) {
             if (obj_type.substring(0, 3) == "set<") {
                 if (func_name == "has")                           { return "bool"; };
                 if (func_name == "insert" || func_name == "delete" ||
-                    func_name == "clean"  || func_name == "negate" ||
-                    func_name == "retype")                        { return "null"; };
+                    func_name == "clean"  || func_name == "negate") { return "null"; };
+                if (func_name == "retype") {
+                    // the argument is a type name, not a variable
+                    if (node.args.length > 0) {
+                        if (node.args[0].kind == "Identifier") {
+                            var rt: str = node.args[0].value;
+                            if (rt != "int" && rt != "float" && rt != "str" && rt != "bool" && rt != "vast") {
+                                this.addErrorAt("Invalid type '" + rt + "' for retype(). Valid types are: int, float, str, bool, vast", node);
+                            };
+                        };
+                    };
+                    return "null";
+                };
                 if (func_name == "union"    || func_name == "intersect" ||
                     func_name == "xor"      || func_name == "rel_diff") {
-                    if (node.args.length > 0) {
-                        var arg_type: str = this.checkExpr(node.args[0]);
-                        if (arg_type != obj_type) {
-                            this.addErrorAt("Cannot call '" + func_name + "' on '" + obj_type + "' with '" + arg_type + "'. Both sets must be the same type.", node);
+                    if (have_first) {
+                        if (first_arg_type != obj_type) {
+                            this.addErrorAt("Cannot call '" + func_name + "' on '" + obj_type + "' with '" + first_arg_type + "'. Both sets must be the same type. Use .retype() to convert first.", node);
                         };
                     };
                     return obj_type;
                 };
+                if (func_name == "subset" || func_name == "superset") {
+                    if (have_first) {
+                        if (first_arg_type != obj_type) {
+                            this.addErrorAt("Cannot call '" + func_name + "' on '" + obj_type + "' with '" + first_arg_type + "'. Both sets must be the same type.", node);
+                        };
+                    };
+                    return "bool";
+                };
                 if (func_name == "size") { return "int"; };
+                if (func_name == "min" || func_name == "max") {
+                    var set_inner: str = obj_type.substring(4, obj_type.length - 2);
+                    if (set_inner == "bool") {
+                        this.addErrorAt("min()/max() not defined for set<bool> - bools are unordered", node);
+                    } else if (set_inner != "int" && set_inner != "float" && set_inner != "vast" && set_inner != "str") {
+                        this.addErrorAt("min()/max() not supported for set<" + set_inner + ">", node);
+                    };
+                    return set_inner;
+                };
+                if (func_name == "jaccard" || func_name == "dice" || func_name == "overlap") {
+                    if (have_first) {
+                        if (first_arg_type != obj_type) {
+                            this.addErrorAt("Cannot call '" + func_name + "' on '" + obj_type + "' with '" + first_arg_type + "'. Both sets must be the same type.", node);
+                        };
+                    };
+                    return "float";
+                };
                 return "unknown";
             };
         };
@@ -1025,13 +1307,21 @@ class TypeChecker {
             if (func_name == "charAt")    { return "str"; };
             if (func_name == "toInt")     { return "int"; };
             if (func_name == "toFloat")   { return "float"; };
+            if (func_name == "dictify")   { return "dict"; };
             if (func_name == "substring") { return "str"; };
+        };
+
+        // Array copy: a new array of the same type (a 2D .copy() does not exist)
+        if (func_name == "copy") {
+            if (this.endsWithBrackets(obj_type) && this.countBrackets(obj_type) == 1) {
+                return obj_type;
+            };
         };
 
         // occs
         if (func_name == "occs") { return "int"; };
 
-        // Module alias call — obj_type == "module"
+        // Module alias call: obj_type == "module"
         if (obj_type == "module") {
             if (node.left.left.kind == "Identifier") {
                 var alias:      str = node.left.left.value;
@@ -1043,11 +1333,25 @@ class TypeChecker {
             return "unknown";
         };
 
-        // Class method lookup
+        // Diamond conflict: the same method inherited from two parents
         if (obj_type != "" && obj_type != "unknown") {
-            var class_sym: str = this.symbols.lookupEncoded(obj_type + "." + func_name);
-            if (class_sym != "") {
-                return this.symbols.decodeField(class_sym, 0);
+            var diamond_enc: str = this.symbols.lookupEncoded("diamond:" + obj_type + "." + func_name);
+            if (diamond_enc != "") {
+                var dparents: str[] = this.splitComma(this.symbols.decodeField(diamond_enc, 0));
+                var obj_label: str = "obj";
+                if (node.left.kind == "MemberAccess") {
+                    if (node.left.left.kind == "Identifier") {
+                        obj_label = node.left.left.value;
+                    };
+                };
+                this.addErrorAt("Method '" + func_name + "()' is inherited from both " + dparents[0] + " and " + dparents[1] + ". Please specify parent class to prevent the Diamond Problem. Use " + dparents[0] + "." + obj_label + "." + func_name + "() or " + dparents[1] + "." + obj_label + "." + func_name + "()", node);
+            };
+        };
+
+        // Class method lookup (private/protected are checked by lookupMember)
+        if (obj_type != "" && obj_type != "unknown") {
+            if (this.findOwner(obj_type, func_name) != "") {
+                return this.lookupMember(obj_type, func_name, node);
             };
         };
 
@@ -1729,6 +2033,117 @@ class TypeChecker {
         return false;
     };
 
+        // true if the list holds s
+    function listHas(list: str[], s: str) -> bool {
+        var k: int = 0;
+        while (k < list.length) {
+            if (list[k] == s) { return true; };
+            k += 1;
+        };
+        return false;
+    };
+
+    // remember the method names and field names a class declares
+    function registerMembers(node: ASTNode) -> null {
+        var mstr: str = "";
+        var fstr: str = "";
+        var k: int = 0;
+        while (k < node.body.length) {
+            var mem: ASTNode = node.body[k];
+            if (mem.kind == "MethodDecl") {
+                if (mem.value != "constructor") {
+                    if (mstr != "") { mstr = mstr + ","; };
+                    mstr = mstr + mem.value;
+                };
+            } else if (mem.kind == "FieldDecl") {
+                if (fstr != "") { fstr = fstr + ","; };
+                fstr = fstr + mem.value;
+            };
+            k += 1;
+        };
+        this.symbols.declareGlobal("members:" + node.value, mstr, false, false, false, "public");
+        this.symbols.declareGlobal("fields:" + node.value, fstr, false, false, false, "public");
+    };
+
+    // all names (own + inherited through every parent) for prefix "members:" or "fields:"
+    function allNames(cls: str, prefix: str) -> str[] {
+        var result: str[] = [];
+        var enc: str = this.symbols.lookupEncoded(prefix + cls);
+        if (enc != "") {
+            var joined: str = this.symbols.decodeField(enc, 0);
+            if (joined != "") {
+                var own: str[] = this.splitComma(joined);
+                var a: int = 0;
+                while (a < own.length) {
+                    if (this.listHas(result, own[a]) == false) { result.push(own[a]); };
+                    a += 1;
+                };
+            };
+        };
+        var idx: int = 0;
+        var parent: str = this.parentAt(cls, idx);
+        while (parent != "") {
+            if (parent != cls) {
+                var inherited: str[] = this.allNames(parent, prefix);
+                var b: int = 0;
+                while (b < inherited.length) {
+                    if (this.listHas(result, inherited[b]) == false) { result.push(inherited[b]); };
+                    b += 1;
+                };
+            };
+            idx += 1;
+            parent = this.parentAt(cls, idx);
+        };
+        return result;
+    };
+
+    // two parents giving the same member: fields are an error, methods are recorded
+    function checkDiamond(node: ASTNode) -> null {
+        if (node.children.length < 2) { return; };
+        var pass: int = 0;
+        while (pass < 2) {
+            var prefix: str = "members:";
+            if (pass == 1) { prefix = "fields:"; };
+            var names:  str[] = [];
+            var owners: str[] = [];
+            var pi: int = 0;
+            while (pi < node.children.length) {
+                var pname: str = node.children[pi].value;
+                var plist: str[] = this.allNames(pname, prefix);
+                var q: int = 0;
+                while (q < plist.length) {
+                    var at: int = -1;
+                    var w: int = 0;
+                    while (w < names.length) {
+                        if (names[w] == plist[q]) { at = w; };
+                        w += 1;
+                    };
+                    if (at < 0) {
+                        names.push(plist[q]);
+                        owners.push(pname);
+                    } else {
+                        owners[at] = owners[at] + "," + pname;
+                    };
+                    q += 1;
+                };
+                pi += 1;
+            };
+            var r: int = 0;
+            while (r < names.length) {
+                var who: str[] = this.splitComma(owners[r]);
+                if (who.length > 1) {
+                    if (pass == 0) {
+                        this.symbols.declareGlobal("diamond:" + node.value + "." + names[r], owners[r], false, false, false, "public");
+                    } else {
+                        this.addErrorAt("Diamond conflict: field '" + names[r] + "' is inherited from both " + who[0] + " and " + who[1] + " in class '" + node.value + "'. Mocha does not support diamond inheritance of fields - rename one of the conflicting fields to resolve this.", node);
+                    };
+                };
+                r += 1;
+            };
+            pass += 1;
+        };
+    };
+
     function checkClass(node: ASTNode) -> null {
         if (this.symbols.isDeclared(node.value) == false) {
             this.symbols.declareClass(node.value);
@@ -1737,7 +2152,16 @@ class TypeChecker {
         // Track inheritance — node.children has Parent nodes
         if (node.children.length > 0) {
             this.inheritance.put(node.value, node.children[0].value);
+            // store EVERY parent as "Class#0", "Class#1", ... for multiple inheritance
+            var inh_i: int = 0;
+            while (inh_i < node.children.length) {
+                this.inheritance.put(node.value + "#" + str(inh_i), node.children[inh_i].value);
+                inh_i += 1;
+            };
         };
+
+        this.registerMembers(node);
+        this.checkDiamond(node);
 
         var prev_class: str = this.current_class;
         this.current_class = node.value;
@@ -1749,6 +2173,9 @@ class TypeChecker {
         while (i < node.body.length) {
             var member: ASTNode = node.body[i];
             if (member.kind == "FieldDecl") {
+                if (member.flag1) {
+                    this.addErrorAt("'shared' is not allowed on fields - use a module-level variable instead", member);
+                };
                 this.symbols.declare(member.value, member.type_str,
                                     false, false, false, member.extra);
                 this.symbols.declareGlobal(node.value + "." + member.value,
@@ -1796,60 +2223,94 @@ class TypeChecker {
     };
 
     function checkInterfaceCompliance(class_node: ASTNode, iface_name: str) -> null {
-        // Interface methods stored as "interface.IfaceName.methodName" -> "retType|params"
-        // We'll iterate by checking each method node registered under this interface
-        // Interface method list stored as "interface.IfaceName.methods" -> comma joined names
         var methods_encoded: str = this.symbols.lookupEncoded("interface." + iface_name + ".methods");
         if (methods_encoded == "") { return; };
+        var names_joined: str = this.symbols.decodeField(methods_encoded, 0);
+        if (names_joined == "") { return; };
+        var method_names: str[] = this.splitComma(names_joined);
 
-        // methods_encoded is comma-separated method names
-        var method_names: str[] = this.splitComma(methods_encoded);
         var mi: int = 0;
         while (mi < method_names.length) {
             var mname: str = method_names[mi];
-            var sig_key: str = "interface." + iface_name + "." + mname;
-            var sig: str = this.symbols.lookupEncoded(sig_key);
-            // sig = "returnType" (params checking deferred — complex to encode)
 
-            // Check class has this method
-            var found: bool = false;
+            // interface signature: "returnType@paramType;paramType"
+            var sig_encoded: str = this.symbols.lookupEncoded("interface." + iface_name + "." + mname);
+            var sig: str = this.symbols.decodeField(sig_encoded, 0);
+            var sig_parts: str[] = this.splitBy(sig, "@");
+            var want_ret: str = sig_parts[0];
+            var want_params: str[] = [];
+            if (sig_parts.length > 1) {
+                if (sig_parts[1] != "") {
+                    want_params = this.splitBy(sig_parts[1], ";");
+                };
+            };
+
+            // find the class method
+            var found_idx: int = -1;
             var ci: int = 0;
             while (ci < class_node.body.length) {
                 if (class_node.body[ci].kind == "MethodDecl") {
                     if (class_node.body[ci].value == mname) {
-                        found = true;
+                        if (found_idx < 0) { found_idx = ci; };
                     };
                 };
                 ci += 1;
             };
-            if (found == false) {
+
+            if (found_idx < 0) {
                 this.addErrorAt("Class '" + class_node.value + "' implements '" + iface_name + "' but is missing method '" + mname + "'", class_node);
+            } else {
+                // return type
+                if (class_node.body[found_idx].type_str != want_ret) {
+                    this.addErrorAt("'" + class_node.value + "." + mname + "' return type '" + class_node.body[found_idx].type_str + "' doesn't match interface '" + want_ret + "'", class_node);
+                };
+                // parameters (didLoad is not counted)
+                var have_types: str[] = [];
+                var pi: int = 0;
+                while (pi < class_node.body[found_idx].params.length) {
+                    if (class_node.body[found_idx].params[pi].value != "didLoad") {
+                        have_types.push(class_node.body[found_idx].params[pi].type_str);
+                    };
+                    pi += 1;
+                };
+                if (have_types.length != want_params.length) {
+                    this.addErrorAt("'" + class_node.value + "." + mname + "' wrong number of parameters for interface '" + iface_name + "'", class_node);
+                } else {
+                    var qi: int = 0;
+                    while (qi < have_types.length) {
+                        if (have_types[qi] != want_params[qi]) {
+                            this.addErrorAt("'" + class_node.value + "." + mname + "' parameter type '" + have_types[qi] + "' doesn't match interface type '" + want_params[qi] + "'", class_node);
+                        };
+                        qi += 1;
+                    };
+                };
             };
             mi += 1;
         };
     };
 
-    // Helper: split a comma-separated string into str[]
-    function splitComma(s: str) -> str[] {
+    // split a string on a single-character separator
+    function splitBy(s: str, sep: str) -> str[] {
         var result: str[] = [];
         var current: str = "";
         var i: int = 0;
         while (i < s.length) {
             var ch: str = s.charAt(i);
-            if (ch == ",") {
-                if (current.length > 0) {
-                    result.push(current);
-                    current = "";
-                };
+            if (ch == sep) {
+                result.push(current);
+                current = "";
             } else {
                 current = current + ch;
             };
             i += 1;
         };
-        if (current.length > 0) {
-            result.push(current);
-        };
+        result.push(current);
         return result;
+    };
+
+    // Helper: split a comma-separated string into str[]
+    function splitComma(s: str) -> str[] {
+        return this.splitBy(s, ",");
     };
 
     function checkInterface(node: ASTNode) -> null {
@@ -1857,29 +2318,38 @@ class TypeChecker {
             this.symbols.declareClass(node.value);
         };
 
-        // Collect method names for compliance checking
-        var method_names: str[] = [];
+        // Register the interface itself so checkClass can find "interface.Name"
+        this.symbols.declareGlobal(
+            "interface." + node.value,
+            node.value,
+            false, false, false, "public"
+        );
+
+        var names_str: str = "";
         var i: int = 0;
         while (i < node.body.length) {
             var method: ASTNode = node.body[i];
-            method_names.push(method.value);
-            // Store return type under "interface.IfaceName.methodName"
+            if (i > 0) { names_str = names_str + ","; };
+            names_str = names_str + method.value;
+
+            // signature "returnType@paramType;paramType"
+            var ptypes: str = "";
+            var pk: int = 0;
+            while (pk < method.params.length) {
+                if (method.params[pk].value != "didLoad") {
+                    if (ptypes != "") { ptypes = ptypes + ";"; };
+                    ptypes = ptypes + method.params[pk].type_str;
+                };
+                pk += 1;
+            };
             this.symbols.declareGlobal(
                 "interface." + node.value + "." + method.value,
-                method.type_str,
+                method.type_str + "@" + ptypes,
                 false, false, false, "public"
             );
             i += 1;
         };
 
-        // Store method name list as comma-joined string
-        var names_str: str = "";
-        var j: int = 0;
-        while (j < method_names.length) {
-            if (j > 0) { names_str = names_str + ","; };
-            names_str = names_str + method_names[j];
-            j += 1;
-        };
         this.symbols.declareGlobal(
             "interface." + node.value + ".methods",
             names_str,
@@ -1928,13 +2398,52 @@ class TypeChecker {
         // so functions/classes can reference each other regardless
         // of declaration order
         // --------------------------------------------------------
+        this.registerParamCounts(program);
         var i: int = 0;
         while (i < program.children.length) {
             var node: ASTNode = program.children[i];
 
             if (node.kind == "FunctionDecl") {
                 if (this.symbols.isDeclared(node.value)) {
-                    this.addErrorAt("Illegal redefinition of function '" + node.value + "'. Mocha prohibits Function OverLoading", node);
+                    // find the first earlier top-level function with the same name
+                    var dup_first: int = -1;
+                    var dup_scan: int = 0;
+                    while (dup_scan < i) {
+                        var dup_cand: ASTNode = program.children[dup_scan];
+                        if (dup_cand.kind == "FunctionDecl" && dup_cand.value == node.value) {
+                            if (dup_first == -1) { dup_first = dup_scan; };
+                        };
+                        dup_scan += 1;
+                    };
+
+                    if (dup_first == -1) {
+                        this.addErrorAt("Illegal redefinition of function '" + node.value + "'. Mocha prohibits Function OverLoading", node);
+                    } else {
+                        // build "function name(a: int, b: str) -> ret" for the earlier and the current function
+                        var dup_sig_first: str = "";
+                        var dup_sig_second: str = "";
+                        var dup_pass: int = 0;
+                        while (dup_pass < 2) {
+                            var dup_idx: int = dup_first;
+                            if (dup_pass == 1) { dup_idx = i; };
+                            var dup_fnode: ASTNode = program.children[dup_idx];
+                            var dup_params: str = "";
+                            var dup_k: int = 0;
+                            while (dup_k < dup_fnode.params.length) {
+                                var dup_p: ASTNode = dup_fnode.params[dup_k];
+                                if (dup_p.value != "didLoad") {
+                                    if (dup_params != "") { dup_params = dup_params + ", "; };
+                                    dup_params = dup_params + dup_p.value + ": " + dup_p.type_str;
+                                };
+                                dup_k += 1;
+                            };
+                            var dup_sig: str = "function " + dup_fnode.value + "(" + dup_params + ") -> " + dup_fnode.type_str;
+                            if (dup_pass == 0) { dup_sig_first = dup_sig; } else { dup_sig_second = dup_sig; };
+                            dup_pass += 1;
+                        };
+
+                        this.addErrorAt("Illegal redefinition of function " + node.value + " in scope. Its versions are:\n  " + dup_sig_first + " {...};\n  and " + dup_sig_second + " {...};\nPlease resolve this ambiguity by renaming one of the functions. Mocha prohibits Function OverLoading", node);
+                    };
                 } else {
                     this.symbols.declareFunction(node.value, node.type_str);
                 };
@@ -2015,6 +2524,20 @@ class TypeChecker {
 
             } else if (node2.kind == "ClassDecl") {
                 this.checkClass(node2);
+                // the entry point must be a plain top-level function
+                var cmi: int = 0;
+                while (cmi < node2.body.length) {
+                    if (node2.body[cmi].kind == "MethodDecl") {
+                        var cmp: int = 0;
+                        while (cmp < node2.body[cmi].params.length) {
+                            if (node2.body[cmi].params[cmp].value == "didLoad") {
+                                this.addErrorAt("'didLoad' is only allowed on a top-level function, not on method '" + node2.value + "." + node2.body[cmi].value + "'", node2.body[cmi]);
+                            };
+                            cmp += 1;
+                        };
+                    };
+                    cmi += 1;
+                };
 
             } else if (node2.kind == "InterfaceDecl") {
                 this.checkInterface(node2);

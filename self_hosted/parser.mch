@@ -277,7 +277,7 @@ class Parser {
         } else if (this.check(TokenType.LAMBDA)) {
             this.advance();
             return "lambda";
-        } else if (this.check(TokenType.TYPE_INT) || this.check(TokenType.TYPE_VAST) || this.check(TokenType.TYPE_FLOAT) || this.check(TokenType.TYPE_STR) || this.check(TokenType.TYPE_BOOL) || this.check(TokenType.TYPE_RESULT) || this.check(TokenType.NULL) || this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
+        } else if (this.check(TokenType.TYPE_INT) || this.check(TokenType.TYPE_VAST) || this.check(TokenType.TYPE_FLOAT) || this.check(TokenType.TYPE_STR) || this.check(TokenType.TYPE_BOOL) || this.check(TokenType.NULL) || this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
             var tok: Token = this.current();
             this.advance();
             base = tok.value;
@@ -664,6 +664,7 @@ class Parser {
                 this.expect(TokenType.COLON, "Expected ':' after field name");
                 field.type_str = this.parse_type_str();
                 field.extra = visibility;
+                field.flag1 = is_shared;
                 if (this.pair(TokenType.ASSIGN)) {
                     field.left = this.parse_expression();
                 };
@@ -1122,9 +1123,21 @@ class Parser {
             // function call
             } else if (this.check(TokenType.LPAREN)) {
                 this.advance();
+                // retype(type_name): the type word must stay a plain identifier, not become a cast
+                var call_is_retype: bool = false;
+                if (expr.kind == "MemberAccess") {
+                    if (expr.value == "retype") { call_is_retype = true; };
+                };
                 expr = this.wrap_node("FunctionCall", expr, "");
                 while (!this.check(TokenType.RPAREN) && !this.check(TokenType.EOF)) {
-                    expr.args.push(this.parse_call_arg());
+                    if (call_is_retype && expr.args.length == 0) {
+                        var rt_tok: Token = this.advance();
+                        var rt_node: ASTNode = this.make_node("Identifier");
+                        rt_node.value = rt_tok.value;
+                        expr.args.push(rt_node);
+                    } else {
+                        expr.args.push(this.parse_call_arg());
+                    };
                     if (!this.check(TokenType.RPAREN)) {
                         this.expect(TokenType.COMMA, "Expected ',' between arguments");
                     };
@@ -1295,7 +1308,7 @@ class Parser {
             case TokenType.ALLOC:
                 this.advance();
                 var alloc_node: ASTNode = this.make_node("AllocArray");
-                if (this.check(TokenType.TYPE_INT) || this.check(TokenType.TYPE_VAST) || this.check(TokenType.TYPE_FLOAT) || this.check(TokenType.TYPE_STR) || this.check(TokenType.TYPE_BOOL) || this.check(TokenType.TYPE_RESULT) || this.check(TokenType.NULL) || this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
+                if (this.check(TokenType.TYPE_INT) || this.check(TokenType.TYPE_VAST) || this.check(TokenType.TYPE_FLOAT) || this.check(TokenType.TYPE_STR) || this.check(TokenType.TYPE_BOOL) || this.check(TokenType.NULL) || this.check(TokenType.IDENTIFIER) || this.check(TokenType.CONST_IDENT)) {
                     var alloc_tok: Token = this.current();
                     this.advance();
                     alloc_node.value = alloc_tok.value;
@@ -1311,20 +1324,6 @@ class Parser {
                     this.expect(TokenType.RBRACKET, "Expected ']'");
                 };
                 return alloc_node;
-            case TokenType.OK:
-                this.advance();
-                this.expect(TokenType.LPAREN, "Expected '(' after 'ok'");
-                var ok_node: ASTNode = this.make_node("OkExpr");
-                ok_node.left = this.parse_expression();
-                this.expect(TokenType.RPAREN, "Expected ')' after ok value");
-                return ok_node;
-            case TokenType.ERROR:
-                this.advance();
-                this.expect(TokenType.LPAREN, "Expected '(' after 'error'");
-                var err_node: ASTNode = this.make_node("ErrorExpr");
-                err_node.left = this.parse_expression();
-                this.expect(TokenType.RPAREN, "Expected ')' after error value");
-                return err_node;
             case TokenType.LAMBDA:
                 return this.parse_lambda();
             case TokenType.AWAIT:

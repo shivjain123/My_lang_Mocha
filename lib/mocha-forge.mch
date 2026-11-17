@@ -22,8 +22,10 @@ local function forge_db_write_meta(db: null, key: str, value: str) -> null {
 };
 
 local function forge_db_read_meta(db: null, key: str) -> str {
-    sqlite3_query_run(db, "SELECT value FROM meta WHERE key = '" + key + "';");
-    return sqlite3_query_cell(db, 0, 0);
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM meta WHERE key = '" + key + "';");
+    var qval: str = sqlite3_query_cell(qres, 0, 0);
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_write_array(db: null, name: str, idx: int, value: str) -> null {
@@ -31,13 +33,17 @@ local function forge_db_write_array(db: null, name: str, idx: int, value: str) -
 };
 
 local function forge_db_read_array_len(db: null, name: str) -> int {
-    sqlite3_query_run(db, "SELECT COUNT(*) FROM arrays WHERE name = '" + name + "';");
-    return sqlite3_query_cell(db, 0, 0).toInt();
+    var qres: int = sqlite3_query_run(db, "SELECT COUNT(*) FROM arrays WHERE name = '" + name + "';");
+    var qval: int = sqlite3_query_cell(qres, 0, 0).toInt();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_read_array_cell(db: null, name: str, idx: int) -> str {
-    sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' AND idx = " + str(idx) + ";");
-    return sqlite3_query_cell(db, 0, 0);
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' AND idx = " + str(idx) + ";");
+    var qval: str = sqlite3_query_cell(qres, 0, 0);
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_write_tree_node(db: null, name: str, node_id: int, is_leaf: int, value: float, feature: int, threshold: float, left_id: int, right_id: int) -> null {
@@ -45,33 +51,45 @@ local function forge_db_write_tree_node(db: null, name: str, node_id: int, is_le
 };
 
 local function forge_db_read_tree_node_isleaf(db: null, name: str, node_id: int) -> int {
-    sqlite3_query_run(db, "SELECT is_leaf FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
-    return sqlite3_query_cell(db, 0, 0).toInt();
+    var qres: int = sqlite3_query_run(db, "SELECT is_leaf FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    var qval: int = sqlite3_query_cell(qres, 0, 0).toInt();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_read_tree_node_value(db: null, name: str, node_id: int) -> float {
-    sqlite3_query_run(db, "SELECT value FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
-    return sqlite3_query_cell(db, 0, 0).toFloat();
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    var qval: float = sqlite3_query_cell(qres, 0, 0).toFloat();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_read_tree_node_feature(db: null, name: str, node_id: int) -> int {
-    sqlite3_query_run(db, "SELECT feature FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
-    return sqlite3_query_cell(db, 0, 0).toInt();
+    var qres: int = sqlite3_query_run(db, "SELECT feature FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    var qval: int = sqlite3_query_cell(qres, 0, 0).toInt();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_read_tree_node_threshold(db: null, name: str, node_id: int) -> float {
-    sqlite3_query_run(db, "SELECT threshold FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
-    return sqlite3_query_cell(db, 0, 0).toFloat();
+    var qres: int = sqlite3_query_run(db, "SELECT threshold FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    var qval: float = sqlite3_query_cell(qres, 0, 0).toFloat();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_read_tree_node_leftid(db: null, name: str, node_id: int) -> int {
-    sqlite3_query_run(db, "SELECT left_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
-    return sqlite3_query_cell(db, 0, 0).toInt();
+    var qres: int = sqlite3_query_run(db, "SELECT left_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    var qval: int = sqlite3_query_cell(qres, 0, 0).toInt();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_db_read_tree_node_rightid(db: null, name: str, node_id: int) -> int {
-    sqlite3_query_run(db, "SELECT right_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
-    return sqlite3_query_cell(db, 0, 0).toInt();
+    var qres: int = sqlite3_query_run(db, "SELECT right_id FROM trees WHERE name = '" + name + "' AND node_id = " + str(node_id) + ";");
+    var qval: int = sqlite3_query_cell(qres, 0, 0).toInt();
+    sqlite3_query_free(qres);
+    return qval;
 };
 
 local function forge_serialize_dtnode(db: null, name: str, node: DTNode, node_id: int, counter: int[]) -> null {

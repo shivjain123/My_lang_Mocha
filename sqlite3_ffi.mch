@@ -29,14 +29,14 @@ function sqlite_tests(didLoad) -> null {
 
     // ── 5. Query all rows ──────────────────────────────────────────
     print("--- 5. Query all ---", newLine=true);
-    sqlite3_query_run(db, "SELECT * FROM students;");
-    var rows: int = sqlite3_query_rows(db);
-    var cols: int = sqlite3_query_cols(db);
+    var res: int = sqlite3_query_run(db, "SELECT * FROM students;");
+    var rows: int = sqlite3_query_rows(res);
+    var cols: int = sqlite3_query_cols(res);
     print("rows: " + str(rows) + " cols: " + str(cols), newLine=true);
 
     var h: int = 0;
     while (h < cols) {
-        print(sqlite3_query_colname(db, h) + "\t", newLine=false);
+        print(sqlite3_query_colname(res, h) + "\t", newLine=false);
         h++;
     };
     print("", newLine=true);
@@ -46,7 +46,7 @@ function sqlite_tests(didLoad) -> null {
     while (i < rows) {
         var j: int = 0;
         while (j < cols) {
-            print(sqlite3_query_cell(db, i, j) + "\t", newLine=false);
+            print(sqlite3_query_cell(res, i, j) + "\t", newLine=false);
             j++;
         };
         print("", newLine=true);
@@ -55,35 +55,39 @@ function sqlite_tests(didLoad) -> null {
 
     // ── 6. Filtered query ──────────────────────────────────────────
     print("--- 6. Filtered query ---", newLine=true);
-    sqlite3_query_run(db, "SELECT name, grade FROM students WHERE passed = 1;");
-    var rows2: int = sqlite3_query_rows(db);
+    sqlite3_query_free(res);
+    res = sqlite3_query_run(db, "SELECT name, grade FROM students WHERE passed = 1;");
+    var rows2: int = sqlite3_query_rows(res);
     print("passed students: " + str(rows2), newLine=true);
     var i2: int = 0;
     while (i2 < rows2) {
-        print(sqlite3_query_cell(db, i2, 0) + " — " + sqlite3_query_cell(db, i2, 1), newLine=true);
+        print(sqlite3_query_cell(res, i2, 0) + " — " + sqlite3_query_cell(res, i2, 1), newLine=true);
         i2++;
     };
 
     // ── 7. Aggregate ───────────────────────────────────────────────
     print("--- 7. Aggregate ---", newLine=true);
-    sqlite3_query_run(db, "SELECT AVG(grade), MAX(grade), MIN(grade) FROM students;");
-    print("avg: " + sqlite3_query_cell(db, 0, 0), newLine=true);
-    print("max: " + sqlite3_query_cell(db, 0, 1), newLine=true);
-    print("min: " + sqlite3_query_cell(db, 0, 2), newLine=true);
+    sqlite3_query_free(res);
+    res = sqlite3_query_run(db, "SELECT AVG(grade), MAX(grade), MIN(grade) FROM students;");
+    print("avg: " + sqlite3_query_cell(res, 0, 0), newLine=true);
+    print("max: " + sqlite3_query_cell(res, 0, 1), newLine=true);
+    print("min: " + sqlite3_query_cell(res, 0, 2), newLine=true);
 
     // ── 8. Update ──────────────────────────────────────────────────
     print("--- 8. Update ---", newLine=true);
     sqlite3_exec(db, "UPDATE students SET grade = 50.0 WHERE name = 'Charlie';");
     print("rows changed: " + str(sqlite3_changes(db)), newLine=true);
-    sqlite3_query_run(db, "SELECT name, grade FROM students WHERE name = 'Charlie';");
-    print("Charlie new grade: " + sqlite3_query_cell(db, 0, 1), newLine=true);
+    sqlite3_query_free(res);
+    res = sqlite3_query_run(db, "SELECT name, grade FROM students WHERE name = 'Charlie';");
+    print("Charlie new grade: " + sqlite3_query_cell(res, 0, 1), newLine=true);
 
     // ── 9. Delete ──────────────────────────────────────────────────
     print("--- 9. Delete ---", newLine=true);
     sqlite3_exec(db, "DELETE FROM students WHERE passed = 0;");
     print("rows deleted: " + str(sqlite3_changes(db)), newLine=true);
-    sqlite3_query_run(db, "SELECT COUNT(*) FROM students;");
-    print("remaining: " + sqlite3_query_cell(db, 0, 0), newLine=true);
+    sqlite3_query_free(res);
+    res = sqlite3_query_run(db, "SELECT COUNT(*) FROM students;");
+    print("remaining: " + sqlite3_query_cell(res, 0, 0), newLine=true);
 
     // ── 10. Error handling ─────────────────────────────────────────
     print("--- 10. Error ---", newLine=true);
@@ -94,6 +98,7 @@ function sqlite_tests(didLoad) -> null {
     // ── 11. Cleanup ────────────────────────────────────────────────
     print("--- 11. Cleanup ---", newLine=true);
     sqlite3_exec(db, "DROP TABLE IF EXISTS students;");
+    sqlite3_query_free(res);
     sqlite3_close(db);
     print("--- SQLite3 Done ---", newLine=true);
 };

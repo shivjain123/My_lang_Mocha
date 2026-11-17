@@ -221,9 +221,6 @@
  *     closing a handle twice prints a warning and is ignored
  *     when the MOCHA_RC_STATS environment variable is set
  *
- * ── STRAGGLER LIB WRAPPERS ─────────────────────────────────
- *   - mocha-processing: mocha_map_float (float array lambda map)
- *     (the rest of each library is written in Mocha itself)
  *
  * ── MOCHA-INK SVG VISUALISATION ─────────────────────────────
  *   - Shared infrastructure: palette (first 8 of Tableau 10),
@@ -1963,19 +1960,6 @@ char* mocha_array_max_str(MochaArray *arr) {
         if (strcmp(v, m) > 0) m = v;
     }
     return m;
-}
-
-/* Map a float lambda over every element, returning a new float array.
- * Straggler from mocha-processing — remainder of lib is in Mocha. */
-MochaArray* mocha_map_float(MochaArray *arr, MochaClosureBundle *bundle) {
-    MochaArray *result = mocha_array_new(arr->length, sizeof(double), 0);
-    for (int32_t i = 0; i < arr->length; i++) {
-        double x;
-        mocha_array_get(arr, i, &x);
-        double val = mocha_call_lambda_float(bundle, &x, NULL);
-        mocha_array_push(result, &val);
-    }
-    return result;
 }
 
 /* ============================================================
@@ -4856,49 +4840,62 @@ int mocha_sqlite3_query(void *db, const char *sql) {
  * SQLITE3 QUERY RESULT API
  * ============================================================ */
 
-/* Internal result cache — stores last query results */
-static char ***mocha_sqlite3_result_rows = NULL;
-static char **mocha_sqlite3_result_colnames = NULL;
-static int mocha_sqlite3_result_nrows = 0;
-static int mocha_sqlite3_result_ncols = 0;
+/* One cached query result. The caller holds a small positive int handle,
+ * never the pointer, so a wrong or already-freed handle is detected
+ * instead of crashing. */
+typedef struct {
+    char ***rows;
+    char **colnames;
+    int nrows;
+    int ncols;
+} MochaSqlResult;
 
-/* Free the cached results */
-static void mocha_sqlite3_free_results() {
-    if (mocha_sqlite3_result_rows) {
-        for (int i = 0; i < mocha_sqlite3_result_nrows; i++) {
-            if (mocha_sqlite3_result_rows[i]) {
-                for (int j = 0; j < mocha_sqlite3_result_ncols; j++) {
-                    if (mocha_sqlite3_result_rows[i][j])
-                        free(mocha_sqlite3_result_rows[i][j]);
+/* Live results, sorted by handle (handles only grow, so new ones go at the end) */
+typedef struct {
+    int id;
+    MochaSqlResult *res;
+} MochaSqlLive;
+
+static MochaSqlLive *mocha_sqlite3_live = NULL;
+static int mocha_sqlite3_live_n = 0;
+static int mocha_sqlite3_live_cap = 0;
+static int mocha_sqlite3_next_id = 1;
+
+/* Free the contents of a result, then the result itself */
+static void mocha_sqlite3_result_destroy(MochaSqlResult *r) {
+    if (!r) return;
+    if (r->rows) {
+        for (int i = 0; i < r->nrows; i++) {
+            if (r->rows[i]) {
+                for (int j = 0; j < r->ncols; j++) {
+                    if (r->rows[i][j])
+                        free(r->rows[i][j]);
                 }
-                free(mocha_sqlite3_result_rows[i]);
+                free(r->rows[i]);
             }
         }
-        free(mocha_sqlite3_result_rows);
-        mocha_sqlite3_result_rows = NULL;
+        free(r->rows);
     }
-    if (mocha_sqlite3_result_colnames) {
-        for (int j = 0; j < mocha_sqlite3_result_ncols; j++) {
-            if (mocha_sqlite3_result_colnames[j])
-                free(mocha_sqlite3_result_colnames[j]);
+    if (r->colnames) {
+        for (int j = 0; j < r->ncols; j++) {
+            if (r->colnames[j])
+                free(r->colnames[j]);
         }
-        free(mocha_sqlite3_result_colnames);
-        mocha_sqlite3_result_colnames = NULL;
+        free(r->colnames);
     }
-    mocha_sqlite3_result_nrows = 0;
-    mocha_sqlite3_result_ncols = 0;
+    free(r);
 }
 
-/* Callback — collects rows into cache.
+/* Callback - collects rows into the result passed as ctx.
  * A SQL NULL is stored as a real NULL pointer, so it can be told apart from the text "NULL".
  * Aborts with an error if the column count changes between statements */
-static int mocha_sqlite3_collect_callback(void *unused, int argc,
+static int mocha_sqlite3_collect_callback(void *ctx, int argc,
                                            char **argv, char **col_names) {
-    (void)unused;
+    MochaSqlResult *r = (MochaSqlResult*)ctx;
     if (argc <= 0) return 0;
 
-    /* first row — allocate column names */
-    if (mocha_sqlite3_result_ncols == 0) {
+    /* first row - allocate column names */
+    if (r->ncols == 0) {
         char **names = (char**)calloc((size_t)argc, sizeof(char*));
         if (!names) {
             fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
@@ -4913,23 +4910,23 @@ static int mocha_sqlite3_collect_callback(void *unused, int argc,
                 return 1;
             }
         }
-        mocha_sqlite3_result_colnames = names;
-        mocha_sqlite3_result_ncols = argc;
-    } else if (argc != mocha_sqlite3_result_ncols) {
+        r->colnames = names;
+        r->ncols = argc;
+    } else if (argc != r->ncols) {
         fprintf(stderr, "MochaSQLiteError (query_run): all statements in one query must return the same "
                         "number of columns (got %d, then %d)\n",
-                mocha_sqlite3_result_ncols, argc);
+                r->ncols, argc);
         return 1;
     }
 
     /* grow rows array */
-    char*** tmp_rows = (char***)realloc(mocha_sqlite3_result_rows,
-        (size_t)(mocha_sqlite3_result_nrows + 1) * sizeof(char**));
+    char*** tmp_rows = (char***)realloc(r->rows,
+        (size_t)(r->nrows + 1) * sizeof(char**));
     if (!tmp_rows) {
         fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
-        return 1;  /* tells sqlite3_exec to abort — the old rows array is still valid */
+        return 1;  /* tells sqlite3_exec to abort - the old rows array is still valid */
     }
-    mocha_sqlite3_result_rows = tmp_rows;
+    r->rows = tmp_rows;
 
     char **row = (char**)calloc((size_t)argc, sizeof(char*));
     if (!row) {
@@ -4947,58 +4944,132 @@ static int mocha_sqlite3_collect_callback(void *unused, int argc,
             }
         }
     }
-    mocha_sqlite3_result_rows[mocha_sqlite3_result_nrows] = row;
-    mocha_sqlite3_result_nrows++;
+    r->rows[r->nrows] = row;
+    r->nrows++;
     return 0;
 }
 
-/* Run a SELECT query and cache results — call this first.
- * If the query fails, the cache is left empty (no half-filled results) */
+/* Position of a handle in the live list (binary search), or -1 if it is
+ * unknown or already freed */
+static int mocha_sqlite3_find_index(int id) {
+    int first = 0, last = mocha_sqlite3_live_n - 1;
+    while (first <= last) {
+        int mid = first + (last - first) / 2;
+        int mid_id = mocha_sqlite3_live[mid].id;
+        if (mid_id == id) return mid;
+        if (mid_id < id) first = mid + 1;
+        else last = mid - 1;
+    }
+    return -1;
+}
+
+/* The result behind a handle, or NULL if the handle is not valid */
+static MochaSqlResult* mocha_sqlite3_find(int id) {
+    int at = mocha_sqlite3_find_index(id);
+    return at < 0 ? NULL : mocha_sqlite3_live[at].res;
+}
+
+/* Remember a new result and give back its handle (0 if memory ran out) */
+static int mocha_sqlite3_register(MochaSqlResult *r) {
+    if (mocha_sqlite3_live_n == mocha_sqlite3_live_cap) {
+        int new_cap = mocha_sqlite3_live_cap ? mocha_sqlite3_live_cap * 2 : 8;
+        MochaSqlLive *grown = (MochaSqlLive*)realloc(mocha_sqlite3_live,
+            (size_t)new_cap * sizeof(MochaSqlLive));
+        if (!grown) return 0;
+        mocha_sqlite3_live = grown;
+        mocha_sqlite3_live_cap = new_cap;
+    }
+    int id = mocha_sqlite3_next_id++;
+    mocha_sqlite3_live[mocha_sqlite3_live_n].id = id;
+    mocha_sqlite3_live[mocha_sqlite3_live_n].res = r;
+    mocha_sqlite3_live_n++;
+    return id;
+}
+
+/* Run a SELECT query and keep its whole result - call this first.
+ * Returns a result handle (1 or more) that the other query_* functions take.
+ * Returns 0 if the query failed (nothing is kept). Free the handle with query_free */
 int mocha_sqlite3_query_run(void *db, const char *sql) {
-    if (!db) return -1;
-    mocha_sqlite3_free_results();
+    if (!db) return 0;
+    MochaSqlResult *r = (MochaSqlResult*)calloc(1, sizeof(MochaSqlResult));
+    if (!r) {
+        fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+        return 0;
+    }
     char *errmsg = NULL;
-    int rc = sqlite3_exec((sqlite3*)db, sql, mocha_sqlite3_collect_callback, 0, &errmsg);
+    int rc = sqlite3_exec((sqlite3*)db, sql, mocha_sqlite3_collect_callback, r, &errmsg);
     if (rc != SQLITE_OK) {
         if (errmsg) {
             fprintf(stderr, "MochaSQLiteError (query_run): %s\n", errmsg);
             sqlite3_free(errmsg);
         }
-        mocha_sqlite3_free_results();
+        mocha_sqlite3_result_destroy(r);
+        return 0;
     }
-    return rc;
+    int id = mocha_sqlite3_register(r);
+    if (id == 0) {
+        fprintf(stderr, "MochaRuntimeError: out of memory collecting SQL rows\n");
+        mocha_sqlite3_result_destroy(r);
+    }
+    return id;
 }
 
-/* How many rows in last query result */
-int mocha_sqlite3_query_rows(void *db) {
-    return mocha_sqlite3_result_nrows;
+/* How many rows in a query result (0 for an invalid handle) */
+int mocha_sqlite3_query_rows(int res) {
+    MochaSqlResult *r = mocha_sqlite3_find(res);
+    return r ? r->nrows : 0;
 }
 
-/* How many columns in last query result */
-int mocha_sqlite3_query_cols(void *db) {
-    return mocha_sqlite3_result_ncols;
+/* How many columns in a query result (0 for an invalid handle) */
+int mocha_sqlite3_query_cols(int res) {
+    MochaSqlResult *r = mocha_sqlite3_find(res);
+    return r ? r->ncols : 0;
 }
 
 /* Get cell value at row i, col j. A SQL NULL gives the text "NULL"
- * (use mocha_sqlite3_query_is_null to tell it from a real "NULL" string) */
-const char* mocha_sqlite3_query_cell(void *db, int row, int col) {
-    if (row < 0 || row >= mocha_sqlite3_result_nrows) return rc_strdup("");
-    if (col < 0 || col >= mocha_sqlite3_result_ncols) return rc_strdup("");
-    const char *v = mocha_sqlite3_result_rows[row][col];
+ * (use mocha_sqlite3_query_is_null to tell it from a real "NULL" string).
+ * An invalid handle or an index out of range gives "" */
+const char* mocha_sqlite3_query_cell(int res, int row, int col) {
+    MochaSqlResult *r = mocha_sqlite3_find(res);
+    if (!r) return rc_strdup("");
+    if (row < 0 || row >= r->nrows) return rc_strdup("");
+    if (col < 0 || col >= r->ncols) return rc_strdup("");
+    const char *v = r->rows[row][col];
     return rc_strdup(v ? v : "NULL");
 }
 
-/* Is the cell a SQL NULL? 1 = yes, 0 = no (also 0 for an out-of-range index) */
-int mocha_sqlite3_query_is_null(void *db, int row, int col) {
-    if (row < 0 || row >= mocha_sqlite3_result_nrows) return 0;
-    if (col < 0 || col >= mocha_sqlite3_result_ncols) return 0;
-    return mocha_sqlite3_result_rows[row][col] == NULL;
+/* Is the cell a SQL NULL? 1 = yes, 0 = no (also 0 for an invalid handle or an out-of-range index) */
+int mocha_sqlite3_query_is_null(int res, int row, int col) {
+    MochaSqlResult *r = mocha_sqlite3_find(res);
+    if (!r) return 0;
+    if (row < 0 || row >= r->nrows) return 0;
+    if (col < 0 || col >= r->ncols) return 0;
+    return r->rows[row][col] == NULL;
 }
 
-/* Get column name at index j */
-const char* mocha_sqlite3_query_colname(void *db, int col) {
-    if (col < 0 || col >= mocha_sqlite3_result_ncols) return rc_strdup("");
-    return rc_strdup(mocha_sqlite3_result_colnames[col]);
+/* Get column name at index j ("" for an invalid handle or index) */
+const char* mocha_sqlite3_query_colname(int res, int col) {
+    MochaSqlResult *r = mocha_sqlite3_find(res);
+    if (!r) return rc_strdup("");
+    if (col < 0 || col >= r->ncols) return rc_strdup("");
+    return rc_strdup(r->colnames[col]);
+}
+
+/* Free a query result. Safe to call twice:
+ * a second free of the same handle prints a warning and is ignored.
+ * Freeing 0 (a failed query_run) does nothing */
+void* mocha_sqlite3_query_free(int res) {
+    if (res == 0) return NULL;
+    int at = mocha_sqlite3_find_index(res);
+    if (at < 0) {
+        fprintf(stderr, "MochaSQLiteWarning: sqlite3_query_free called on a result that is already freed, ignored\n");
+        return NULL;
+    }
+    mocha_sqlite3_result_destroy(mocha_sqlite3_live[at].res);
+    memmove(&mocha_sqlite3_live[at], &mocha_sqlite3_live[at + 1],
+            (size_t)(mocha_sqlite3_live_n - at - 1) * sizeof(MochaSqlLive));
+    mocha_sqlite3_live_n--;
+    return NULL;
 }
 
 /* Error message */
@@ -6444,32 +6515,35 @@ static int32_t ht_find_slot(MochaHashTable *ht, const char *key) {
     int32_t  first_marked = -1;
 
     for (int32_t i = 0; i < ht->capacity; i++) {
-        int32_t idx = (int32_t)((hash + (uint32_t)(i * i)) % (uint32_t)ht->capacity);
+        /* triangular probing: offsets 0, 1, 3, 6, 10, ... visit EVERY slot when the
+           capacity is a power of two (the old i*i steps only reached a few of them) */
+        uint64_t offset = ((uint64_t)i * ((uint64_t)i + 1u)) / 2u;
+        int32_t idx = (int32_t)(((uint64_t)hash + offset) % (uint64_t)ht->capacity);
         MochaHEntry *slot = &ht->entries[idx];
 
         if (slot->state == HT_EMPTY) {
-            /* Not found — return marked slot if we passed one,
+            /* Not found: return marked slot if we passed one,
                otherwise return this empty slot for insertion */
             return first_marked != -1 ? first_marked : idx;
         }
 
         if (slot->state == HT_MARKED) {
-            /* Remember first marked slot — can reuse for insert */
+            /* Remember first marked slot: can reuse for insert */
             if (first_marked == -1) first_marked = idx;
             continue;
         }
 
-        /* HT_OCCUPIED — check key match */
+        /* HT_OCCUPIED: check key match */
         if (strcmp(slot->key, key) == 0) {
             return idx;
         }
     }
 
-    /* All slots visited — return first marked if any */
+    /* All slots visited: return first marked if any */
     if (first_marked != -1){
         return first_marked;
     }
-    fprintf(stderr, "MochaRuntimeError: HashTable completely full.\n");
+    fprintf(stderr, "MochaInternalError: HashTable completely full. This should never happen and is a bug in the Mocha runtime, not in your program.\n");
     exit(2);
 }
 

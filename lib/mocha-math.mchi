@@ -3,6 +3,8 @@
 
 // mocha-lib-type: compiled
 
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
 function mocha_ext_float_cosec_ffi(x: float, mes: int) -> float native mocha_ext_float_cosec_impl;
 function mocha_ext_float_sec_ffi(x: float, mes: int) -> float native mocha_ext_float_sec_impl;
 function mocha_ext_float_cot_ffi(x: float, mes: int) -> float native mocha_ext_float_cot_impl;
@@ -30,6 +32,7 @@ function abs(x: float) -> float native mocha_user_abs;
 function rdown(x: float) -> float;
 function rup(x: float) -> float;
 function round(x: float) -> float native mocha_user_round;
+function round_even(x: float) -> float;
 function fast_pow(base: float, exp: int) -> float native mocha_math_fast_pow;
 function c_pow(base: float, exp: float) -> float native mocha_math_c_pow;
 function complex_pow(base: Complex, exp: float) -> Complex native mocha_math_complex_pow;

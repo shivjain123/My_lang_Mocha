@@ -537,14 +537,6 @@ class TypeChecker:
         """ These have been abandoned. START """
         if isinstance(node, AwaitExpr):
             return self.check_expr(node.value)
-
-        if isinstance(node, OkExpr):
-            self.check_expr(node.value)
-            return "Result"
-
-        if isinstance(node, ErrorExpr):
-            self.check_expr(node.value)
-            return "Result"
         """ END """
         
         if isinstance(node, ArrayLiteral):

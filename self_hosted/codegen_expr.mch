@@ -85,7 +85,6 @@ extend CodeGen {
             case "RowSlice":       return this.genRowSlice(node);
             case "ColSlice":       return this.genColSlice(node);
             case "LambdaExpr":     return this.genLambda(node);
-            case "OkExpr":         return this.genExpr(node.left);
             case "AwaitExpr":      return this.genExpr(node.left);
             case "ListComprehension": return this.genListComprehension(node);
             default:
