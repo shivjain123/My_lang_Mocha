@@ -358,5 +358,50 @@ function main(didLoad) -> null {
     var tc58: TypeChecker = run_tc("class A { shared var x: int; var y: int; function constructor() -> null { this.y = 0; }; }; function main(didLoad) -> null { };");
     check_int("1 error (shared var x; plain var y is fine)", 1, tc58.errors.length);
 
+    // ─── TEST 59: weak field parses ─────────────────────────
+    print("--- TEST 59: weak field ---", newLine=true);
+    var tc59: TypeChecker = run_tc("class Node { weak var parent: Node; var v: int; function constructor() -> null { this.v = 0; }; }; function main(didLoad) -> null { };");
+    check_int("no errors (weak var parses; the checker rule comes next)", 0, tc59.errors.length);
+
+    // ─── TEST 60: weak field types ──────────────────────────
+    print("--- TEST 60: weak field rule ---", newLine=true);
+    var tc60: TypeChecker = run_tc("class Node { weak var parent: Node; weak var n: int; weak var kids: Node[]; function constructor() -> null { }; }; function main(didLoad) -> null { };");
+    check_int("2 errors (weak int, weak Node[]; weak Node is fine)", 2, tc60.errors.length);
+
+    // ─── TEST 61: dict literal parses ───────────────────────
+    print("--- TEST 61: dict literal ---", newLine=true);
+    var tc61: TypeChecker = run_tc("function main(didLoad) -> null { var a: dict = {}; var b: dict = {\"x\": 1, \"y\": 2,}; };");
+    check_int("no errors (parses; the checker rule comes next)", 0, tc61.errors.length);
+
+    // ─── TEST 62: dict literal rules ────────────────────────
+    print("--- TEST 62: dict literal check ---", newLine=true);
+    var tc62: TypeChecker = run_tc("function main(didLoad) -> null { var a: dict = {\"x\": 1, \"y\": 2}; var b: dict = {1: 2}; var c: int = {\"k\": 1}; var d: dict = {\"k\": zzz}; };");
+    check_int("3 errors (int key, dict into int, undeclared zzz)", 3, tc62.errors.length);
+
+    // ─── TEST 63: set literal parses ────────────────────────
+    print("--- TEST 63: set literal ---", newLine=true);
+    var tc63: TypeChecker = run_tc("function main(didLoad) -> null { var a: set<int> = <1, 2, 3>; var b: set<str> = <\"x\", \"y\",>; };");
+    check_int("no errors (parses; the checker rule comes next)", 0, tc63.errors.length);
+
+    // ─── TEST 64: set literal rules ─────────────────────────
+    print("--- TEST 64: set literal check ---", newLine=true);
+    var tc64: TypeChecker = run_tc("function main(didLoad) -> null { var a: set<int> = <1, 2, 3>; var b: set<int> = <1, \"x\">; var c: set<str> = <1, 2>; };");
+    check_int("2 errors (mixed elements; set<int> into set<str>)", 2, tc64.errors.length);
+
+    // ─── TEST 65: for each over a set ───────────────────────
+    print("--- TEST 65: for each in <set> ---", newLine=true);
+    var tc65: TypeChecker = run_tc("function f(s: set<int>, n: int) -> null { for each x in <s> { var y: int = x; var z: str = x; }; for each q in <n> { }; }; function main(didLoad) -> null { };");
+    check_int("2 errors (x is int, not str; <n> is not a set)", 2, tc65.errors.length);
+
+    // ─── TEST 66: library qualified call ────────────────────
+    print("--- TEST 66: lib qualified call ---", newLine=true);
+    var tc66: TypeChecker = run_tc("function main(didLoad) -> null { var a: float = \"mocha-math\".sin(45.0); var s: str = \"hello\"; var b: float = \"mocha-math\".cos(zzz); };");
+    check_int("1 error (zzz undeclared; plain string and known call are fine)", 1, tc66.errors.length);
+
+    // ─── TEST 67: range ends ────────────────────────────────
+    print("--- TEST 67: range ends ---", newLine=true);
+    var tc67: TypeChecker = run_tc("function main(didLoad) -> null { var n: int = 5; match (n) { case 1..9: var a: int = 1; case 1..\"z\": var b: int = 2; default: var c: int = 3; }; };");
+    check_int("1 error (1..\"z\" mixes int and str; 1..9 is fine)", 1, tc67.errors.length);
+
     print("--- ALL TESTS DONE ---", newLine=true);
 };

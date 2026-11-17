@@ -136,6 +136,7 @@ tag TokenType {
 
     // --- Visibility (local) ---
     LOCAL,
+    WEAK,
 
     // --- Exception Handling ---
     TRY,

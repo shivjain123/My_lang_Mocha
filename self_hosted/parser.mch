@@ -430,7 +430,15 @@ class Parser {
             var var_tok: Token = this.expect(TokenType.IDENTIFIER, "Expected variable name after 'each'");
             node.value = var_tok.value;
             this.expect(TokenType.IN, "Expected 'in' after variable name");
-            node.left = this.parse_expression();
+            if (this.check(TokenType.LT)) {
+                // for each x in <set>
+                this.advance();
+                node.left = this.parse_primary();
+                this.expect(TokenType.GT, "Expected '>' to close set in 'for each'");
+                node.flag1 = true;
+            } else {
+                node.left = this.parse_expression();
+            };
             this.expect(TokenType.LBRACE, "Expected '{' to open for each body");
             while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
                 node.body.push(this.parse_statement());
@@ -655,6 +663,16 @@ class Parser {
                 member_async = true;
             };
 
+            // weak: only valid directly before 'var'
+            var is_weak: bool = false;
+            if (this.check(TokenType.WEAK)) {
+                this.advance();
+                is_weak = true;
+                if (!this.check(TokenType.VAR)) {
+                    this.parse_error("'weak' can only be used on a field: weak var name: Type;");
+                };
+            };
+
             // field
             if (this.check(TokenType.VAR)) {
                 this.advance();
@@ -665,7 +683,11 @@ class Parser {
                 field.type_str = this.parse_type_str();
                 field.extra = visibility;
                 field.flag1 = is_shared;
+                field.flag2 = is_weak;
                 if (this.pair(TokenType.ASSIGN)) {
+                    if (is_weak) {
+                        this.parse_error("A weak field cannot have an initial value; assign it later with this.name = ...;");
+                    };
                     field.left = this.parse_expression();
                 };
                 this.expect(TokenType.SEMICOLON, "Expected ';' after field declaration");
@@ -1233,6 +1255,26 @@ class Parser {
                 complex_node.real_val = tok.value.toFloat();
                 return complex_node;
             case TokenType.STR_LIT:
+                if (tok.value.length >= 6 && this.peek(1).type == TokenType.DOT) {
+                    if (tok.value.substring(0, 5) == "mocha-") {
+                        // library call: "mocha-math".sin(45.0)
+                        var lib_node: ASTNode = this.make_node("LibQualifiedCall");
+                        lib_node.extra = tok.value;
+                        this.advance();   // the string
+                        this.advance();   // the dot
+                        var lib_fn: Token = this.expect(TokenType.IDENTIFIER, "Expected function name after '.'");
+                        lib_node.value = lib_fn.value;
+                        this.expect(TokenType.LPAREN, "Expected '(' after function name");
+                        if (this.check(TokenType.RPAREN) == false) {
+                            lib_node.args.push(this.parse_call_arg());
+                            while (this.pair(TokenType.COMMA)) {
+                                lib_node.args.push(this.parse_call_arg());
+                            };
+                        };
+                        this.expect(TokenType.RPAREN, "Expected ')' after arguments");
+                        return lib_node;
+                    };
+                };
                 this.advance();
                 var str_node: ASTNode = this.make_node("StrLiteral");
                 str_node.value = tok.value;
@@ -1387,6 +1429,34 @@ class Parser {
                 };
                 this.expect(TokenType.RBRACKET, "Expected ']' to close array literal");
                 return arr_node;
+            case TokenType.LT:
+                this.advance();
+                var set_node: ASTNode = this.make_node("SetLiteral");
+                if (this.check(TokenType.GT) == false) {
+                    set_node.children.push(this.parse_primary());
+                    while (this.pair(TokenType.COMMA)) {
+                        if (this.check(TokenType.GT)) { break; };
+                        set_node.children.push(this.parse_primary());
+                    };
+                };
+                this.expect(TokenType.GT, "Expected '>' to close set literal");
+                return set_node;
+            case TokenType.LBRACE:
+                this.advance();
+                var dict_node: ASTNode = this.make_node("DictLiteral");
+                if (this.check(TokenType.RBRACE) == false) {
+                    dict_node.children.push(this.parse_expression());
+                    this.expect(TokenType.COLON, "Expected ':' after dict key");
+                    dict_node.children.push(this.parse_expression());
+                    while (this.pair(TokenType.COMMA)) {
+                        if (this.check(TokenType.RBRACE)) { break; };
+                        dict_node.children.push(this.parse_expression());
+                        this.expect(TokenType.COLON, "Expected ':' after dict key");
+                        dict_node.children.push(this.parse_expression());
+                    };
+                };
+                this.expect(TokenType.RBRACE, "Expected '}' to close dict literal");
+                return dict_node;
             default:
                 this.parse_error("Expected an expression. Got: " + tok.value);
                 return this.make_node("Unknown");

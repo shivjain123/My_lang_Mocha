@@ -187,13 +187,14 @@ class TypeChecker {
             return true;
         };
 
-        // set compatibility
-        if (expected.length >= 4 && actual.length >= 4) {
+        // set compatibility: element types must match; set<unknown> and set<object> fit any set
+        if (expected.length >= 5 && actual.length >= 5) {
             if (expected.substring(0, 3) == "set<" && actual.substring(0, 3) == "set<") {
-                return true;
-            };
-            if (expected.substring(0, 3) == "set<" && actual == "set<unknown>") {
-                return true;
+                var exp_set_elem: str = expected.substring(4, expected.length - 2);
+                var act_set_elem: str = actual.substring(4, actual.length - 2);
+                if (act_set_elem == "unknown" || act_set_elem == "object") { return true; };
+                if (exp_set_elem == "unknown" || exp_set_elem == "object") { return true; };
+                return this.typesCompatible(exp_set_elem, act_set_elem);
             };
         };
 
@@ -413,16 +414,67 @@ class TypeChecker {
 
             case "AwaitExpr":
                 return this.checkExpr(node.left);
+            
+            case "LibQualifiedCall":
+                var lq: int = 0;
+                while (lq < node.args.length) {
+                    if (node.args[lq].kind != "NamedArg") {
+                        this.checkExpr(node.args[lq]);
+                    };
+                    lq += 1;
+                };
+                var lib_enc: str = this.symbols.lookupEncoded(node.extra + "." + node.value);
+                if (lib_enc != "") {
+                    return this.symbols.decodeField(lib_enc, 0);
+                };
+                return "unknown";
+
+            case "SetLiteral":
+                if (node.children.length == 0) { return "set<unknown>"; };
+                var set_first: str = this.checkExpr(node.children[0]);
+                var sk: int = 1;
+                while (sk < node.children.length) {
+                    var set_elem: str = this.checkExpr(node.children[sk]);
+                    if (this.typesCompatible(set_first, set_elem) == false) {
+                        this.addErrorAt("Set elements must all be the same type (first element is '" + set_first + "'), but got '" + set_elem + "'", node);
+                    };
+                    sk += 1;
+                };
+                if (set_first != "int" && set_first != "float" && set_first != "str" && set_first != "bool") {
+                    return "set<object>";
+                };
+                return "set<" + set_first + ">";
+
+            case "DictLiteral":
+                var dk: int = 0;
+                while (dk < node.children.length) {
+                    var dkey_type: str = this.checkExpr(node.children[dk]);
+                    if (dkey_type != "str" && dkey_type != "unknown") {
+                        this.addErrorAt("Dict keys must be str, got '" + dkey_type + "'", node);
+                    };
+                    if (dk + 1 < node.children.length) {
+                        this.checkExpr(node.children[dk + 1]);
+                    };
+                    dk += 2;
+                };
+                return "dict";
 
             case "RangeNode":
                 var rl: str = this.checkExpr(node.left);
                 var rr: str = this.checkExpr(node.right);
-                if (rl != "int") {
-                    this.addErrorAt("Range start must be int, got '" + rl + "'", node);
+                var range_ok: bool = true;
+                if (rl != "int" && rl != "str" && rl != "unknown") {
+                    this.addErrorAt("Range start must be int or str, got '" + rl + "'", node);
+                    range_ok = false;
                 };
-                if (rr != "int") {
-                    this.addErrorAt("Range end must be int, got '" + rr + "'", node);
+                if (rr != "int" && rr != "str" && rr != "unknown") {
+                    this.addErrorAt("Range end must be int or str, got '" + rr + "'", node);
+                    range_ok = false;
                 };
+                if (range_ok && rl != "unknown" && rr != "unknown" && rl != rr) {
+                    this.addErrorAt("Range start and end must be the same type, got '" + rl + "' and '" + rr + "'", node);
+                };
+                if (rl == "str") { return "str[]"; };
                 return "int[]";
 
             default:
@@ -1827,9 +1879,14 @@ class TypeChecker {
         var iterable_type: str = this.checkExpr(node.left);
         var elem_type: str = "";
 
-        if (iterable_type.length >= 4) {
+        if (node.flag1 && iterable_type.length >= 5) {
+            if (iterable_type.substring(0, 3) != "set<") {
+                this.addErrorAt("Expected a set in 'for each ... in <...>', got '" + iterable_type + "'", node);
+            };
+        };
+        if (iterable_type.length >= 5) {
             if (iterable_type.substring(0, 3) == "set<") {
-                elem_type = iterable_type.substring(4, iterable_type.length - 1);
+                elem_type = iterable_type.substring(4, iterable_type.length - 2);
                 node.type_str = elem_type;
                 this.symbols.pushScope();
                 this.symbols.declareSimple(node.value, elem_type);
@@ -2173,6 +2230,12 @@ class TypeChecker {
         while (i < node.body.length) {
             var member: ASTNode = node.body[i];
             if (member.kind == "FieldDecl") {
+                if (member.flag2) {
+                    var weak_prims: str[] = ["int", "float", "str", "bool", "vast", "dict", "null"];
+                    if (this.countBrackets(member.type_str) > 0 || this.listHas(weak_prims, member.type_str) || this.symbols.isDeclared(member.type_str) == false) {
+                        this.addErrorAt("'weak' only applies to a field whose type is a single class, not '" + member.type_str + "'", member);
+                    };
+                };
                 if (member.flag1) {
                     this.addErrorAt("'shared' is not allowed on fields - use a module-level variable instead", member);
                 };

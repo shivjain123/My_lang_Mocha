@@ -285,6 +285,7 @@ class Lexer {
         if (word == "private")    { return this.make_token(TokenType.PRIVATE,    word, l, c); };
         if (word == "protected")  { return this.make_token(TokenType.PROTECTED,  word, l, c); };
         if (word == "local")      { return this.make_token(TokenType.LOCAL,      word, l, c); };
+        if (word == "weak")       { return this.make_token(TokenType.WEAK,       word, l, c); };
         if (word == "try")        { return this.make_token(TokenType.TRY,        word, l, c); };
         if (word == "rescue")     { return this.make_token(TokenType.RESCUE,     word, l, c); };
         if (word == "fail")       { return this.make_token(TokenType.FAIL,       word, l, c); };
