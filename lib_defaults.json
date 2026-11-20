@@ -1,0 +1,34 @@
+{
+ "Rbm_train_step": [
+  [
+   "v0",
+   null
+  ],
+  [
+   "lr",
+   null
+  ],
+  [
+   "pers",
+   "false"
+  ]
+ ],
+ "Rbm_train_values": [
+  [
+   "samples",
+   null
+  ],
+  [
+   "epochs",
+   null
+  ],
+  [
+   "lr",
+   null
+  ],
+  [
+   "pers",
+   "false"
+  ]
+ ]
+}

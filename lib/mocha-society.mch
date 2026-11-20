@@ -1,8 +1,18 @@
-~~ mocha-society — Sociology, Political Science, Anthropology & Socio-Economics Library for Mocha
-~~ Section 1: Demography
-~~
-~~ Part of the Mocha Scientific Library Ecosystem
-~~ License: Polyform Non-Commercial
+"""
+    mocha-society — Sociology, Political Science, Anthropology & Socio-Economics Library for Mocha
+
+    Sections:
+    1. Demography
+    2. Social Stratification & Inequality
+    3. Political Science / Electoral Systems
+    4. Social Network Analysis
+    5. Anthropology / Kinship & Cultural Diversity
+    6. Research Methods & Measurement
+    7. Socio-Economic Development
+
+    Part of the Mocha Scientific Library Ecosystem
+    License: Apache 2.0
+"""
 
 // mocha-lib-deps: mocha-math
 

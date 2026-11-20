@@ -255,6 +255,9 @@ class CodeGen:
         self.current_mocha_return_type = None
         self.current_function_name = None
         self.current_param_names = []
+        # key -> [(param_name, llvm_type, default_node or None)], excluding 'this'.
+        # Used by _collect_args to slot named args and fill in default values.
+        self.method_params = {}
 
     # -------------------------------------------------------
     # Helpers
@@ -489,15 +492,48 @@ class CodeGen:
             )
         return self.method_return_types[name]
     
-    def _collect_args(self, node):
-        """Collect positional args, skipping named params (Assignment nodes)."""
-        args = []
+    def _collect_args(self, node, key=None):
+        """Collect call args in parameter order.
+        Named args (Assignment nodes) are slotted by name and missing trailing args are filled
+        from their defaults, using self.method_params[key]. Without a key (or without recorded
+        params) only the positional args are returned, named args are ignored."""
+        positional = []
+        named = {}
         for arg in node.args:
             if isinstance(arg, Assignment):
-                continue
-            reg, typ = self.gen_expr(arg)
-            args.append((reg, typ))
-        return args
+                if isinstance(arg.target, Identifier):
+                    named[arg.target.name] = self.gen_expr(arg.value)
+            else:
+                positional.append(self.gen_expr(arg))
+        return self._complete_args(key, positional, named, node)
+
+    def _complete_args(self, key, positional, named, node):
+        """Order already-evaluated call args by the parameter list in self.method_params[key]:
+        named args are slotted by name, missing trailing args come from their defaults.
+        Without recorded params only the positional args are returned."""
+        params = self.method_params.get(key) if key else None
+        if not params:
+            return positional
+
+        known = [p[0] for p in params]
+        for name in named:
+            if name not in known:
+                raise MochaCodeGenError(f"unknown named argument '{name}'", node.line, node.col)
+
+        final = list(positional)
+        for i in range(len(positional), len(params)):
+            pname, ptype, pdefault = params[i]
+            if pname in named:
+                final.append(named[pname])
+            elif pdefault is not None:
+                if isinstance(pdefault, tuple):
+                    # imported lib: (llvm constant, llvm type) read from the manifest
+                    final.append((pdefault[0], pdefault[1]))
+                else:
+                    final.append(self.gen_expr(pdefault))
+            else:
+                break
+        return final
 
     def _emit_call(self, ret_type, c_func, all_args):
         """Emit a call and return (reg, type). Handles void vs non-void."""
@@ -519,7 +555,7 @@ class CodeGen:
             ext_key = f"mocha_ext_{sanitized}_{member}"
             if ext_key in self.method_return_types:
                 ret_type = self.method_return_types[ext_key]
-                args = self._collect_args(node)
+                args = self._collect_args(node, ext_key)
                 all_args = [(obj_reg, obj_llvm_type)] + args
                 return self._emit_call(ret_type, ext_key, all_args)
             raise MochaCodeGenError(f"{type_name} has no method '{member}'", node.line, node.col)
@@ -2751,7 +2787,7 @@ class CodeGen:
                 self.emit(f"  {adj} = bitcast {fields[start][1]}* {gep} to %struct.{decl_class}*")
                 obj_reg = adj
                 call_obj_type = f"%struct.{decl_class}*"
-        args = self._collect_args(node)
+        args = self._collect_args(node, func_name)
         all_args = [(obj_reg, call_obj_type)] + args
         # RC: fresh array arguments are ours to release after the call; skipped when named
         # arguments make the node list and the argument list differ in length (a leak is safer)
@@ -3378,6 +3414,7 @@ class CodeGen:
         if is_constructor_candidate and func_name in self.classes_with_constructors:
             class_name      = func_name
             func_name       = f"{func_name}_constructor"
+            args = self._complete_args(func_name, args, named_args, node)
             obj, struct_ptr_type = self.emit_class_alloc(class_name)
             args.insert(0, (obj, struct_ptr_type))
             arg_str = ", ".join(f"{t} {r}" for r, t in args)
@@ -3393,7 +3430,7 @@ class CodeGen:
             constructor_name = f"{func_name}_constructor"
             # the arguments were already compiled in Step 2 (args); compiling node.args again
             # would evaluate them twice (leaking the first set and repeating any side effects)
-            arg_vals = list(args)
+            arg_vals = self._complete_args(constructor_name, args, named_args, node)
             if arg_vals:
                 param_types = ", ".join([struct_ptr_type] + [t for _, t in arg_vals])
                 declare = f"declare void @{constructor_name}({param_types})"
@@ -5334,6 +5371,7 @@ class CodeGen:
             "int[][]":  "%MochaArray2D*",
             "float[][]":"%MochaArray2D*",
             "str[][]":"%MochaArray2D*",
+            "File":     "%struct.MochaFile*",
         }
 
         this_llvm = type_to_llvm.get(node.type_name, f"%struct.{node.type_name}*")
@@ -7150,6 +7188,10 @@ class CodeGen:
                         ret_llvm = to_llvm_type(member.return_type)
                         method_name = f"{node.name}_{member.name}"
                         self.method_return_types[method_name] = ret_llvm
+                        self.method_params[method_name] = [
+                            (p.name, to_llvm_type(p.type), getattr(p, 'default', None))
+                            for p in member.params
+                        ]
                         if member.has_didLoad:
                             entry_func = (method_name, member.params)
 
@@ -7162,6 +7204,10 @@ class CodeGen:
 
                     method_name = f"mocha_ext_{sanitized}_{func.name}"
                     self.method_return_types[method_name] = ret_llvm
+                    self.method_params[method_name] = [
+                        (p.name, to_llvm_type(p.type), getattr(p, 'default', None))
+                        for p in func.params
+                    ]
 
                     if getattr(func, 'is_native', False) and func.native_name:
                         safe_name = self.sanitize_type_name(func.native_name)

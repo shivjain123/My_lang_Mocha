@@ -171,6 +171,35 @@ try:
 except FileNotFoundError:
     pass
 
+LIB_DEFAULTS = {}      # IR name -> [[param, default or None], ...], written by build_lib_signatures.py
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib_defaults.json"), encoding="utf-8") as _fh:
+        LIB_DEFAULTS.update(json.load(_fh))
+except FileNotFoundError:
+    pass
+
+
+def with_defaults(callee, args):
+    """The compiler passes every default parameter; the source usually left trailing ones out, or named them."""
+    ps = LIB_DEFAULTS.get(callee)
+    if not ps or len(args) != len(ps):
+        return args
+    args = list(args)
+
+    def same(a, d):
+        if d in ("true", "false"):
+            return a == d or a == ("1" if d == "true" else "0")
+        return a == d
+    while args and ps[len(args) - 1][1] is not None and same(args[-1], ps[len(args) - 1][1]):
+        args.pop()
+    for k, a in enumerate(args):
+        if ps[k][1] is not None:
+            if ps[k][1] in ("true", "false") and a in ("0", "1"):
+                a = "true" if a == "1" else "false"
+            args[k] = f"{ps[k][0]}={a}"
+    return args
+
+
 _lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib_sigs.json")
 try:
     with open(_lib_path, encoding="utf-8") as _fh:
@@ -526,7 +555,7 @@ def infer_collections(fn):
         for tok, (_, pname) in zip(ats, callee_fn.params):
             ld = defs.get(tok)
             lm = LOAD_RE.match(ld.text) if ld is not None else None
-            if lm and lm.group(3) in out and out[lm.group(3)][0] is None and out[lm.group(3)][1] == "unknown:param":
+            if lm and lm.group(3) in out and out[lm.group(3)][0] is None and out[lm.group(3)][1] in ("unknown:param", "unknown:non-call"):
                 cty = cout.get(pname.lstrip('%'), (None, ""))[0]
                 if cty:
                     out[lm.group(3)] = (cty, "inherit")
@@ -881,6 +910,11 @@ def infer_returns(funcs, g):
                         fty_ = FIELD_TYPES.get((gm_.group(1), gm_.group(3))) if gm_ else None
                         if fty_ and fty_.endswith("[][]"):
                             return fty_[:-2], "field col"
+                    if callee == "mocha_array_new" and m:     # return [a, b]: a fresh array literal; the element size says the type (8 = float by default, like from_creation)
+                        ta_ = [a.split()[-1] for a in split_top_level(m.group(3))]
+                        aty_ = {"4": "int[]", "1": "bool[]", "8": "float[]"}.get(ta_[1]) if len(ta_) >= 2 else None
+                        if aty_:
+                            return aty_, "array literal"
                     return None, f"call:{callee}"
                 return None, f"op:{d.op}"
 
@@ -1828,6 +1862,12 @@ def emit_function(fn, g):
             if pr_ < 9:
                 r_ = f"({r_})"
             return f"{r_}.{cxm_.group(1)}({', '.join(value(t) for t in toks[1:])})"
+        gcm_ = re.match(r'^mocha_ext_(\w+?)_(\w+)$', callee)      # recv.method(args): an extension method on a class (File, ...); the first argument is the receiver
+        if gcm_ and toks and re.search(r'@' + re.escape(callee) + r'\(\s*%struct\.\w+\*', d.text):
+            r_, pr_ = operand(toks[0])
+            if pr_ < 9:
+                r_ = f"({r_})"
+            return f"{r_}.{gcm_.group(2)}({', '.join(value(t) for t in toks[1:])})"
         if callee.startswith("mocha_tensor_"):  # the source calls these runtime functions by their IR name: mocha_tensor_softmax_grad(d.ptr, w.ptr)
             return f"{callee}({', '.join(value(t) for t in toks)})"
         if callee.startswith("mocha_") and callee in NATIVE_SYMS:   # a native the file declares itself: the source calls it by its symbol
@@ -1843,7 +1883,7 @@ def emit_function(fn, g):
         if ats and ats[0].startswith("%struct.") and ats[0].endswith("*"):
             cls = ats[0][len("%struct."):-1]
             if callee.startswith(cls + "_") and callee != cls + "_constructor":
-                return f"{value(toks[0])}.{callee[len(cls) + 1:]}({', '.join(value(t) for t in toks[1:])})"
+                return f"{value(toks[0])}.{callee[len(cls) + 1:]}({', '.join(with_defaults(callee, [value(t) for t in toks[1:]]))})"
         if callee.endswith("__name") and callee[:-6] in g.tags and len(toks) == 1:   # s.name(): the compiler generates Status__name from the tag declaration
             la, pa = operand(toks[0])
             return (f"({la})" if pa < 9 else la) + ".name()"
@@ -1924,6 +1964,9 @@ def emit_function(fn, g):
         if slot not in slot_val:
             raise EmitError(f"{fn.name}: {callee} stores a value I can't trace")
         val = value(slot_val[slot])
+        sd_ = defs.get(slot_val[slot])
+        if sd_ is not None and sd_.op == "sitofp":     # no implicit int->float at an element store: a bare sitofp there is an explicit float(...)
+            val = f"float({val})"
         if callee == "mocha_array_init_set":
             lit_elems.setdefault(toks[0], {})[int(toks[1])] = val
         elif lc_state["on"] and callee == "mocha_array_push":      # the comprehension's expression
@@ -2466,16 +2509,18 @@ def emit_function(fn, g):
             continue
         args, flag = [payload[0]], payload[1]
         lastpos = payload[2] if len(payload) > 2 else None
-        while (flag == "0" and k < len(entries) and entries[k][1] == "print"
+        while (k < len(entries) and entries[k][1] == "print" and entries[k][2][1] == "0"     # the newline flag sits on the FIRST call of a print statement; its other arguments carry 0
                and entries[k][0] == line and entries[k][3] == ind
                and not (lastpos is not None and len(entries[k][2]) > 2
                         and any(x_.op != "zext" for x_ in all_i[lastpos + 1:entries[k][2][2]]))):
             args.append(entries[k][2][0])
-            flag = entries[k][2][1]
+            # flag stays the first call's: it is the whole statement's newline flag
             lastpos = entries[k][2][2] if len(entries[k][2]) > 2 else None
             k += 1
+        if args == ["null"]:                   # print(newLine=true): the IR prints a null string
+            args = []
         out.append((line, pad + "print(" + ", ".join(args)
-                    + (", newLine=true);" if flag == "1" else ");")))
+                    + ((", newLine=true);" if args else "newLine=true);") if flag == "1" else ");")))
     return out
 
 
@@ -2491,7 +2536,13 @@ def lambda_text(lam, g):
         for i in ids:
             m = BITCAST_RE.match(i.text) if i.op == "bitcast" else None
             if m and m.group(2) == "%" + pname and m.group(3).endswith("*"):
-                ty = mocha_type(m.group(3)[:-1])
+                llvm_ = m.group(3)[:-1]
+                if llvm_ in COLL_SUFFIX:      # an array/set parameter: its element type comes from how the body uses it (e.g. passed on to a function whose header says float[])
+                    ty = infer_collections(lam).get(re.sub(r'_raw$', '', pname), (None, ""))[0]
+                    if ty is None:
+                        raise EmitError(f"{lam.name}: can't tell the element type of the lambda parameter '{pname}' from how it is used")
+                else:
+                    ty = mocha_type(llvm_)
         if ty is None:
             raise EmitError(f"{lam.name}: can't tell the type of the lambda parameter '{pname}'")
         parts.append(f"{re.sub(r'_raw$', '', pname)}: {ty}")
@@ -2499,7 +2550,7 @@ def lambda_text(lam, g):
     if len(body) != 1 or not body[0][1].strip().startswith("return "):
         raise EmitError(f"{lam.name}: a lambda body that isn't a single expression (not supported yet)")
     expr = body[0][1].strip()[len("return "):-1]
-    return f"lambda ({', '.join(parts)}) -> {mocha_type(lam.ret_type)}: {expr}"
+    return f"lambda ({', '.join(parts)}) -> {return_type(lam) if lam.ret_type in COLL_SUFFIX else mocha_type(lam.ret_type)}: {expr}"
 
 
 emit_straight = emit_function             # old name, still used by the runner

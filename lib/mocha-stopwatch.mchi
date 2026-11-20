@@ -32,6 +32,7 @@ class Stopwatch field stop_time: float;
 class Stopwatch field running: int;
 class Stopwatch field has_result: int;
 class Stopwatch field use_wall: int;
+// ctor Stopwatch ()
 class Stopwatch function use_cpu_time() -> null;
 class Stopwatch function use_wall_time() -> null;
 class Stopwatch function begin() -> null;

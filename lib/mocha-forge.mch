@@ -46,6 +46,20 @@ local function forge_db_read_array_cell(db: null, name: str, idx: int) -> str {
     return qval;
 };
 
+// reads a whole saved array with one query, values in idx order
+local function forge_db_read_array_all(db: null, name: str) -> str[] {
+    var out: str[] = [];
+    var qres: int = sqlite3_query_run(db, "SELECT value FROM arrays WHERE name = '" + name + "' ORDER BY idx;");
+    var nrows: int = sqlite3_query_rows(qres);
+    var r: int = 0;
+    while (r < nrows) {
+        out.push(sqlite3_query_cell(qres, r, 0));
+        r++;
+    };
+    sqlite3_query_free(qres);
+    return out;
+};
+
 local function forge_db_write_tree_node(db: null, name: str, node_id: int, is_leaf: int, value: float, feature: int, threshold: float, left_id: int, right_id: int) -> null {
     sqlite3_exec(db, "INSERT INTO trees (name, node_id, is_leaf, value, feature, threshold, left_id, right_id) VALUES ('" + name + "', " + str(node_id) + ", " + str(is_leaf) + ", " + str(value) + ", " + str(feature) + ", " + str(threshold) + ", " + str(left_id) + ", " + str(right_id) + ");");
 };
@@ -278,9 +292,14 @@ class OneHotEncoder {
         this.n_categories = forge_db_read_meta(db, "n_categories").toInt();
         this.fitted = forge_db_read_meta(db, "fitted").toInt();
         this.categories = alloc str[this.n_categories];
+        var cvals: str[] = forge_db_read_array_all(db, "categories");
+        if (cvals.length < this.n_categories) {
+            c_print_err("MochaLibError (mocha-forge): OneHotEncoder.load saved categories are shorter than n_categories.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < this.n_categories) {
-            this.categories[i] = forge_db_read_array_cell(db, "categories", i);
+            this.categories[i] = cvals[i];
             i++;
         };
         sqlite3_close(db);
@@ -400,9 +419,14 @@ class OrdinalEncoder {
         this.n_categories = forge_db_read_meta(db, "n_categories").toInt();
         this.fitted = forge_db_read_meta(db, "fitted").toInt();
         this.order = alloc str[this.n_categories];
+        var ovals: str[] = forge_db_read_array_all(db, "order");
+        if (ovals.length < this.n_categories) {
+            c_print_err("MochaLibError (mocha-forge): OrdinalEncoder.load saved order is shorter than n_categories.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < this.n_categories) {
-            this.order[i] = forge_db_read_array_cell(db, "order", i);
+            this.order[i] = ovals[i];
             i++;
         };
         sqlite3_close(db);
@@ -521,9 +545,14 @@ class TargetEncoder {
         this.n_categories = forge_db_read_meta(db, "n_categories").toInt();
         this.fitted = forge_db_read_meta(db, "fitted").toInt();
         this.categories = alloc str[this.n_categories];
+        var cvals: str[] = forge_db_read_array_all(db, "categories");
+        if (cvals.length < this.n_categories) {
+            c_print_err("MochaLibError (mocha-forge): TargetEncoder.load saved categories are shorter than n_categories.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < this.n_categories) {
-            this.categories[i] = forge_db_read_array_cell(db, "categories", i);
+            this.categories[i] = cvals[i];
             i++;
         };
         sqlite3_close(db);
@@ -819,9 +848,14 @@ class LinearRegression {
         this.reg_lambda = forge_db_read_meta(db, "reg_lambda").toFloat();
         var wlen: int = forge_db_read_meta(db, "weights_len").toInt();
         this.weights = alloc float[wlen];
+        var wvals: str[] = forge_db_read_array_all(db, "weights");
+        if (wvals.length < wlen) {
+            c_print_err("MochaLibError (mocha-forge): LinearRegression.load saved weights are shorter than weights_len.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < wlen) {
-            this.weights[i] = forge_db_read_array_cell(db, "weights", i).toFloat();
+            this.weights[i] = wvals[i].toFloat();
             i++;
         };
         sqlite3_close(db);
@@ -1116,9 +1150,14 @@ class LogisticClassification {
         this.fitted = forge_db_read_meta(db, "fitted").toInt();
         var wlen: int = forge_db_read_meta(db, "weights_len").toInt();
         this.weights = alloc float[wlen];
+        var wvals: str[] = forge_db_read_array_all(db, "weights");
+        if (wvals.length < wlen) {
+            c_print_err("MochaLibError (mocha-forge): LinearRegression.load saved weights are shorter than weights_len.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < wlen) {
-            this.weights[i] = forge_db_read_array_cell(db, "weights", i).toFloat();
+            this.weights[i] = wvals[i].toFloat();
             i++;
         };
         sqlite3_close(db);
@@ -1434,12 +1473,22 @@ class KNNClassifier {
         var n_features: int = forge_db_read_meta(db, "n_features").toInt();
         this.x_train = alloc float[this.n_train][n_features];
         this.y_train = alloc int[this.n_train];
+        var yvals: str[] = forge_db_read_array_all(db, "y_train");
+        if (yvals.length < this.n_train) {
+            c_print_err("MochaLibError (mocha-forge): KNN.load saved y_train is shorter than n_train.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < this.n_train) {
-            this.y_train[i] = forge_db_read_array_cell(db, "y_train", i).toInt();
+            this.y_train[i] = yvals[i].toInt();
+            var xvals: str[] = forge_db_read_array_all(db, "x_train_" + str(i));
+            if (xvals.length < n_features) {
+                c_print_err("MochaLibError (mocha-forge): KNN.load saved x_train row is shorter than n_features.");
+                c_exit(2);
+            };
             var fi: int = 0;
             while (fi < n_features) {
-                this.x_train[i][fi] = forge_db_read_array_cell(db, "x_train_" + str(i), fi).toFloat();
+                this.x_train[i][fi] = xvals[fi].toFloat();
                 fi++;
             };
             i++;
@@ -1686,17 +1735,27 @@ class KMeans {
         this.threshold = forge_db_read_meta(db, "threshold").toFloat();
         var llen: int = forge_db_read_meta(db, "labels_len").toInt();
         this.cluster_labels = alloc int[llen];
+        var lvals: str[] = forge_db_read_array_all(db, "labels");
+        if (lvals.length < llen) {
+            c_print_err("MochaLibError (mocha-forge): KMeans.load saved labels are shorter than labels_len.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < llen) {
-            this.cluster_labels[i] = forge_db_read_array_cell(db, "labels", i).toInt();
+            this.cluster_labels[i] = lvals[i].toInt();
             i++;
         };
         this.centroids = alloc float[this.k][this.n_features];
         var ci: int = 0;
         while (ci < this.k) {
+            var cvals: str[] = forge_db_read_array_all(db, "centroids_" + str(ci));
+            if (cvals.length < this.n_features) {
+                c_print_err("MochaLibError (mocha-forge): KMeans.load saved centroid row is shorter than n_features.");
+                c_exit(2);
+            };
             var fi: int = 0;
             while (fi < this.n_features) {
-                this.centroids[ci][fi] = forge_db_read_array_cell(db, "centroids_" + str(ci), fi).toFloat();
+                this.centroids[ci][fi] = cvals[fi].toFloat();
                 fi++;
             };
             ci++;
@@ -3044,22 +3103,34 @@ class Svm {
         this.alphas = alloc float[n_support];
         this.support_y = alloc float[n_support];
         this.support_x = alloc float[n_support][n_features];
+        var wvals: str[] = forge_db_read_array_all(db, "weights");
+        var avals: str[] = forge_db_read_array_all(db, "alphas");
+        var yvals: str[] = forge_db_read_array_all(db, "support_y");
+        if (wvals.length < wlen || avals.length < n_support || yvals.length < n_support) {
+            c_print_err("MochaLibError (mocha-forge): SVM.load saved arrays are shorter than their stored lengths.");
+            c_exit(2);
+        };
         var i: int = 0;
         while (i < wlen) {
-            this.weights[i] = forge_db_read_array_cell(db, "weights", i).toFloat();
+            this.weights[i] = wvals[i].toFloat();
             i++;
         };
         var ai: int = 0;
         while (ai < n_support) {
-            this.alphas[ai] = forge_db_read_array_cell(db, "alphas", ai).toFloat();
+            this.alphas[ai] = avals[ai].toFloat();
             ai++;
         };
         var si: int = 0;
         while (si < n_support) {
-            this.support_y[si] = forge_db_read_array_cell(db, "support_y", si).toFloat();
+            this.support_y[si] = yvals[si].toFloat();
+            var xvals: str[] = forge_db_read_array_all(db, "support_x_" + str(si));
+            if (xvals.length < n_features) {
+                c_print_err("MochaLibError (mocha-forge): SVM.load saved support_x row is shorter than n_features.");
+                c_exit(2);
+            };
             var fi: int = 0;
             while (fi < n_features) {
-                this.support_x[si][fi] = forge_db_read_array_cell(db, "support_x_" + str(si), fi).toFloat();
+                this.support_x[si][fi] = xvals[fi].toFloat();
                 fi++;
             };
             si++;

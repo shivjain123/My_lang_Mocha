@@ -61,6 +61,7 @@ class Tensor field ptr: vast;
 class Tensor field nrows: int;
 class Tensor field ncols: int;
 class Tensor field freed: int;
+// ctor Tensor (rows: int, cols: int)
 class Tensor function put(row: int, col: int, val: float) -> null;
 class Tensor function at(row: int, col: int) -> float;
 class Tensor function show() -> null;
@@ -110,6 +111,7 @@ class Dense field last_input: Tensor;
 class Dense field last_output: Tensor;
 class Dense field has_input: bool;
 class Dense field t: int;
+// ctor Dense (input_size: int, output_size: int, activation: Activation)
 class Dense function forward(input: Tensor) -> Tensor;
 class Dense function backward(dout: Tensor, lr: float) -> Tensor;
 class Dense function backward_core(dact: Tensor, lr: float) -> Tensor;
@@ -118,6 +120,7 @@ class Dense function save(path: str) -> null;
 class Dense function load(path: str) -> null;
 class Network;
 class Network field layers: Dense[];
+// ctor Network ()
 class Network function add(layer: Dense) -> null;
 class Network function fit_step(input: Tensor, labels: Tensor, lr: float, loss: str) -> float;
 class Network function predict(input: Tensor) -> Tensor;
@@ -161,6 +164,7 @@ class Gru field seq_z: Tensor[];
 class Gru field seq_cand: Tensor[];
 class Gru field seq_hx: Tensor[];
 class Gru field seq_rhx: Tensor[];
+// ctor Gru (input_size: int, hidden_size: int)
 class Gru function forward(x: Tensor, h: Tensor) -> Tensor;
 class Gru function backward(dh_new: Tensor, lr: float) -> Tensor;
 class Gru function forward_all(xs: Tensor[]) -> Tensor;
@@ -183,6 +187,7 @@ class BiGru field fwd: Gru;
 class BiGru field bwd: Gru;
 class BiGru field input_size: int;
 class BiGru field hidden_size: int;
+// ctor BiGru (input_size: int, hidden_size: int)
 class BiGru function forward(xs: Tensor[]) -> Tensor[];
 class BiGru function backward(douts: Tensor[], lr: float) -> Tensor[];
 class BiGru function dispose() -> null;
@@ -193,6 +198,7 @@ class Hopfield;
 class Hopfield field weights: Tensor;
 class Hopfield field size: int;
 class Hopfield field n_stored: int;
+// ctor Hopfield (size: int)
 class Hopfield function store(pattern: Tensor) -> null;
 class Hopfield function store_values(values: float[]) -> null;
 class Hopfield function normalize() -> null;
@@ -225,11 +231,23 @@ class Attention field last_k: Tensor;
 class Attention field last_v: Tensor;
 class Attention field last_scores: Tensor;
 class Attention field last_weights: Tensor;
+// ctor Attention (d_model: int, d_k: int)
 class Attention function forward(x: Tensor) -> Tensor;
 class Attention function backward(dout: Tensor, lr: float) -> Tensor;
 class Attention function dispose() -> null;
 class Attention function save(path: str) -> null;
 class Attention function load(path: str) -> null;
+class MultiHeadAttention;
+class MultiHeadAttention field heads: Attention[];
+class MultiHeadAttention field n_heads: int;
+class MultiHeadAttention field d_model: int;
+class MultiHeadAttention field d_k: int;
+// ctor MultiHeadAttention (d_model: int, n_heads: int, d_k: int)
+class MultiHeadAttention function forward(x: Tensor) -> Tensor;
+class MultiHeadAttention function backward(dout: Tensor, lr: float) -> Tensor;
+class MultiHeadAttention function dispose() -> null;
+class MultiHeadAttention function save(path: str) -> null;
+class MultiHeadAttention function load(path: str) -> null;
 class LayerNorm;
 class LayerNorm field gamma: Tensor;
 class LayerNorm field beta: Tensor;
@@ -240,6 +258,7 @@ class LayerNorm field vbeta: Tensor;
 class LayerNorm field size: int;
 class LayerNorm field t: int;
 class LayerNorm field last_x: Tensor;
+// ctor LayerNorm (size: int)
 class LayerNorm function forward(x: Tensor) -> Tensor;
 class LayerNorm function backward(dout: Tensor, lr: float) -> Tensor;
 class LayerNorm function dispose() -> null;
@@ -247,11 +266,17 @@ class LayerNorm function save(path: str) -> null;
 class LayerNorm function load(path: str) -> null;
 class BertLayer;
 class BertLayer field attn: Attention;
+class BertLayer field mha: MultiHeadAttention;
+class BertLayer field n_heads: int;
 class BertLayer field norm1: LayerNorm;
 class BertLayer field ffn1: Dense;
 class BertLayer field ffn2: Dense;
 class BertLayer field norm2: LayerNorm;
 class BertLayer field d_model: int;
+// ctor BertLayer (d_model: int, d_k: int, d_ff: int)
+class BertLayer function use_heads(n: int) -> null;
+class BertLayer function attn_forward(x: Tensor) -> Tensor;
+class BertLayer function attn_backward(dout: Tensor, lr: float) -> Tensor;
 class BertLayer function forward(x: Tensor) -> Tensor;
 class BertLayer function backward(dout: Tensor, lr: float) -> Tensor;
 class BertLayer function dispose() -> null;
@@ -265,6 +290,7 @@ class Lsm field input_size: int;
 class Lsm field reservoir_size: int;
 class Lsm field output_size: int;
 class Lsm field state: Tensor;
+// ctor Lsm (input_size: int, reservoir_size: int, output_size: int, spectral_radius: float)
 class Lsm function step(u: Tensor) -> Tensor;
 class Lsm function step_values(values: float[]) -> float[];
 class Lsm function reset() -> null;
@@ -279,11 +305,16 @@ class Rbm field bv: Tensor;
 class Rbm field bh: Tensor;
 class Rbm field visible_size: int;
 class Rbm field hidden_size: int;
+class Rbm field chain: Tensor;
+class Rbm field chain_ready: int;
+// ctor Rbm (visible_size: int, hidden_size: int)
 class Rbm function sample_hidden(v: Tensor) -> Tensor;
 class Rbm function sample_visible(h: Tensor) -> Tensor;
 class Rbm function reconstruct(v: Tensor) -> Tensor;
-class Rbm function train_step(v0: Tensor, lr: float) -> null;
-class Rbm function train_values(samples: float[], epochs: int, lr: float) -> null;
+class Rbm function train_step(v0: Tensor, lr: float, pers: bool) -> null;
+// default Rbm.train_step pers = 0 i8
+class Rbm function train_values(samples: float[], epochs: int, lr: float, pers: bool) -> null;
+// default Rbm.train_values pers = 0 i8
 class Rbm function reconstruct_values(values: float[]) -> float[];
 class Rbm function reconstruction_error(v: Tensor) -> float;
 class Rbm function binarize(probs: Tensor) -> null;
@@ -295,6 +326,7 @@ class Embedding field table: Tensor;
 class Embedding field grad_table: Tensor;
 class Embedding field vocab_size: int;
 class Embedding field d_model: int;
+// ctor Embedding (vocab_size: int, d_model: int)
 class Embedding function forward(ids: int[]) -> Tensor;
 class Embedding function backward(dout: Tensor, ids: int[], lr: float) -> null;
 class Embedding function dispose() -> null;
@@ -304,6 +336,7 @@ class PositionalEncoding;
 class PositionalEncoding field table: Tensor;
 class PositionalEncoding field max_len: int;
 class PositionalEncoding field d_model: int;
+// ctor PositionalEncoding (max_len: int, d_model: int)
 class PositionalEncoding function encode(x: Tensor) -> Tensor;
 class PositionalEncoding function dispose() -> null;
 class BertClassifier;
@@ -320,6 +353,8 @@ class BertClassifier function bc_encode(tk: Tokenizer, text: str) -> int[];
 class BertClassifier function bc_join(a: str[], b: str[]) -> str[];
 class BertClassifier function bc_make_labels(n_pos: int, n_neg: int) -> float[];
 class BertClassifier function bc_shuffled_order(n: int) -> int[];
+// ctor BertClassifier (positive: str[], negative: str[], d_model: int, d_k: int, d_ff: int)
+class BertClassifier function use_heads(n: int) -> null;
 class BertClassifier function train(positive: str[], negative: str[], epochs: int, lr: float) -> null;
 class BertClassifier function train_labelled(texts: str[], labels: float[], epochs: int, lr: float) -> null;
 class BertClassifier function predict(text: str) -> float;
@@ -343,6 +378,7 @@ class GruClassifier function gc_free_rows(xs: Tensor[]) -> null;
 class GruClassifier function gc_join(a: str[], b: str[]) -> str[];
 class GruClassifier function gc_make_labels(n_pos: int, n_neg: int) -> float[];
 class GruClassifier function gc_shuffled_order(n: int) -> int[];
+// ctor GruClassifier (positive: str[], negative: str[], d_model: int, d_hidden: int)
 class GruClassifier function train(positive: str[], negative: str[], epochs: int, lr: float) -> null;
 class GruClassifier function train_labelled(texts: str[], labels: float[], epochs: int, lr: float) -> null;
 class GruClassifier function predict(text: str) -> float;

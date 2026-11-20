@@ -1,3 +1,5 @@
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 local function mocha_str_toupper_ffi(s: str) -> str native mocha_str_toupper;
 local function mocha_str_tolower_ffi(s: str) -> str native mocha_str_tolower;
 local function c_isalpha(c: str) -> int native mocha_wrap_isalpha_str;
@@ -130,8 +132,6 @@ extend str {
         return result;
     };
 
-    // Function is no longer how I had written it because prev Claude did these
-    // changes to try and solve the problem, but to no avail
     function trimRight() -> str {
         var i: int = this.length - 1;
         while (i >= 0) {
@@ -432,6 +432,51 @@ extend str[] {
         return result;
     };
 };
+
+extend File {
+    ~~ Reads one CSV record as fields. A quoted field may span lines,
+    ~~ so lines are joined while the quote count is odd.
+    function readCsvRecord() -> str[] {
+        var rec: str = this.readLine();
+        if (rec.indexOf("\"") == -1) {
+            return rec.split(",");
+        };
+        while (rec.occurs("\"") % 2 == 1 && !this.eof()) {
+            rec = rec + "\n" + this.readLine();
+        };
+        return csv_split_record(rec);
+    };
+
+    ~~ Reads a whole numeric CSV: skips the header line, skips blank lines,
+    ~~ returns one float[] row per record. Every row must match the header width.
+    function readCsv() -> float[][] {
+        var data: float[][] = [[]];
+        var header: str[] = this.readCsvRecord();
+        var width: int = header.length;
+        var rec_no: int = 1;
+        while (!this.eof()) {
+            var rec: str[] = this.readCsvRecord();
+            rec_no = rec_no + 1;
+            var first: str = rec[0];
+            var blank: bool = rec.length == 1 && first.rip() == "";
+            if (!blank) {
+                if (rec.length != width) {
+                    c_print_err("MochaLibError (mocha-string): readCsv record " + str(rec_no) + " has " + str(rec.length) + " fields, header has " + str(width) + ".");
+                    c_exit(2);
+                };
+                var row: float[] = [];
+                var k: int = 0;
+                while (k < rec.length) {
+                    row.push(rec[k].toFloat());
+                    k = k + 1;
+                };
+                data.push(row);
+            };
+        };
+        return data;
+    };
+};
+
 // =============================================
 // REGEX ENGINE — Tier 1
 // Supports: . * + ? ^ $ [abc] [a-z] [^abc]
@@ -778,4 +823,40 @@ class Tokenizer {
     function size() -> int {
         return this.vocab_size;
     };
+};
+
+// ── CSV record splitter ──
+// splits one CSV record into fields, honoring "quotes" and "" escapes
+local function csv_split_record(rec: str) -> str[] {
+    var fields: str[] = [];
+    var cur: str = "";
+    var in_q: bool = false;
+    var n: int = rec.length;
+    var i: int = 0;
+    while (i < n) {
+        var c: str = str(rec.charAt(i));
+        var step: int = 1;
+        if (in_q) {
+            if (c == "\"") {
+                if (i + 1 < n && str(rec.charAt(i + 1)) == "\"") {
+                    cur = cur + "\"";
+                    step = 2;
+                } else {
+                    in_q = false;
+                };
+            } else {
+                cur = cur + c;
+            };
+        } else if (c == "\"") {
+            in_q = true;
+        } else if (c == ",") {
+            fields.push(cur);
+            cur = "";
+        } else {
+            cur = cur + c;
+        };
+        i = i + step;
+    };
+    fields.push(cur);
+    return fields;
 };

@@ -34,8 +34,6 @@ extend CodeGen {
         var entry_func_name:   str      = "";
         var entry_func_params: ASTNode[] = [];
 
-        print(program.children.length, newLine=true);
-
         // ====================================================
         // PRE-PASS: register tag types
         // ====================================================
@@ -54,7 +52,7 @@ extend CodeGen {
             var node: ASTNode = program.children[ci];
             if (node.kind == "ClassDecl") {
                 this.class_node_list.push(node);
-                this.class_node_index.put(node.value, str(this.class_node_list.length - 1));
+                this.putCNI(node.value, str(this.class_node_list.length - 1));
             };
             ci = ci + 1;
         };
@@ -85,9 +83,9 @@ extend CodeGen {
                     if (already == false) {
                         this.extra_declares.push(decl);
                     };
-                    this.lib_functions.put(node.value, node.extra + "|" + ret_llvm);
-                    this.method_return_types.put(node.value, ret_llvm);
-                    this.method_return_types.put(node.extra, ret_llvm);
+                    this.putLF(node.value, node.extra + "|" + ret_llvm);
+                    this.putMRT(node.value, ret_llvm);
+                    this.putMRT(node.extra, ret_llvm);
                 };
             };
             ni = ni + 1;
@@ -141,8 +139,8 @@ extend CodeGen {
                     var ltmp:  str = this.freshTemp();
                     this.emit("  " + ltmp + " = load " + ltype + ", " + ltype + "* " + lptr);
                     this.emit("  store " + ltype + " " + ltmp + ", " + ltype + "* @__global_" + gnode2.value);
-                    this.global_ptrs.put(gnode2.value, "@__global_" + gnode2.value);
-                    this.global_mocha_types.put(gnode2.value, gnode2.type_str);
+                    this.putGP(gnode2.value, "@__global_" + gnode2.value);
+                    this.putGMT(gnode2.value, gnode2.type_str);
                 };
                 gii = gii + 1;
             };
@@ -161,14 +159,14 @@ extend CodeGen {
 
             if (node.kind == "FunctionDecl" || node.kind == "MethodDecl") {
                 var ret_llvm: str = this.toLLVMType(node.type_str);
-                this.method_return_types.put(node.value, ret_llvm);
+                this.putMRT(node.value, ret_llvm);
                 // check for didLoad
                 var dli: int = 0;
                 while (dli < node.params.length) {
                     if (node.params[dli].value == "didLoad") {
                         entry_func_name   = node.value;
                         entry_func_params = node.params;
-                        this.method_return_types.put("mocha_entry_" + node.value, ret_llvm);
+                        this.putMRT("mocha_entry_" + node.value, ret_llvm);
                     };
                     dli = dli + 1;
                 };
@@ -179,7 +177,7 @@ extend CodeGen {
                     var member: ASTNode = node.body[cmi];
                     if (member.kind == "MethodDecl") {
                         var mret: str = this.toLLVMType(member.type_str);
-                        this.method_return_types.put(node.value + "_" + member.value, mret);
+                        this.putMRT(node.value + "_" + member.value, mret);
                         var mdli: int = 0;
                         while (mdli < member.params.length) {
                             if (member.params[mdli].value == "didLoad") {
@@ -198,7 +196,7 @@ extend CodeGen {
                     var efunc: ASTNode = node.body[efi];
                     var eret:  str = this.toLLVMType(efunc.type_str);
                     var ename: str = "mocha_ext_" + this.sanitizeTypeName(node.value) + "_" + efunc.value;
-                    this.method_return_types.put(ename, eret);
+                    this.putMRT(ename, eret);
                     efi = efi + 1;
                 };
             };
@@ -334,7 +332,7 @@ extend CodeGen {
         if (this.is_lib == false) {
             this.emit("define i32 @main(i32 %argc, i8** %argv) {");
             this.emit("entry:");
-            this.emit("  call void @mocha_gc_init()");
+            this.emit("  call void @mocha_signal_handlers_init()");
 
             var lii: int = 0;
             while (lii < this.lib_init_calls.length) {
@@ -391,7 +389,7 @@ extend CodeGen {
                 this.emit("  call void @mocha_main()");
             };
 
-            this.emit("  call void @mocha_gc_shutdown()");
+            this.emit("  call void @mocha_rc_shutdown()");
             this.emit("  ret i32 0");
             this.emit("}");
         };
@@ -399,21 +397,16 @@ extend CodeGen {
         // ====================================================
         // Assemble final output
         // ====================================================
-        var final_output: str[] = [];
-
-        // 1. Preamble
-        var preamble_saved: str[] = this.output;
-        this.output = [];
-        this.emitPreamble();
-        var preamble_lines: str[] = this.output;
-        this.output = preamble_saved;
-
-        // 2. String globals
-        var str_saved: str[] = this.output;
-        this.output = [];
-        this.emitStringGlobals();
-        var str_lines: str[] = this.output;
-        this.output = str_saved;
+        // preamble and string globals are emitted into a scratch generator,
+        // so this.output is never swapped out
+        var pre_gen: CodeGen = CodeGen();
+        pre_gen.emitPreamble();
+        var str_gen: CodeGen = CodeGen();
+        str_gen.string_const_keys = this.string_const_keys;
+        str_gen.string_const_ids  = this.string_const_ids;
+        str_gen.emitStringGlobals();
+        var preamble_lines: str[] = pre_gen.output;
+        var str_lines:      str[] = str_gen.output;
 
         // 3. Type declarations
         // 4. Extra declares

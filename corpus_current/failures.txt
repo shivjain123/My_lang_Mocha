@@ -11,12 +11,6 @@ caller
       Γ¥î Type errors found:
          MochaTypeError at line 4, col 23: 'secretHelper' is local to its file and cannot be called from outside
 
-chain_leak_test
-    corpus_current\chain_leak_test.ll:736:49: error: '%t18' defined with type 'ptr' but expected 'i32'
-      736 |   %t22 = call i8* @mocha_sqlite3_query_cell(i32 %t18, i32 %t20, i32 %t21)
-          |                                                 ^
-    1 error generated.
-
 check_64double
       Γ£à No imports
     Step 3: Type Checking...
@@ -60,8 +54,8 @@ complex_str_check
          MochaTypeError at line 2, col 29: Complex() arguments must be int, vast or float, not 'str'
 
 comprehensive_v0.5_tests
-    corpus_current\comprehensive_v0.5_tests.ll:4178:21: error: use of undefined value '@fclose'
-     4178 |   %t1469 = call i32 @fclose(i8* %t1468)
+    corpus_current\comprehensive_v0.5_tests.ll:4180:21: error: use of undefined value '@fclose'
+     4180 |   %t1469 = call i32 @fclose(i8* %t1468)
           |                     ^
     1 error generated.
 
@@ -160,12 +154,6 @@ shared_field
     Step 3: Type Checking...
       Γ¥î Type errors found:
          MochaTypeError at line 2, col 5: 'shared' is not allowed on fields ΓÇö use a module-level variable instead
-
-sqlite3_ffi
-    corpus_current\sqlite3_ffi.ll:548:49: error: '%t91' defined with type 'ptr' but expected 'i32'
-      548 |   %t93 = call i32 @mocha_sqlite3_query_rows(i32 %t91)
-          |                                                 ^
-    1 error generated.
 
 suite_of_v0.7
     Step 3: Type Checking...
@@ -300,7 +288,7 @@ test_ng
          MochaTypeError at line 2, col 5: 'weak' only applies to a field whose type is a single class, not 'dict'
 
 test_nv
-    ≡ƒöÑ Mocha Compiler v1.6
+    ≡ƒöÑ Mocha Compiler v1.7
     ≡ƒôä Compiling: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\test_nv.mch
       Γ¥î mocha-native file not found: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\some_folder\fake.a
 

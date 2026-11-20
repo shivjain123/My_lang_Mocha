@@ -260,7 +260,7 @@ extend float[] {
 
         var g1: float = this.skewness();
         var nf: float = float(n);
-        var correction: float = ((nf * (nf - 1.0)) / (nf - 2.0)).sqrt().real;
+        var correction: float = (nf * (nf - 1.0)).sqrt().real / (nf - 2.0);
         return correction * g1;
     };
 

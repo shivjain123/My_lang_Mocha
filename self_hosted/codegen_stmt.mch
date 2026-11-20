@@ -118,6 +118,104 @@ extend CodeGen {
     // genStmt — main dispatcher
     // --------------------------------------------------------
 
+    function emitPopTryFramesForLoop() -> null {
+        var pi: int = 0;
+        while (pi < this.try_loop_n) {
+            if (this.try_loop_ids[pi] == this.break_label) {
+                this.emit("  call i8* @mocha_ex_pop()");
+            };
+            pi = pi + 1;
+        };
+    };
+
+    function genFail(node: ASTNode) -> null {
+        var m: str = this.genExpr(node.left);
+        this.emit("  call void @mocha_ex_throw(i8* " + this.exprReg(m) + ")");
+        this.emit("  unreachable");
+    };
+
+    function genRethrow(node: ASTNode) -> null {
+        if (this.cur_rescue_slot != "") {
+            var msg: str = this.freshTemp();
+            this.emit("  " + msg + " = load i8*, i8** " + this.cur_rescue_slot);
+            this.emit("  call void @mocha_ex_throw(i8* " + msg + ")");
+        } else {
+            this.emit("  call void @mocha_ex_rethrow()");
+        };
+        this.emit("  unreachable");
+    };
+
+    function genTry(node: ASTNode) -> null {
+        var try_lbl:    str = this.freshLabel("try_body");
+        var rescue_lbl: str = this.freshLabel("rescue_body");
+        var after_lbl:  str = this.freshLabel("after_try");
+
+        // push frame
+        var frame_reg: str = this.freshTemp();
+        this.emit("  " + frame_reg + " = call %MochaExFrame* @mocha_ex_push()");
+        var env_reg: str = this.freshTemp();
+        this.emit("  " + env_reg + " = call i8* @mocha_ex_env_ptr(%MochaExFrame* " + frame_reg + ")");
+
+        var landed_reg: str = this.freshTemp();
+        var is_throw:   str = this.freshTemp();
+        if (this.target_os == "Windows") {
+            this.emit("  call void @mocha_ex_reset_landed()");
+            this.emit("  call void @RtlCaptureContext(i8* " + env_reg + ") returns_twice");
+            this.emit("  " + landed_reg + " = call i32 @mocha_ex_did_land()");
+        } else {
+            this.emit("  " + landed_reg + " = call i32 @setjmp(i8* " + env_reg + ") returns_twice");
+        };
+        this.emit("  " + is_throw + " = icmp ne i32 " + landed_reg + ", 0");
+        this.emit("  br i1 " + is_throw + ", label %" + rescue_lbl + ", label %" + try_lbl);
+
+        // try body
+        this.emit(try_lbl + ":");
+        if (this.try_loop_n < this.try_loop_ids.length) {
+            this.try_loop_ids[this.try_loop_n] = this.break_label;
+        } else {
+            this.try_loop_ids.push(this.break_label);
+        };
+        this.try_loop_n = this.try_loop_n + 1;
+        this.try_depth = this.try_depth + 1;
+        var ti: int = 0;
+        while (ti < node.body.length) {
+            this.genStmt(node.body[ti]);
+            ti = ti + 1;
+        };
+        this.try_loop_n = this.try_loop_n - 1;
+        this.try_depth = this.try_depth - 1;
+        if (this.lastIsTerminator() == false) {
+            this.emit("  call i8* @mocha_ex_pop()");
+            this.emit("  br label %" + after_lbl);
+        };
+
+        // rescue body
+        this.emit(rescue_lbl + ":");
+        var msg_reg: str = this.freshTemp();
+        this.emit("  " + msg_reg + " = call i8* @mocha_ex_pop()");
+        var prev_slot: str = this.cur_rescue_slot;
+        var rescue_slot: str = this.allocaAtEntry("i8*");
+        this.emit("  store i8* " + msg_reg + ", i8** " + rescue_slot);
+        this.cur_rescue_slot = rescue_slot;
+        if (node.value != "") {
+            var bind_ptr: str = this.allocaAtEntry("i8*");
+            this.emit("  store i8* " + msg_reg + ", i8** " + bind_ptr);
+            this.declareLocal(node.value, bind_ptr, "i8*", "str");
+        };
+        var ri: int = 0;
+        while (ri < node.else_body.length) {
+            this.genStmt(node.else_body[ri]);
+            ri = ri + 1;
+        };
+        this.cur_rescue_slot = prev_slot;
+        if (this.lastIsTerminator() == false) {
+            this.emit("  br label %" + after_lbl);
+        };
+
+        // after
+        this.emit(after_lbl + ":");
+    };
+
     function genStmt(node: ASTNode) -> null {
         match (node.kind) {
             case "VarDecl":
@@ -134,6 +232,8 @@ extend CodeGen {
                 this.genIf(node);
             case "WhileLoop":
                 this.genWhile(node);
+            case "DoWhileLoop":
+                this.genDoWhile(node);
             case "ForLoop":
                 this.genFor(node);
             case "ForEachLoop":
@@ -141,13 +241,27 @@ extend CodeGen {
             case "MatchStmt":
                 this.genMatch(node);
             case "BreakStmt":
+                this.emitPopTryFramesForLoop();
                 this.emit("  br label %" + this.break_label);
             case "ContinueStmt":
+                this.emitPopTryFramesForLoop();
                 this.emit("  br label %" + this.continue_label);
+            case "TryRescue":
+                this.genTry(node);
+            case "FailStmt":
+                this.genFail(node);
+            case "RethrowStmt":
+                this.genRethrow(node);
             case "PrintStmt":
                 this.genPrint(node);
             case "ExprStmt":
-                this.genExpr(node.left);
+                if (node.left.kind == "Assignment") {
+                    this.genAssignment(node.left);
+                } else if (node.left.kind == "CompoundAssignment") {
+                    this.genCompoundAssignmentStmt(node.left);
+                } else {
+                    this.genExpr(node.left);
+                };
             case "FunctionCall":
                 this.genFunctionCall(node);
             case "PostIncrement":
@@ -268,17 +382,17 @@ extend CodeGen {
     function genConstDecl(node: ASTNode) -> null {
         // Simple literal constants stored in lib_constants
         if (node.left.kind == "IntLiteral") {
-            this.lib_functions.put(node.value, str(node.left.int_val) + "|i32");
+            this.putLF(node.value, str(node.left.int_val) + "|i32");
             return;
         };
         if (node.left.kind == "FloatLiteral") {
-            this.lib_functions.put(node.value, str(node.left.real_val) + "|double");
+            this.putLF(node.value, str(node.left.real_val) + "|double");
             return;
         };
         if (node.left.kind == "BoolLiteral") {
             var v: int = 0;
             if (node.left.bool_val) { v = 1; };
-            this.lib_functions.put(node.value, str(v) + "|i8");
+            this.putLF(node.value, str(v) + "|i8");
             return;
         };
         // Complex const — treat as var
@@ -362,16 +476,102 @@ extend CodeGen {
     // --------------------------------------------------------
 
     function genCompoundAssignmentStmt(node: ASTNode) -> null {
-        // reuse the expr codegen — it handles this.field += x now
-        this.genExpr(node);
+        var ptr:       str = "";
+        var llvm_type: str = "";
+
+        // 1. find the address of the target
+        if (node.left.kind == "Identifier") {
+            if (this.hasLocal(node.left.value) == false) {
+                mocha_error("MochaCodeGenError", "Compound assignment to undeclared variable '" + node.left.value + "'");
+                return;
+            };
+            ptr       = this.getLocalPtr(node.left.value);
+            llvm_type = this.getLocalType(node.left.value);
+        } else if (node.left.kind == "MemberAccess") {
+            var obj_result: str = this.genExpr(node.left.left);
+            var obj_reg:    str = this.exprReg(obj_result);
+            var obj_type:   str = this.exprType(obj_result);
+            if (obj_type.length < 8) { return; };
+            if (obj_type.substring(0, 7) != "%struct") { return; };
+            var class_name: str = this.inferClassName(obj_type);
+            var field_idx:  int = this.getFieldIndex(class_name, node.left.value);
+            if (field_idx < 0) {
+                mocha_error("MochaCodeGenError", "Unknown field '" + node.left.value + "' on '" + class_name + "'");
+                return;
+            };
+            llvm_type = this.getFieldLLVMType(class_name, node.left.value);
+            ptr = this.freshTemp();
+            this.emit("  " + ptr + " = getelementptr %struct." + class_name + ", " + obj_type + " " + obj_reg + ", i32 0, i32 " + str(field_idx));
+        } else {
+            mocha_error("MochaCodeGenError", "Compound assignment target must be a variable or field");
+            return;
+        };
+
+        // 2. load, operate, store
+        var old: str = this.freshTemp();
+        this.emit("  " + old + " = load " + llvm_type + ", " + llvm_type + "* " + ptr);
+        var val_result: str = this.genExpr(node.right);
+        var val_reg:    str = this.exprReg(val_result);
+        var val_type:   str = this.exprType(val_result);
+
+        // widen the operand to the target's type
+        if (val_type == "i32" && llvm_type == "i64") {
+            var w1: str = this.freshTemp();
+            this.emit("  " + w1 + " = sext i32 " + val_reg + " to i64");
+            val_reg = w1;
+        } else if ((val_type == "i32" || val_type == "i64") && llvm_type == "double") {
+            var w2: str = this.freshTemp();
+            this.emit("  " + w2 + " = sitofp " + val_type + " " + val_reg + " to double");
+            val_reg = w2;
+        };
+
+        var op:       str  = node.value;
+        var is_float: bool = llvm_type == "double";
+        var result:   str  = this.freshTemp();
+        if (is_float) {
+            var ffn: str = "";
+            if (op == "+=") { ffn = "mocha_float_add"; };
+            if (op == "-=") { ffn = "mocha_float_sub"; };
+            if (op == "*=") { ffn = "mocha_float_mul"; };
+            if (op == "/=") { ffn = "mocha_float_div"; };
+            if (ffn == "") {
+                mocha_error("MochaCodeGenError", "Unknown compound op: " + op);
+                return;
+            };
+            this.emit("  " + result + " = call double @" + ffn + "(double " + old + ", double " + val_reg + ")");
+        } else if (op == "/=") {
+            var dfn: str = "mocha_int_div";
+            if (llvm_type == "i64") { dfn = "mocha_vast_div"; };
+            this.emit("  " + result + " = call " + llvm_type + " @" + dfn + "(" + llvm_type + " " + old + ", " + llvm_type + " " + val_reg + ")");
+        } else {
+            var instr: str = "";
+            if (op == "+=") { instr = "add"; };
+            if (op == "-=") { instr = "sub"; };
+            if (op == "*=") { instr = "mul"; };
+            if (instr == "") {
+                mocha_error("MochaCodeGenError", "Unknown compound op: " + op);
+                return;
+            };
+            this.emit("  " + result + " = " + instr + " " + llvm_type + " " + old + ", " + val_reg);
+        };
+        this.emit("  store " + llvm_type + " " + result + ", " + llvm_type + "* " + ptr);
     };
 
     // --------------------------------------------------------
     // Return
     // --------------------------------------------------------
 
+    function emitPopAllTryFrames() -> null {
+        var qi: int = 0;
+        while (qi < this.try_depth) {
+            this.emit("  call i8* @mocha_ex_pop()");
+            qi = qi + 1;
+        };
+    };
+
     function genReturn(node: ASTNode) -> null {
         if (node.left == null) {
+            this.emitPopAllTryFrames();
             this.emit("  ret void");
             return;
         };
@@ -381,11 +581,13 @@ extend CodeGen {
         var ret_type:   str = this.current_return_type;
 
         if (ret_type == "void") {
+            this.emitPopAllTryFrames();
             this.emit("  ret void");
             return;
         };
 
         var coerced: str = this.coerceToType(val_reg, val_type, ret_type);
+        this.emitPopAllTryFrames();
         this.emit("  ret " + ret_type + " " + coerced);
     };
 
@@ -491,6 +693,33 @@ extend CodeGen {
             i = i + 1;
         };
         this.emitBrIfNeeded(cond_lbl);
+        this.emit(end_lbl + ":");
+
+        this.break_label    = prev_break;
+        this.continue_label = prev_continue;
+    };
+
+    function genDoWhile(node: ASTNode) -> null {
+        var count:    int = this.temp_count;
+        var body_lbl: str = "dowhile_body_" + str(count);
+        var end_lbl:  str = "dowhile_end_"  + str(count);
+        this.temp_count = this.temp_count + 1;
+
+        var prev_break:    str = this.break_label;
+        var prev_continue: str = this.continue_label;
+        this.break_label    = end_lbl;
+        this.continue_label = body_lbl;
+
+        this.emit("  br label %" + body_lbl);
+        this.emit(body_lbl + ":");
+        var i: int = 0;
+        while (i < node.body.length) {
+            this.genStmt(node.body[i]);
+            i = i + 1;
+        };
+        var cond_result: str = this.genExpr(node.condition);
+        var cond_i1:     str = this.boolToI1(this.exprReg(cond_result), this.exprType(cond_result));
+        this.emit("  br i1 " + cond_i1 + ", label %" + body_lbl + ", label %" + end_lbl);
         this.emit(end_lbl + ":");
 
         this.break_label    = prev_break;

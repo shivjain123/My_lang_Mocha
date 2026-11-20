@@ -44,12 +44,14 @@ function hamming(a: str, b: str) -> int;
 class NormalDist;
 class NormalDist field mean_val: float;
 class NormalDist field std_val: float;
+// ctor NormalDist (mean: float, std: float)
 class NormalDist function pdf(x: float) -> float;
 class NormalDist function cdf(x: float) -> float;
 class NormalDist function survival(x: float) -> float;
 class NormalDist function contains(x: float, prob: float) -> bool;
 class PoissonDist;
 class PoissonDist field rate: float;
+// ctor PoissonDist (rate: float)
 class PoissonDist function pmf(k: int) -> float;
 class PoissonDist function cdf(k: int) -> float;
 class PoissonDist function survival(k: int) -> float;
@@ -58,6 +60,7 @@ class PoissonDist function variance() -> float;
 class BinomialDist;
 class BinomialDist field n: int;
 class BinomialDist field p: float;
+// ctor BinomialDist (n: int, p: float)
 class BinomialDist function choose(k: int) -> float;
 class BinomialDist function pmf(k: int) -> float;
 class BinomialDist function cdf(k: int) -> float;
@@ -66,6 +69,7 @@ class BinomialDist function mean() -> float;
 class BinomialDist function variance() -> float;
 class ExponentialDist;
 class ExponentialDist field rate: float;
+// ctor ExponentialDist (rate: float)
 class ExponentialDist function pdf(x: float) -> float;
 class ExponentialDist function cdf(x: float) -> float;
 class ExponentialDist function survival(x: float) -> float;
@@ -76,6 +80,7 @@ class ExponentialDist function memoryless(t: float, s: float) -> float;
 class GammaDist;
 class GammaDist field alpha: float;
 class GammaDist field beta: float;
+// ctor GammaDist (alpha: float, beta: float)
 class GammaDist function pdf(x: float) -> float;
 class GammaDist function mean() -> float;
 class GammaDist function variance() -> float;
@@ -85,6 +90,7 @@ class GammaDist function is_chi_squared(df: int) -> bool;
 class BetaDist;
 class BetaDist field alpha: float;
 class BetaDist field beta: float;
+// ctor BetaDist (alpha_val: float, beta_val: float)
 class BetaDist function beta_func() -> float;
 class BetaDist function pdf(x: float) -> float;
 class BetaDist function mean() -> float;
@@ -99,6 +105,7 @@ class GaussianMixture field means: float[];
 class GaussianMixture field stds: float[];
 class GaussianMixture field weights: float[];
 class GaussianMixture field n_components: int;
+// ctor GaussianMixture (means: float[], stds: float[], weights: float[])
 class GaussianMixture function pdf(x: float) -> float;
 class GaussianMixture function cdf(x: float) -> float;
 class GaussianMixture function mean() -> float;
@@ -108,6 +115,7 @@ class GaussianMixture function responsibility(x: float, k: int) -> float;
 class FDist;
 class FDist field d1: float;
 class FDist field d2: float;
+// ctor FDist (d1: float, d2: float)
 class FDist function log_beta(a: float, b: float) -> float;
 class FDist function beta_cf(x: float, a: float, b: float) -> float;
 class FDist function reg_incomplete_beta(x: float, a: float, b: float) -> float;

@@ -1,8 +1,12 @@
 from "mocha-neuron" import *;
+from "mocha-stopwatch" import *;
 
 function main(didLoad) -> null {
     rand_seed(42);
     mocha_cuda_init();
+
+    var sw: Stopwatch = Stopwatch();
+    sw.begin();
 
     var positive: str[] = [
         "i love this movie",
@@ -33,6 +37,9 @@ function main(didLoad) -> null {
     print("terrible awful movie -> ", model.predict("terrible awful movie"), "\n");
     print("brilliant amazing story -> ", model.predict("brilliant amazing story"), "\n");
     print("i hated every moment -> ", model.predict("i hated every moment"), "\n");
+
+    sw.end();
+    print("Time elapsed:    " + str(sw.elapsed_sec()) + " s", newLine=true);
 
     model.dispose();
 };

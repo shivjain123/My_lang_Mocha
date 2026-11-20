@@ -2,7 +2,9 @@ from "mocha-forge" import *;
 
 function main(didLoad) -> null {
     var f: File = open("digital_habits_vs_mental_health.csv", "read");
-    var line: str = f.readLine();
+    var data: float[][] = f.readCsv();
+    f.close();
+    print("rows read: ", data.length, newLine=true);
 
     var screen:   float[][] = [[]];
     var tiktok:   float[][] = [[]];
@@ -11,23 +13,21 @@ function main(didLoad) -> null {
     var social:   float[][] = [[]];
     var mood:     float[] = [];
 
-    line = f.readLine();
-    while (line != "") {
-        var parts: str[] = line.split(",");
-        var r_screen: float[] = [parts[0].toFloat()];
-        var r_social: float[] = [parts[1].toFloat()];
-        var r_tiktok: float[] = [parts[2].toFloat()];
-        var r_sleep:  float[] = [parts[3].toFloat()];
-        var r_stress: float[] = [parts[4].toFloat()];
+    var d: int = 0;
+    while (d < data.length) {
+        var r_screen: float[] = [data[d][0]];
+        var r_social: float[] = [data[d][1]];
+        var r_tiktok: float[] = [data[d][2]];
+        var r_sleep:  float[] = [data[d][3]];
+        var r_stress: float[] = [data[d][4]];
         screen.push(r_screen);
         social.push(r_social);
         tiktok.push(r_tiktok);
         sleep.push(r_sleep);
         stress.push(r_stress);
-        mood.push(parts[5].toFloat());
-        line = f.readLine();
+        mood.push(data[d][5]);
+        d++;
     };
-    f.close();
 
     // ── Compute mood min/max ──
     var mood_min: float = mood[0];

@@ -32,6 +32,7 @@ class Expr field value: float;
 class Expr field name: str;
 class Expr field left: Expr;
 class Expr field right: Expr;
+// ctor Expr (kind: int, value: float, name: str, left: Expr, right: Expr)
 function num(v: float) -> Expr;
 function var_e(name: str) -> Expr;
 function add(a: Expr, b: Expr) -> Expr;

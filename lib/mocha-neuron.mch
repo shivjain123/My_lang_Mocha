@@ -1916,6 +1916,122 @@ class Attention {
 };
 
 // =============================================
+// MULTI-HEAD ATTENTION
+// n_heads independent Attention heads of size d_model / n_heads, outputs summed.
+// Equivalent to concat(heads) @ Wo, because Wo splits by rows per head.
+// =============================================
+
+class MultiHeadAttention {
+    var heads:   Attention[];
+    var n_heads: int;
+    var d_model: int;
+    var d_k:     int;     // size of each head
+
+    function constructor(d_model: int, n_heads: int, d_k: int) -> null {
+        if (n_heads < 1) {
+            c_print_err("MochaLibError (mocha-neuron): MultiHeadAttention n_heads must be at least 1.");
+            c_exit(2);
+        };
+        if (d_k < 1) {
+            c_print_err("MochaLibError (mocha-neuron): MultiHeadAttention d_k must be at least 1.");
+            c_exit(2);
+        };
+        this.d_model = d_model;
+        this.n_heads = n_heads;
+        this.d_k     = d_k;
+        this.heads   = [];
+        var dk: int = d_k;
+        var h: int = 0;
+        while (h < n_heads) {
+            this.heads.push(Attention(d_model, dk));
+            h = h + 1;
+        };
+    };
+
+    ~~ @param x: [seq_len x d_model]
+    ~~ @return: [seq_len x d_model]
+    function forward(x: Tensor) -> Tensor {
+        var out: Tensor = this.heads[0].forward(x);
+        var h: int = 1;
+        while (h < this.n_heads) {
+            var o: Tensor = this.heads[h].forward(x);
+            out.add_inplace(o);
+            o.dispose();
+            h = h + 1;
+        };
+        return out;
+    };
+
+    ~~ @param dout: [seq_len x d_model]
+    ~~ @return: gradient w.r.t. x [seq_len x d_model]
+    function backward(dout: Tensor, lr: float) -> Tensor {
+        var dx: Tensor = this.heads[0].backward(dout, lr);
+        var h: int = 1;
+        while (h < this.n_heads) {
+            var d: Tensor = this.heads[h].backward(dout, lr);
+            dx.add_inplace(d);
+            d.dispose();
+            h = h + 1;
+        };
+        return dx;
+    };
+
+    function dispose() -> null {
+        var h: int = 0;
+        while (h < this.n_heads) {
+            this.heads[h].dispose();
+            h = h + 1;
+        };
+    };
+
+    function save(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        neuron_db_setup(db);
+        sqlite3_exec(db, "BEGIN TRANSACTION;");
+        neuron_db_write_meta(db, "layer_type", "MultiHeadAttention");
+        neuron_db_write_meta(db, "d_model", str(this.d_model));
+        neuron_db_write_meta(db, "n_heads", str(this.n_heads));
+        neuron_db_write_meta(db, "d_k", str(this.d_k));
+        sqlite3_exec(db, "COMMIT;");
+        sqlite3_close(db);
+        var h: int = 0;
+        while (h < this.n_heads) {
+            this.heads[h].save(path + ".h" + str(h));
+            h = h + 1;
+        };
+    };
+
+    function load(path: str) -> null {
+        var db: null = sqlite3_open(path);
+        var dm: int = neuron_db_read_meta(db, "d_model").toInt();
+        var nh: int = neuron_db_read_meta(db, "n_heads").toInt();
+        var dkk: int = neuron_db_read_meta(db, "d_k").toInt();
+        sqlite3_close(db);
+        if (nh < 1 || dkk < 1) {
+            c_print_err("MochaLibError (mocha-neuron): MultiHeadAttention.load saved n_heads and d_k are invalid.");
+            c_exit(2);
+        };
+
+        // free the heads made by the constructor, then rebuild from the files
+        var old: int = 0;
+        while (old < this.heads.length) {
+            this.heads[old].dispose();
+            old = old + 1;
+        };
+        this.heads   = [];
+        this.d_model = dm;
+        this.n_heads = nh;
+        this.d_k     = dkk;
+        var h: int = 0;
+        while (h < nh) {
+            this.heads.push(Attention(dm, dkk));
+            this.heads[h].load(path + ".h" + str(h));
+            h = h + 1;
+        };
+    };
+};
+
+// =============================================
 // LAYER NORMALIZATION
 // =============================================
 
@@ -2011,7 +2127,9 @@ class LayerNorm {
 // FFN = Dense(d_model, d_ff, relu) → Dense(d_ff, d_model, none)
 
 class BertLayer {
-    var attn:   Attention;
+    var attn:   Attention;             // used when n_heads == 1
+    var mha:    MultiHeadAttention;    // used when n_heads > 1
+    var n_heads: int;
     var norm1:  LayerNorm;
     var ffn1:   Dense;
     var ffn2:   Dense;
@@ -2020,11 +2138,47 @@ class BertLayer {
 
     function constructor(d_model: int, d_k: int, d_ff: int) -> null {
         this.d_model = d_model;
-        this.attn  = Attention(d_model, d_k);
+        this.n_heads = 1;
+        this.attn = Attention(d_model, d_k);
         this.norm1 = LayerNorm(d_model);
         this.ffn1  = Dense(d_model, d_ff, Activation.RELU);
         this.ffn2  = Dense(d_ff, d_model, Activation.NONE);
         this.norm2 = LayerNorm(d_model);
+    };
+
+    ~~ Switch to multi-head attention. Call once, right after the constructor, before training.
+    ~~ d_k (size of each head) stays as given to the constructor.
+    ~~ @param n: number of heads
+    function use_heads(n: int) -> null {
+        if (n < 1) {
+            c_print_err("MochaLibError (mocha-neuron): BertLayer.use_heads n must be at least 1.");
+            c_exit(2);
+        };
+        if (this.n_heads != 1) {
+            c_print_err("MochaLibError (mocha-neuron): BertLayer.use_heads can only be called once, on a fresh layer.");
+            c_exit(2);
+        };
+        if (n > 1) {
+            var dk: int = this.attn.d_k;
+            this.attn.dispose();
+            this.mha = MultiHeadAttention(this.d_model, n, dk);
+            this.n_heads = n;
+        };
+    };
+
+    // picks single-head or multi-head attention
+    function attn_forward(x: Tensor) -> Tensor {
+        if (this.n_heads == 1) {
+            return this.attn.forward(x);
+        };
+        return this.mha.forward(x);
+    };
+
+    function attn_backward(dout: Tensor, lr: float) -> Tensor {
+        if (this.n_heads == 1) {
+            return this.attn.backward(dout, lr);
+        };
+        return this.mha.backward(dout, lr);
     };
 
     ~~ Forward pass — one BERT layer
@@ -2032,7 +2186,7 @@ class BertLayer {
     ~~ @return: output [seq_len x d_model]
     function forward(x: Tensor) -> Tensor {
         // attn caches x as last_x — do NOT dispose x here, caller owns it
-        var attn_out: Tensor = this.attn.forward(x);
+        var attn_out: Tensor = this.attn_forward(x);
 
         // res1 = x + attn_out
         var res1: Tensor = x.add(attn_out);
@@ -2086,7 +2240,7 @@ class BertLayer {
         dnorm1.dispose();
 
         // backward through attention
-        var dattn: Tensor = this.attn.backward(dres1, lr);
+        var dattn: Tensor = this.attn_backward(dres1, lr);
 
         // residual: dx = dattn + dres1
         var dx: Tensor = dattn.add(dres1);
@@ -2097,7 +2251,11 @@ class BertLayer {
     };
 
     function dispose() -> null {
-        this.attn.dispose();
+        if (this.n_heads == 1) {
+            this.attn.dispose();
+        } else {
+            this.mha.dispose();
+        };
         this.norm1.dispose();
         this.ffn1.dispose();
         this.ffn2.dispose();
@@ -2110,13 +2268,18 @@ class BertLayer {
         sqlite3_exec(db, "BEGIN TRANSACTION;");
         neuron_db_write_meta(db, "layer_type", "BertLayer");
         neuron_db_write_meta(db, "d_model", str(this.d_model));
-        neuron_db_write_meta(db, "attn_d_k", str(this.attn.d_k));
-        neuron_db_write_meta(db, "attn_scale", str(this.attn.scale));
-        neuron_db_write_meta(db, "attn_t", str(this.attn.t));
-        neuron_save_tensor(db, "attn_Wq", this.attn.Wq);
-        neuron_save_tensor(db, "attn_Wk", this.attn.Wk);
-        neuron_save_tensor(db, "attn_Wv", this.attn.Wv);
-        neuron_save_tensor(db, "attn_Wo", this.attn.Wo);
+        neuron_db_write_meta(db, "n_heads", str(this.n_heads));
+        if (this.n_heads == 1) {
+            neuron_db_write_meta(db, "attn_d_k", str(this.attn.d_k));
+            neuron_db_write_meta(db, "attn_scale", str(this.attn.scale));
+            neuron_db_write_meta(db, "attn_t", str(this.attn.t));
+            neuron_save_tensor(db, "attn_Wq", this.attn.Wq);
+            neuron_save_tensor(db, "attn_Wk", this.attn.Wk);
+            neuron_save_tensor(db, "attn_Wv", this.attn.Wv);
+            neuron_save_tensor(db, "attn_Wo", this.attn.Wo);
+        } else {
+            neuron_db_write_meta(db, "attn_d_k", str(this.mha.d_k));
+        };
         neuron_db_write_meta(db, "norm1_size", str(this.norm1.size));
         neuron_db_write_meta(db, "norm1_t", str(this.norm1.t));
         neuron_save_tensor(db, "norm1_gamma", this.norm1.gamma);
@@ -2139,19 +2302,38 @@ class BertLayer {
         neuron_save_tensor(db, "norm2_beta", this.norm2.beta);
         sqlite3_exec(db, "COMMIT;");
         sqlite3_close(db);
+        if (this.n_heads > 1) {
+            this.mha.save(path + ".mha");
+        };
     };
 
     function load(path: str) -> null {
         var db: null = sqlite3_open(path);
         this.d_model = neuron_db_read_meta(db, "d_model").toInt();
         var attn_d_k: int = neuron_db_read_meta(db, "attn_d_k").toInt();
-        this.attn = Attention(this.d_model, attn_d_k);
-        this.attn.scale = neuron_db_read_meta(db, "attn_scale").toFloat();
-        this.attn.t = neuron_db_read_meta(db, "attn_t").toInt();
-        this.attn.Wq = neuron_load_tensor(db, "attn_Wq");
-        this.attn.Wk = neuron_load_tensor(db, "attn_Wk");
-        this.attn.Wv = neuron_load_tensor(db, "attn_Wv");
-        this.attn.Wo = neuron_load_tensor(db, "attn_Wo");
+        var nh: int = neuron_db_read_meta(db, "n_heads").toInt();
+        if (nh < 1) { nh = 1; };   // files saved before multi-head have no n_heads
+
+        // free the attention the constructor made, then rebuild from the file
+        if (this.n_heads == 1) {
+            this.attn.dispose();
+        } else {
+            this.mha.dispose();
+        };
+        this.n_heads = nh;
+
+        if (nh == 1) {
+            this.attn = Attention(this.d_model, attn_d_k);
+            this.attn.scale = neuron_db_read_meta(db, "attn_scale").toFloat();
+            this.attn.t = neuron_db_read_meta(db, "attn_t").toInt();
+            this.attn.Wq = neuron_load_tensor(db, "attn_Wq");
+            this.attn.Wk = neuron_load_tensor(db, "attn_Wk");
+            this.attn.Wv = neuron_load_tensor(db, "attn_Wv");
+            this.attn.Wo = neuron_load_tensor(db, "attn_Wo");
+        } else {
+            this.mha = MultiHeadAttention(this.d_model, nh, attn_d_k);
+            this.mha.load(path + ".mha");
+        };
         var norm1_size: int = neuron_db_read_meta(db, "norm1_size").toInt();
         this.norm1 = LayerNorm(norm1_size);
         this.norm1.t = neuron_db_read_meta(db, "norm1_t").toInt();
@@ -2435,6 +2617,8 @@ class Rbm {
     var bh:           Tensor;  // hidden bias [1 x hidden]
     var visible_size: int;
     var hidden_size:  int;
+    var chain:        Tensor;  // persistent visible chain [1 x visible], only valid when chain_ready == 1
+    var chain_ready:  int;     // 0 = chain not created yet
 
     function constructor(visible_size: int, hidden_size: int) -> null {
         if (visible_size < 1) {
@@ -2447,6 +2631,7 @@ class Rbm {
         };
         this.visible_size = visible_size;
         this.hidden_size  = hidden_size;
+        this.chain_ready  = 0;
 
         // xavier init weights
         var limit: float = ((4.0 / (visible_size + hidden_size)).sqrt()).real;
@@ -2519,7 +2704,8 @@ class Rbm {
     ~~ Train one step using Contrastive Divergence (CD-1)
     ~~ @param v0: one data sample [1 x visible_size]
     ~~ @param lr: learning rate
-    function train_step(v0: Tensor, lr: float) -> null {
+    ~~ @param pers: true = persistent chain (PCD), false = CD-1 (default)
+    function train_step(v0: Tensor, lr: float, pers: bool = false) -> null {
         if (lr <= 0.0) {
             c_print_err("MochaLibError (mocha-neuron): Rbm.train_step lr must be positive.");
             c_exit(2);
@@ -2528,9 +2714,38 @@ class Rbm {
         var h0: Tensor = this.sample_hidden(v0);
         this.binarize(h0);  // sample binary
 
+        // PCD: create the persistent chain from the first sample
+        if (pers) {
+            if (this.chain_ready == 0) {
+                this.chain = Tensor(1, this.visible_size);
+                var ck: int = 0;
+                while (ck < this.visible_size) {
+                    this.chain.put(0, ck, v0.at(0, ck));
+                    ck = ck + 1;
+                };
+                this.chain_ready = 1;
+            };
+        };
+
         // reconstruct: v1 = sigmoid(h0 @ w^T + bv)
         var v1: Tensor = this.sample_visible(h0);
         this.binarize(v1);  // sample binary
+
+        // PCD: redo the negative phase from the chain instead of from the data
+        if (pers) {
+            var hc: Tensor = this.sample_hidden(this.chain);
+            this.binarize(hc);
+            v1.dispose();
+            v1 = this.sample_visible(hc);
+            hc.dispose();
+            this.binarize(v1);
+            // move the chain to v1 (a copy, since v1 is modified and disposed below)
+            var cj: int = 0;
+            while (cj < this.visible_size) {
+                this.chain.put(0, cj, v1.at(0, cj));
+                cj = cj + 1;
+            };
+        };
 
         // negative phase: h1 = sigmoid(v1 @ w + bh)
         var h1: Tensor = this.sample_hidden(v1);
@@ -2575,7 +2790,8 @@ class Rbm {
     ~~ @param samples: float[] of n * visible_size values, one sample after another
     ~~ @param epochs: number of passes over all samples
     ~~ @param lr: learning rate
-    function train_values(samples: float[], epochs: int, lr: float) -> null {
+    ~~ @param pers: true = persistent chain (PCD), false = CD-1 (default)
+    function train_values(samples: float[], epochs: int, lr: float, pers: bool = false) -> null {
         if (samples.length < this.visible_size) {
             c_print_err("MochaLibError (mocha-neuron): Rbm.train_values needs at least one sample.");
             c_exit(2);
@@ -2599,7 +2815,7 @@ class Rbm {
                     v.put(0, k, samples[s * this.visible_size + k]);
                     k = k + 1;
                 };
-                this.train_step(v, lr);
+                this.train_step(v, lr, pers=pers);
                 v.dispose();
                 s = s + 1;
             };
@@ -2681,6 +2897,10 @@ class Rbm {
         this.w.dispose();
         this.bv.dispose();
         this.bh.dispose();
+        if (this.chain_ready == 1) {
+            this.chain.dispose();
+            this.chain_ready = 0;
+        };
     };
 
     function save(path: str) -> null {
@@ -2947,6 +3167,13 @@ class BertClassifier {
         this.pe   = PositionalEncoding(this.max_len, d_model);
         this.bert = BertLayer(d_model, d_k, d_ff);
         this.head = Dense(d_model, 1, Activation.SIGMOID);
+    };
+
+    ~~ Switch the BERT layer to multi-head attention. Call right after the constructor, before training.
+    ~~ d_k (given to the constructor) is the size of each head.
+    ~~ @param n: number of heads
+    function use_heads(n: int) -> null {
+        this.bert.use_heads(n);
     };
 
     function train(positive: str[], negative: str[], epochs: int, lr: float) -> null {

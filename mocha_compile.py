@@ -467,6 +467,37 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
             return "i32"
         return type_map.get(ptype, "i8*")
 
+    # defaults written by generate_manifest: "// default Class.method param = value llvm_type"
+    lib_defaults = {}
+    for dl in lines:
+        dl = dl.strip()
+        if dl.startswith("// default "):
+            try:
+                head, rest = dl[len("// default "):].split(" = ", 1)
+                cm, pname = head.split(" ", 1)
+                val, dtype = rest.rsplit(" ", 1)
+                lib_defaults[(cm, pname.strip())] = (val.strip(), dtype.strip())
+            except ValueError:
+                pass
+
+    # constructor parameter lists: "// ctor Class (a: int, b: float)"
+    for cl in lines:
+        cl = cl.strip()
+        if cl.startswith("// ctor "):
+            try:
+                cname, rest = cl[len("// ctor "):].split(" (", 1)
+                cparams_str = rest.rsplit(")", 1)[0]
+                clist = []
+                for param in cparams_str.split(","):
+                    param = param.strip()
+                    if ":" in param:
+                        pn, pt = [x.strip() for x in param.split(":", 1)]
+                        clist.append((pn, parse_llvm_type(pt),
+                                      lib_defaults.get((f"{cname}.constructor", pn))))
+                codegen.method_params[f"{cname}_constructor"] = clist
+            except ValueError:
+                pass
+
     for line in lines:
         line = line.strip()
 
@@ -570,6 +601,18 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
 
             params_str  = after_func[after_func.index("(")+1:after_func.index(")")].strip()
 
+            # parameter names, types and manifest defaults, for named args and omitted args
+            ext_plist = []
+            if params_str:
+                for param in params_str.split(","):
+                    param = param.strip()
+                    if ":" in param:
+                        pn, pt = [x.strip() for x in param.split(":", 1)]
+                        ext_plist.append((pn, parse_llvm_type(pt),
+                                          lib_defaults.get((f"{type_name}.{func_name}", pn))))
+            codegen.method_params[f"mocha_ext_{sanitized_type}_{func_name}"] = ext_plist
+            codegen.method_params[f"mocha_ext_{type_name}_{func_name}"] = ext_plist
+
             # this param uses the actual LLVM struct type based on dimensions
             if "[][]" in type_name:
                 this_llvm = "%MochaArray2D*"
@@ -639,6 +682,18 @@ def register_lib_in_codegen(lib_name: str, lib_dir: str, codegen: CodeGen, alias
             declare_str = f"declare {llvm_ret} @{method_key}({param_str})"
             if declare_str not in codegen.extra_declares:
                 codegen.extra_declares.append(declare_str)
+
+            # parameter names, types and manifest defaults, for named args and omitted args
+            plist = []
+            if params_str:
+                for param in params_str.split(","):
+                    param = param.strip()
+                    if ":" in param:
+                        pname = param.split(":")[0].strip()
+                        ptype = param.split(":")[1].strip()
+                        plist.append((pname, parse_llvm_type(ptype),
+                                      lib_defaults.get((f"{class_name}.{func_name}", pname))))
+            codegen.method_params[method_key] = plist
         
         elif line.startswith("tag "):
             tag_name = line[4:line.index("{")].strip()
@@ -1263,6 +1318,15 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
                     lines.append(f"extend {node.type_name} function {func.name}({params}) -> {func.return_type} native {func.native_name};")
                 else:
                     lines.append(f"extend {node.type_name} function {func.name}({params}) -> {func.return_type};")
+                for p in func.params:
+                    d = getattr(p, 'default', None)
+                    kind = type(d).__name__ if d is not None else ""
+                    if kind == "BoolLiteral":
+                        lines.append(f"// default {node.type_name}.{func.name} {p.name} = {1 if d.value else 0} i8")
+                    elif kind == "IntLiteral":
+                        lines.append(f"// default {node.type_name}.{func.name} {p.name} = {d.value} i32")
+                    elif kind == "FloatLiteral":
+                        lines.append(f"// default {node.type_name}.{func.name} {p.name} = {d.value} double")
 
         elif isinstance(node, ClassDecl):
             lines.append(f"class {node.name};")
@@ -1275,10 +1339,41 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
             for member in node.body:
                 if isinstance(member, MethodDecl):
                     if member.name == "constructor":
+                        # constructors get no "class ... function" line (it would declare twice);
+                        # their parameter list and defaults go in comment lines instead
+                        cparams = ", ".join(f"{p.name}: {p.type}" for p in member.params
+                                            if not getattr(p, 'has_didLoad', False))
+                        lines.append(f"// ctor {node.name} ({cparams})")
+                        for p in member.params:
+                            d = getattr(p, 'default', None)
+                            kind = type(d).__name__ if d is not None else ""
+                            if kind == "BoolLiteral":
+                                assert d is not None
+                                lines.append(f"// default {node.name}.constructor {p.name} = {1 if d.value else 0} i8")
+                            elif kind == "IntLiteral":
+                                assert d is not None
+                                lines.append(f"// default {node.name}.constructor {p.name} = {d.value} i32")
+                            elif kind == "FloatLiteral":
+                                assert d is not None
+                                lines.append(f"// default {node.name}.constructor {p.name} = {d.value} double")
                         continue
                     params = ", ".join(f"{p.name}: {p.type}" for p in member.params
                                     if not getattr(p, 'has_didLoad', False))
                     lines.append(f"class {node.name} function {member.name}({params}) -> {member.return_type};")
+                    # literal defaults, for call sites that omit the argument:
+                    #   // default Class.method param = <llvm constant> <llvm type>
+                    for p in member.params:
+                        d = getattr(p, 'default', None)
+                        kind = type(d).__name__ if d is not None else ""
+                        if kind == "BoolLiteral":
+                            assert d is not None
+                            lines.append(f"// default {node.name}.{member.name} {p.name} = {1 if d.value else 0} i8")
+                        elif kind == "IntLiteral":
+                            assert d is not None
+                            lines.append(f"// default {node.name}.{member.name} {p.name} = {d.value} i32")
+                        elif kind == "FloatLiteral":
+                            assert d is not None
+                            lines.append(f"// default {node.name}.{member.name} {p.name} = {d.value} double")
         elif isinstance(node, TagDecl):
             members = ", ".join(node.members)
             lines.append(f"tag {node.name} {{ {members} }};")
@@ -1338,7 +1433,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.6")
+    print(f"🔥 Mocha Compiler v1.7")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):
@@ -1380,21 +1475,27 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
             print(f"  🔗 Native ({_p})", flush=True)
             continue
         if _p.startswith("@"):
-            if _p.lower() != "@fortran":
-                print(f"  ❌ mocha-native: unknown shorthand '{_p}' (only @fortran exists)")
+            _short = _p.lower()
+            if _short not in ("@fortran", "@pthread"):
+                print(f"  ❌ mocha-native: unknown shorthand '{_p}' (known: @fortran, @pthread)")
                 return False
             if not IS_WINDOWS or not MINGW_GCC:
-                print("  ❌ mocha-native: @fortran is only supported on Windows (mingw) for now.")
+                print(f"  ❌ mocha-native: {_p} is only supported on Windows (mingw) for now.")
                 return False
             _root = os.path.dirname(os.path.dirname(MINGW_GCC))
-            for _f in (os.path.join(_root, "lib", "libgfortran.a"),
-                       os.path.join(_root, "lib", "libquadmath.a"),
-                       os.path.join(_root, "x86_64-w64-mingw32", "lib", "libwinpthread.a")):
+            _pth = os.path.join(_root, "x86_64-w64-mingw32", "lib", "libwinpthread.a")
+            if _short == "@fortran":
+                _wanted = [os.path.join(_root, "lib", "libgfortran.a"),
+                           os.path.join(_root, "lib", "libquadmath.a"), _pth]
+            else:
+                _wanted = [_pth]
+            for _f in _wanted:
                 if not os.path.exists(_f):
-                    print(f"  ❌ mocha-native: @fortran needs {_f}, but it does not exist.")
+                    print(f"  ❌ mocha-native: {_p} needs {_f}, but it does not exist.")
                     return False
-                user_native_tail.append(_f)
-                print(f"  🔗 Native (@fortran): {_f}", flush=True)
+                if _f not in user_native_tail:
+                    user_native_tail.append(_f)
+                    print(f"  🔗 Native ({_p}): {_f}", flush=True)
             continue
         if not os.path.exists(_p):
             print(f"  ❌ mocha-native file not found: {_p}")

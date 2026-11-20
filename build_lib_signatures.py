@@ -53,6 +53,12 @@ def scan_signatures(path):
             depth += (clean[j] == '{') - (clean[j] == '}')
             j += 1
         spans.append((m.start(), j, m.group(1)))
+    for m in re.finditer(r'\bextend\s+(\w+)\s*\{', clean):
+        depth, j = 1, m.end()
+        while j < len(clean) and depth:
+            depth += (clean[j] == '{') - (clean[j] == '}')
+            j += 1
+        spans.append((m.start(), j, "mocha_ext_" + m.group(1)))
     found = []
     for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', clean):
         depth, j = 1, m.end()
@@ -66,11 +72,27 @@ def scan_signatures(path):
         owner = min(owners, key=lambda s: s[1] - s[0])[2] if owners else None
         name = f"{owner}_{m.group(1)}" if owner else m.group(1)
         found.append((name, re.sub(r'\s+', '', rm.group(1))))
+        ps_, d_, cur_ = [], 0, ""          # parameter names and defaults, read from the raw text (strings stay intact)
+        for ch_ in text[m.end():j - 1] + ",":
+            if ch_ in "([{<":
+                d_ += 1
+            elif ch_ in ")]}>":
+                d_ -= 1
+            if ch_ == "," and d_ == 0:
+                pm_ = re.match(r'\s*(\w+)\s*(?::\s*[^=]+?)?\s*(?:=\s*(.+?))?\s*$', cur_, re.S)
+                if pm_:
+                    ps_.append([pm_.group(1), pm_.group(2)])
+                cur_ = ""
+            else:
+                cur_ += ch_
+        if any(p_[1] is not None for p_ in ps_):
+            DEFAULTS[name] = ps_
     return found
 
 
 # ---- 1. build the table from lib\*.mch --------------------------------------
 sigs = collections.defaultdict(lambda: collections.defaultdict(set))   # name -> type -> files
+DEFAULTS = {}                                                          # IR name -> [[param, default or None], ...] for functions that have default parameters
 libs = sorted(glob.glob(os.path.join(HERE, "lib", "*.mch")))
 if not libs:
     print("❌ no ..\\lib\\*.mch files found")
@@ -88,6 +110,9 @@ for n, t in list(conflicts.items())[:10]:
 with open(os.path.join(HERE, "lib_sigs.json"), "w", encoding="utf-8") as fh:
     json.dump(table, fh, indent=1, sort_keys=True)
 print("📄 table written to ..\\lib_sigs.json")
+with open(os.path.join(HERE, "lib_defaults.json"), "w", encoding="utf-8") as fh:
+    json.dump(DEFAULTS, fh, indent=1, sort_keys=True)
+print(f"📄 {len(DEFAULTS)} functions with default parameters -> ..\\lib_defaults.json")
 if "--no-validate" in sys.argv:        # the shipped build stops here; the rest checks the table against the test corpus
     sys.exit(0)
 

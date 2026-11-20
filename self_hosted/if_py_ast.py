@@ -1,9 +1,6 @@
-"""
+from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from __future__ import annotations
+from typing import Optional, List
 
 @dataclass
 class ASTNode:
@@ -30,4 +27,3 @@ class ASTNode:
     is_variadic: bool = False
     line: int = 0
     col: int = 0
-"""

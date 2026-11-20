@@ -27,15 +27,12 @@ extend CodeGen {
     // saves/restores output buffer so allocas go first
     // --------------------------------------------------------
 
-    function beginFunctionBody() -> str[] {
-        var saved: str[] = this.output;
-        this.output      = [];
+    function beginFunctionBody() -> int {
         this.entry_allocas = [];
-        return saved;
+        return this.output.length;
     };
 
-    function endFunctionBody(saved: str[], ret_llvm: str, func_name: str, param_str: str) -> null {
-        // Add terminator if needed
+    function endFunctionBody(from_idx: int, ret_llvm: str, func_name: str, param_str: str) -> null {
         if (this.lastIsTerminator() == false) {
             if (ret_llvm == "void") {
                 this.emit("  ret void");
@@ -48,23 +45,28 @@ extend CodeGen {
             };
         };
 
-        var body_lines: str[] = this.output;
-        this.output = saved;
-
-        this.emit("define " + ret_llvm + " @" + func_name + "(" + param_str + ") {");
-        this.emit("entry:");
+        // body lines are everything emitted since start; rebuild output around them
+        var rebuilt: str[] = [];
+        var k: int = 0;
+        while (k < from_idx) {
+            rebuilt.push(this.output[k]);
+            k += 1;
+        };
+        rebuilt.push("define " + ret_llvm + " @" + func_name + "(" + param_str + ") {");
+        rebuilt.push("entry:");
         var ai: int = 0;
         while (ai < this.entry_allocas.length) {
-            this.output.push(this.entry_allocas[ai]);
-            ai = ai + 1;
+            rebuilt.push(this.entry_allocas[ai]);
+            ai += 1;
         };
-        var bi: int = 0;
-        while (bi < body_lines.length) {
-            this.output.push(body_lines[bi]);
-            bi = bi + 1;
+        var bi: int = from_idx;
+        while (bi < this.output.length) {
+            rebuilt.push(this.output[bi]);
+            bi += 1;
         };
-        this.emit("}");
-        this.emitBlank();
+        rebuilt.push("}");
+        rebuilt.push("");
+        this.output = rebuilt;
     };
 
     // --------------------------------------------------------
@@ -95,9 +97,9 @@ extend CodeGen {
                 this.extra_declares.push(decl);
             };
             // register mocha name -> c name
-            this.lib_functions.put(node.value, node.extra + "|" + ret_llvm);
-            this.method_return_types.put(node.value, ret_llvm);
-            this.method_return_types.put(node.extra, ret_llvm);
+            this.putLF(node.value, node.extra + "|" + ret_llvm);
+            this.putMRT(node.value, ret_llvm);
+            this.putMRT(node.extra, ret_llvm);
             return;
         };
 
@@ -118,7 +120,7 @@ extend CodeGen {
             pi2 = pi2 + 1;
         };
 
-        this.method_return_types.put(node.value, ret_llvm);
+        this.putMRT(node.value, ret_llvm);
 
         var prev_return:  str  = this.current_return_type;
         var prev_in_func: bool = this.in_function;
@@ -126,16 +128,12 @@ extend CodeGen {
         this.in_function         = true;
 
         // Save locals
-        var prev_ptrs:   HashTable = this.local_ptrs;
-        var prev_types:  HashTable = this.local_types;
-        var prev_mocha:  HashTable = this.local_mocha_types;
-        var prev_counts: HashTable = this.local_name_counts;
         this.local_ptrs        = HashTable();
         this.local_types       = HashTable();
         this.local_mocha_types = HashTable();
         this.local_name_counts = HashTable();
 
-        var saved: str[] = this.beginFunctionBody();
+        var saved: int = this.beginFunctionBody();
 
         // Store this
         if (this.current_class != "" && node.flag1 == false) {
@@ -176,10 +174,6 @@ extend CodeGen {
         // Restore
         this.current_return_type = prev_return;
         this.in_function         = prev_in_func;
-        this.local_ptrs          = prev_ptrs;
-        this.local_types         = prev_types;
-        this.local_mocha_types   = prev_mocha;
-        this.local_name_counts   = prev_counts;
         this.entry_allocas       = [];
     };
 
@@ -203,9 +197,9 @@ extend CodeGen {
                 var parent_encoded: str = this.class_fields.get(parent_name);
                 var child_encoded:  str = this.class_fields.get(node.value);
                 if (parent_encoded != "" && child_encoded != "") {
-                    this.class_fields.put(node.value, parent_encoded + "," + child_encoded);
+                    this.putCF(node.value, parent_encoded + "," + child_encoded);
                 } else if (parent_encoded != "") {
-                    this.class_fields.put(node.value, parent_encoded);
+                    this.putCF(node.value, parent_encoded);
                 };
             };
         };
@@ -219,7 +213,7 @@ extend CodeGen {
             var member: ASTNode = node.body[mi];
             if (member.kind == "MethodDecl") {
                 var mangled_name: str = node.value + "_" + member.value;
-                this.method_return_types.put(mangled_name, this.toLLVMType(member.type_str));
+                this.putMRT(mangled_name, this.toLLVMType(member.type_str));
                 if (member.value == "constructor") {
                     this.classes_with_ctors.push(node.value);
                 };
@@ -307,7 +301,7 @@ extend CodeGen {
                 var child_func:  str = node.value + "_" + pmember.value;
                 var parent_func: str = parent_name + "_" + pmember.value;
                 var ret_type:    str = this.toLLVMType(pmember.type_str);
-                this.method_return_types.put(child_func, ret_type);
+                this.putMRT(child_func, ret_type);
 
                 var params_str: str = "%struct." + node.value + "* %self";
                 var ppi: int = 0;
@@ -387,7 +381,7 @@ extend CodeGen {
             var func: ASTNode = node.body[fi];
             var method_name: str = "mocha_ext_" + this.sanitizeTypeName(node.value) + "_" + func.value;
             var ret_llvm: str = this.toLLVMType(func.type_str);
-            this.method_return_types.put(method_name, ret_llvm);
+            this.putMRT(method_name, ret_llvm);
 
             if (func.flag2) { fi = fi + 1; continue; }; // native
 
@@ -404,16 +398,12 @@ extend CodeGen {
             this.current_return_type = ret_llvm;
             this.in_function         = true;
 
-            var prev_ptrs:   HashTable = this.local_ptrs;
-            var prev_types:  HashTable = this.local_types;
-            var prev_mocha:  HashTable = this.local_mocha_types;
-            var prev_counts: HashTable = this.local_name_counts;
             this.local_ptrs        = HashTable();
             this.local_types       = HashTable();
             this.local_mocha_types = HashTable();
             this.local_name_counts = HashTable();
 
-            var saved: str[] = this.beginFunctionBody();
+            var saved: int = this.beginFunctionBody();
 
             // Store this
             var this_ptr: str = "%this.ptr";
@@ -447,10 +437,6 @@ extend CodeGen {
 
             this.current_return_type = prev_return;
             this.in_function         = prev_in_func;
-            this.local_ptrs          = prev_ptrs;
-            this.local_types         = prev_types;
-            this.local_mocha_types   = prev_mocha;
-            this.local_name_counts   = prev_counts;
             this.entry_allocas       = [];
 
             fi = fi + 1;
@@ -472,8 +458,8 @@ extend CodeGen {
             var member: str = node.children[i].value;
             var gname:  str = "@" + node.value + "__" + member;
             this.emit(gname + " = constant i32 " + str(i));
-            this.global_ptrs.put(node.value + "." + member, gname);
-            this.global_mocha_types.put(node.value + "." + member, node.value);
+            this.putGP(node.value + "." + member, gname);
+            this.putGMT(node.value + "." + member, node.value);
             i = i + 1;
         };
 

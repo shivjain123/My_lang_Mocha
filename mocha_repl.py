@@ -560,7 +560,7 @@ def run_repl():
     evaluator = Evaluator()
 
     print("╔══════════════════════════════════╗")
-    print("║   Mocha REPL v1.6  🐶            ║")
+    print("║   Mocha REPL v1.7  🐶            ║")
     print("║   'exit' to quit                 ║")
     print("║   'clear' to reset state         ║")
     print("║   'vars' to show variables       ║")

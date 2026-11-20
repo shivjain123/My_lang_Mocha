@@ -3,6 +3,8 @@
 
 // mocha-lib-type: compiled
 
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
 local function mocha_str_toupper_ffi(s: str) -> str;
 local function mocha_str_tolower_ffi(s: str) -> str;
 local function c_isalpha(c: str) -> int;
@@ -39,6 +41,8 @@ extend str function regex_find_all(pat: str) -> str[];
 extend str function regex_replace_all(pat: str, replacement: str) -> str;
 extend str function regex_split(pat: str) -> str[];
 extend str[] function join(delim: str) -> str;
+extend File function readCsvRecord() -> str[];
+extend File function readCsv() -> float[][];
 local function regex_is_digit(c: str) -> bool;
 local function regex_is_word(c: str) -> bool;
 local function regex_is_space(c: str) -> bool;
@@ -50,9 +54,11 @@ local function regex_find_span(pat: str, text: str) -> int[];
 class Tokenizer;
 class Tokenizer field vocab: str[];
 class Tokenizer field vocab_size: int;
+// ctor Tokenizer ()
 class Tokenizer function find(word: str) -> int;
 class Tokenizer function word(i: int) -> str;
 class Tokenizer function fit(texts: str[]) -> null;
 class Tokenizer function encode(text: str) -> int[];
 class Tokenizer function decode(ids: int[]) -> str;
 class Tokenizer function size() -> int;
+local function csv_split_record(rec: str) -> str[];

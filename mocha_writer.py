@@ -147,7 +147,94 @@ def lib_consts():
         _LIB["consts"] = s
     return _LIB["consts"]
 
-def native_lines2(text, imports, g):
+def _call_args(body, name):
+    """Argument texts of every call NAME(...) in the emitted source."""
+    found = []
+    for m in re.finditer(r'(?<![\w.])' + re.escape(name) + r'\(', body):
+        i, depth, quoted, cur, args = m.end(), 1, False, "", []
+        while i < len(body) and depth:
+            ch = body[i]
+            if quoted:
+                cur += ch
+                if ch == "\\" and i + 1 < len(body):
+                    i += 1
+                    cur += body[i]
+                elif ch == '"':
+                    quoted = False
+            elif ch == '"':
+                quoted, cur = True, cur + ch
+            elif ch in "([{":
+                depth, cur = depth + 1, cur + ch
+            elif ch in ")]}":
+                depth -= 1
+                if depth:
+                    cur += ch
+            elif ch == "," and depth == 1:
+                args.append(cur.strip())
+                cur = ""
+            else:
+                cur += ch
+            i += 1
+        if cur.strip():
+            args.append(cur.strip())
+        found.append(args)
+    return found
+
+
+def _local_type(body, ident):
+    m = re.search(r'\bvar\s+' + re.escape(ident) + r'\s*:\s*([^=;]+?)\s*(?:=|;)', body)
+    if not m:
+        m = re.search(r'[(,]\s*' + re.escape(ident) + r'\s*:\s*([^,)=]+)', body)
+    return m.group(1).strip() if m else None
+
+
+def native_from_calls(name, ret, ps, body):
+    """A native whose signature has arrays, sets or lambdas: read the types off the emitted call sites (the emitter already typed those locals)."""
+    calls = _call_args(body, name)
+    if not calls or any(len(a) != len(ps) for a in calls):
+        return None
+    scalar = {"i32": "int", "i64": "vast", "double": "float", "void": "null", "i8": "bool"}
+    coll = {"%MochaArray*": lambda t: t.endswith("[]") and not t.endswith("[][]"),
+            "%MochaArray2D*": lambda t: t.endswith("[][]"),
+            "%MochaSet*": lambda t: t.startswith("set<")}
+    ptypes = []
+    for k, p in enumerate(ps):
+        if p in scalar:
+            ptypes.append(scalar[p])
+            continue
+        seen = set()
+        for a in calls:
+            t = a[k]
+            if t.startswith("lambda ("):
+                seen.add("lambda")
+            elif t.startswith('"'):
+                seen.add("str")
+            elif re.fullmatch(r'[A-Za-z_]\w*', t):
+                lt = _local_type(body, t)
+                if lt:
+                    seen.add(lt)
+        if p in coll:
+            seen = {x for x in seen if coll[p](x)}
+        elif p == "i8*" and not seen:
+            seen = {"null"}
+        if len(seen) != 1:
+            return None
+        ptypes.append(next(iter(seen)))
+    if ret in scalar:
+        rt = scalar[ret]
+    elif ret == "i8*":
+        import mocha_emitter as _me
+        rt = _me.NATIVE_RET_MOD.get(name, "null")
+    else:
+        rts = {m.group(1).strip() for m in re.finditer(r'\bvar\s+\w+\s*:\s*([^=;]+?)\s*=\s*' + re.escape(name) + r'\(', body)}
+        rts = {x for x in rts if ret not in coll or coll[ret](x)}
+        if len(rts) != 1:
+            return None
+        rt = next(iter(rts))
+    return f"function {name}({', '.join(f'p{k}: {t}' for k, t in enumerate(ptypes))}) -> {rt} native {name};"
+
+
+def native_lines2(text, imports, g, body_text=""):
     """A declared non-runtime symbol that is called, and whose lib (if any) was not imported: the file declared it as native."""
     _load_libs()
     imp = {re.sub(r'^from "mocha-(\w+)".*', r'\1', x) for x in imports if x.startswith("from ")}
@@ -169,6 +256,7 @@ def native_lines2(text, imports, g):
             continue
         ps = [a.strip() for a in dm.group(1).split(",") if a.strip()]
         if (ret not in tmap and ret != "i8*") or any(a not in tmap and a != "i8*" for a in ps):
+            out.append(native_from_calls(name, ret, ps, body_text) or f"// mocha reverse: could not write the native declaration for {name} (its signature uses arrays or other types the IR cannot name); declare it yourself: function {name}(...) -> ... native {name};")
             continue
         strs = set()
         for _, args in calls:
@@ -446,7 +534,6 @@ def write_module(text):
             return None
         return max((c for c in class_names if fn.name.startswith(c + "_")), key=len, default=None)
     out = import_lines(text)
-    out += native_lines2(text, out, g)
     blocks = {}                            # ("c", class) / ("f", function) -> its printed lines; put in IR order at the end
     ev = field_evidence(funcs)
     borrow = {}                            # a parent's field named only through a child class that inherits it
@@ -513,6 +600,7 @@ def write_module(text):
             seen.add(key_)
             order.append(key_)
     order += [k for k in blocks if k not in seen]      # anything the walk missed goes at the end
+    out += native_lines2(text, out, g, "\n".join(l for k_ in order for l in blocks[k_]))   # natives after the bodies, so their types can be read off the call sites
     for key_ in order:
         out += blocks[key_]
     return "\n".join(out)

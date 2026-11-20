@@ -216,7 +216,8 @@ function integral(f: lambda, a: float, b: float) -> float native mocha_math_inte
 ~~ limit at infinity — no point needed
 function limit_inf(f: lambda) -> float native mocha_math_limit_inf;
 
-~~C's random. False-entropy. Same each time
+~~ Seeded pseudo-random numbers (SplitMix64). Same seed gives the same sequence on every platform. Not cryptographic.
+~~ rand_int / rand_vast include both ends; rand_float returns min <= x < max. If max < min they are swapped.
 function rand_int(min: int, max: int) -> int native mocha_rand_int;
 function rand_vast(min: vast, max: vast) -> vast native mocha_rand_vast;
 function rand_float(min: float, max: float) -> float native mocha_rand_float;

@@ -68,7 +68,7 @@ size_*.wasm
 size_*.wasm.gz
 
 # scratch: new RC tests
-test_[a-z][a-z].mch
+test_[a-n][a-z].mch
 type_survey2.py
 wasm_regress.ps1
 test_d[p-z].txt
@@ -105,3 +105,4 @@ corpus_current/try_*.py
 decomp_out/
 decompiler_dev/
 decomp_out_baseline/
+self_hosted/*.bak

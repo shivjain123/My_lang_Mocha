@@ -180,11 +180,11 @@
  *     repeated frames into "[repeated N times]"
  *   - exit() macro overridden to print traceback before _Exit
  *
- * ── FFI WRAPPERS ───────────────────────────────────────────
- *   - SQLite3 (open/exec/query/close/is_null; query prints rows to
- *     stdout; result cache API — query_run, query_rows/cols/
- *     cell/colname; table_exists, last_rowid, changes, errmsg;
- *     the result cache is a single global)
+ *   - SQLite3 (open/exec/query/close; query prints rows to
+ *     stdout; result handle API: query_run returns a handle that
+ *     query_rows/cols/cell/is_null/colname read and query_free
+ *     releases, so several results can be open at once;
+ *     table_exists, last_rowid, changes, errmsg)
  *   - Lua 5.5.0 [MOCHA_WITH_LUA] (new/close, dostring/dofile,
  *     safe_dostring; get/set for number/string/bool/int; call
  *     variants: call_number/string/int, call1n, call1s, call2n,
@@ -3027,23 +3027,45 @@ double mocha_math_limit_inf(MochaClosureBundle *bundle) {
     return r;
 }
 
-//Fake entropy but deterministic and needed for ML save/load
+// Mocha PRNG: SplitMix64. Deterministic, same sequence on every platform. NOT cryptographic.
+static uint64_t mocha_rng_state = 0x9E3779B97F4A7C15ULL;
+
+static uint64_t mocha_rng_next(void) {
+    uint64_t z = (mocha_rng_state += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+// uniform integer in [0, n) with no modulo bias; n == 0 means the full 64-bit range
+static uint64_t mocha_rng_below(uint64_t n) {
+    if (n == 0) return mocha_rng_next();
+    uint64_t threshold = (0 - n) % n;
+    for (;;) {
+        uint64_t r = mocha_rng_next();
+        if (r >= threshold) return r % n;
+    }
+}
+
 int32_t mocha_rand_int(int32_t min, int32_t max) {
-    return min + (rand() % (max - min + 1));
+    if (max < min) { int32_t t = min; min = max; max = t; }
+    uint64_t range = (uint64_t)((int64_t)max - (int64_t)min) + 1;
+    return (int32_t)((int64_t)min + (int64_t)mocha_rng_below(range));
 }
 
 int64_t mocha_rand_vast(int64_t min, int64_t max) {
-    uint64_t range = (uint64_t)(max - min + 1);
-    uint64_t r = ((uint64_t)rand() << 32) ^ ((uint64_t)rand() << 16) ^ (uint64_t)rand();
-    return min + (int64_t)(r % range);
+    if (max < min) { int64_t t = min; min = max; max = t; }
+    uint64_t range = (uint64_t)max - (uint64_t)min + 1;
+    return (int64_t)((uint64_t)min + mocha_rng_below(range));
 }
 
 double mocha_rand_float(double min, double max) {
-    return min + ((double)rand() / (double)RAND_MAX) * (max - min);
+    double u = (double)(mocha_rng_next() >> 11) * (1.0 / 9007199254740992.0); // 53 bits, in [0, 1)
+    return min + u * (max - min);
 }
 
 void* mocha_rand_seed(int32_t seed) {
-    srand((unsigned int)seed);
+    mocha_rng_state = (uint64_t)(uint32_t)seed;
     return NULL;
 }
 
@@ -3605,7 +3627,11 @@ MochaDict* mocha_dict_copy(MochaDict *src) {
     MochaDict *d = mocha_dict_new();
     for (int32_t i = 0; i < src->size; i++) {
         void *new_val = mocha_dict_dup_value(src->entries[i].value, src->entries[i].value_type);
-        dict_set_entry(d, src->entries[i].key, new_val, src->entries[i].value_type);
+        dict_grow(d);
+        d->entries[d->size].key        = strdup(src->entries[i].key);
+        d->entries[d->size].value      = new_val;
+        d->entries[d->size].value_type = src->entries[i].value_type;
+        d->size++;
     }
     return d;
 }
@@ -4963,10 +4989,21 @@ static int mocha_sqlite3_find_index(int id) {
     return -1;
 }
 
-/* The result behind a handle, or NULL if the handle is not valid */
+/* The result behind a handle, or NULL if the handle is not valid.
+ * Handle 0 (a failed query_run) is silent. Any other unknown handle prints
+ * one warning: it was already freed, or the program or library was built
+ * before the handle change and still passes the database instead */
 static MochaSqlResult* mocha_sqlite3_find(int id) {
+    static int mocha_sqlite3_warned_bad_handle = 0;
     int at = mocha_sqlite3_find_index(id);
-    return at < 0 ? NULL : mocha_sqlite3_live[at].res;
+    if (at >= 0) return mocha_sqlite3_live[at].res;
+    if (id != 0 && !mocha_sqlite3_warned_bad_handle) {
+        mocha_sqlite3_warned_bad_handle = 1;
+        fprintf(stderr, "MochaSQLiteWarning: a query function got a result handle that is not valid "
+                        "(already freed, or built before the handle change: run mocha libs and recompile). "
+                        "This warning is shown once\n");
+    }
+    return NULL;
 }
 
 /* Remember a new result and give back its handle (0 if memory ran out) */
@@ -7532,28 +7569,89 @@ void ink_save(InkPlot* p, const char* path) {
     if (p->n_series > 1) show_legend = 1;
 
     if (show_legend) {
-        int lx = ml + pw - 10;
-        int ly = mt + 10;
-        int lw = 130;
+        /* box size: fits the longest label */
+        int maxlen = 0;
+        for (int s = 0; s < p->n_series; s++) {
+            char tmp[32];
+            const char* l = ink_series_label(p->series[s].label, s, tmp, sizeof(tmp));
+            int len = (int)strlen(l);
+            if (len > maxlen) maxlen = len;
+        }
+        int lw = 36 + (int)(maxlen * 7.5);
+        if (lw < 80) lw = 80;
         int lh = p->n_series * 22 + 10;
+
+        /* candidate spots inside the plot area, in order of preference:
+           top-right, bottom-right, top-left, bottom-left,
+           middle-right, middle-left, top-centre, bottom-centre */
+        int mg = 10;
+        int opt_x[3] = { ml + pw - lw - mg, ml + mg, ml + (pw - lw) / 2 };   /* right, left, centre */
+        int opt_y[3] = { mt + mg, mt + ph - lh - mg, mt + (ph - lh) / 2 };   /* top, bottom, middle */
+        int cand_x[8] = { 0, 0, 1, 1, 0, 1, 2, 2 };
+        int cand_y[8] = { 0, 1, 0, 1, 2, 2, 0, 1 };
+
+        int lx0 = opt_x[0];
+        int ly0 = opt_y[0];
+        long best_score = -1;
+
+        for (int c = 0; c < 8; c++) {
+            int bx = opt_x[cand_x[c]];
+            int by = opt_y[cand_y[c]];
+            double pad = 6.0;
+            double bx0 = bx - pad, bx1 = bx + lw + pad;
+            double by0 = by - pad, by1 = by + lh + pad;
+            long score = 0;
+
+            /* count data points and line samples that fall under the box */
+            for (int s = 0; s < p->n_series; s++) {
+                InkSeries* sr = &p->series[s];
+                for (int i = 0; i < sr->n; i++) {
+                    double px = ink_map_x(sr->x[i], nx_min, nx_max, ml, pw);
+                    double py = ink_map_y(sr->y[i], ny_min, ny_max, mt, ph);
+                    if (px >= bx0 && px <= bx1 && py >= by0 && py <= by1) score++;
+                    if (!sr->is_scatter && i + 1 < sr->n) {
+                        double qx = ink_map_x(sr->x[i + 1], nx_min, nx_max, ml, pw);
+                        double qy = ink_map_y(sr->y[i + 1], ny_min, ny_max, mt, ph);
+                        double dx = qx - px, dy = qy - py;
+                        double adx = dx < 0 ? -dx : dx;
+                        double ady = dy < 0 ? -dy : dy;
+                        int steps = (int)((adx + ady) / 6.0) + 1;
+                        for (int k = 1; k < steps; k++) {
+                            double t = (double)k / steps;
+                            double sx = px + dx * t;
+                            double sy = py + dy * t;
+                            if (sx >= bx0 && sx <= bx1 && sy >= by0 && sy <= by1) score++;
+                        }
+                    }
+                }
+            }
+
+            /* strictly fewer wins, so ties keep the earlier (more usual) spot */
+            if (best_score < 0 || score < best_score) {
+                best_score = score;
+                lx0 = bx;
+                ly0 = by;
+            }
+            if (score == 0) break;
+        }
+
         fprintf(f,
             "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
             "fill=\"white\" stroke=\"#DDD\" stroke-width=\"1\" rx=\"4\" opacity=\"0.9\"/>\n",
-            lx - lw, ly, lw, lh
+            lx0, ly0, lw, lh
         );
         for (int s = 0; s < p->n_series; s++) {
-            int iy = ly + 10 + s * 22;
+            int iy = ly0 + 10 + s * 22;
             const char* col = p->series[s].color;
             char default_label[32];
-            snprintf(default_label, sizeof(default_label), "Series %d", s + 1);
-            const char* lbl = p->series[s].label[0] ? p->series[s].label : default_label;
+            const char* lbl = ink_series_label(p->series[s].label, s, default_label, sizeof(default_label));
             fprintf(f,
                 "<rect x=\"%d\" y=\"%d\" width=\"14\" height=\"14\" fill=\"%s\" rx=\"2\"/>\n",
-                lx - lw + 8, iy, col
+                lx0 + 8, iy, col
             );
             fprintf(f,
                 "<text x=\"%d\" y=\"%d\" class=\"ink-legend\">%s</text>\n",
-                lx - lw + 28, iy + 11, ink_xml_esc(lbl)
+                lx0 + 28, iy + 11, ink_xml_esc(lbl)
             );
         }
     }

@@ -15,6 +15,7 @@ local function forge_db_read_meta(db: null, key: str) -> str;
 local function forge_db_write_array(db: null, name: str, idx: int, value: str) -> null;
 local function forge_db_read_array_len(db: null, name: str) -> int;
 local function forge_db_read_array_cell(db: null, name: str, idx: int) -> str;
+local function forge_db_read_array_all(db: null, name: str) -> str[];
 local function forge_db_write_tree_node(db: null, name: str, node_id: int, is_leaf: int, value: float, feature: int, threshold: float, left_id: int, right_id: int) -> null;
 local function forge_db_read_tree_node_isleaf(db: null, name: str, node_id: int) -> int;
 local function forge_db_read_tree_node_value(db: null, name: str, node_id: int) -> float;
@@ -30,6 +31,7 @@ class OneHotEncoder;
 class OneHotEncoder field categories: str[];
 class OneHotEncoder field n_categories: int;
 class OneHotEncoder field fitted: int;
+// ctor OneHotEncoder ()
 class OneHotEncoder function fit(data: str[]) -> null;
 class OneHotEncoder function transform(data: str[]) -> int[][];
 class OneHotEncoder function inverse_transform(encoded: int[][]) -> str[];
@@ -40,6 +42,7 @@ class OrdinalEncoder;
 class OrdinalEncoder field order: str[];
 class OrdinalEncoder field n_categories: int;
 class OrdinalEncoder field fitted: int;
+// ctor OrdinalEncoder ()
 class OrdinalEncoder function fit(data: str[], order: str[]) -> null;
 class OrdinalEncoder function transform(data: str[]) -> int[];
 class OrdinalEncoder function inverse_transform(encoded: int[]) -> str[];
@@ -50,6 +53,7 @@ class TargetEncoder;
 class TargetEncoder field categories: str[];
 class TargetEncoder field n_categories: int;
 class TargetEncoder field fitted: int;
+// ctor TargetEncoder ()
 class TargetEncoder function fit(data: str[]) -> null;
 class TargetEncoder function transform(data: str[]) -> int[];
 class TargetEncoder function inverse_transform(encoded: int[]) -> str[];
@@ -64,6 +68,7 @@ class LinearRegression field iterations: int;
 class LinearRegression field fitted: int;
 class LinearRegression field reg_type: str;
 class LinearRegression field reg_lambda: float;
+// ctor LinearRegression (lr: float, iterations: int)
 class LinearRegression function ridge(lamb_da: float) -> null;
 class LinearRegression function lasso(lamb_da: float) -> null;
 class LinearRegression function fit(x: float[][], y: float[]) -> null;
@@ -80,6 +85,7 @@ class LogisticClassification field bias: float;
 class LogisticClassification field lr: float;
 class LogisticClassification field iterations: int;
 class LogisticClassification field fitted: int;
+// ctor LogisticClassification (lr: float, iterations: int)
 class LogisticClassification function confusion(x: float[][], y: int[]) -> int[];
 class LogisticClassification function sigmoid(z: float) -> float;
 class LogisticClassification function fit(x: float[][], y: int[]) -> null;
@@ -101,6 +107,7 @@ class KNNClassifier field fitted: int;
 class KNNClassifier field distance_metric: str;
 class KNNClassifier field y_train_reg: float[];
 class KNNClassifier field reg_mode: int;
+// ctor KNNClassifier (k: int)
 class KNNClassifier function confusion(x: float[][], y: int[]) -> int[];
 class KNNClassifier function use_euclidean() -> null;
 class KNNClassifier function use_manhattan() -> null;
@@ -126,6 +133,7 @@ class KMeans field n_samples: int;
 class KMeans field n_features: int;
 class KMeans field fitted: int;
 class KMeans field threshold: float;
+// ctor KMeans (k: int)
 class KMeans function set_threshold(t: float) -> null;
 class KMeans function fit(x: float[][]) -> null;
 class KMeans function get_labels() -> int[];
@@ -140,6 +148,7 @@ class DTNode field left: DTNode;
 class DTNode field right: DTNode;
 class DTNode field is_leaf: int;
 class DTNode field label: int;
+// ctor DTNode (feature_idx: int, threshold: float, left: DTNode, right: DTNode, is_leaf: int, label: int)
 local function dt_leaf(label: int) -> DTNode;
 local function dt_node(feature_idx: int, threshold: float, left: DTNode, right: DTNode) -> DTNode;
 class DecisionTree;
@@ -147,6 +156,7 @@ class DecisionTree field max_depth: int;
 class DecisionTree field root: DTNode;
 class DecisionTree field fitted: int;
 class DecisionTree field use_gini: int;
+// ctor DecisionTree (max_depth: int)
 class DecisionTree function fast_gini() -> null;
 class DecisionTree function gini(y: int[], n: int) -> float;
 class DecisionTree function entropy(y: int[], n: int) -> float;
@@ -170,6 +180,7 @@ class RandomForest field roots: DTNode[];
 class RandomForest field fitted: int;
 class RandomForest field use_gini: int;
 class RandomForest field n_features_total: int;
+// ctor RandomForest (n_trees: int, max_depth: int)
 class RandomForest function fast_gini() -> null;
 class RandomForest function gini(y: int[], n: int) -> float;
 class RandomForest function entropy(y: int[], n: int) -> float;
@@ -201,6 +212,7 @@ class Svm field kernel_matrix: float[][];
 class Svm field n_train: int;
 class Svm field c_param: float;
 class Svm field gamma: float;
+// ctor Svm (max_iter: int)
 class Svm function linear(lr: float) -> null;
 class Svm function rbf(c_param: float, gamma: float) -> null;
 class Svm function ridge(lamb_da: float) -> null;
@@ -226,6 +238,7 @@ class TrainTestSplit field y_train: int[];
 class TrainTestSplit field y_test: int[];
 class TrainTestSplit field n_train: int;
 class TrainTestSplit field n_test: int;
+// ctor TrainTestSplit (x_train: float[][], x_test: float[][], y_train: int[], y_test: int[], n_train: int, n_test: int)
 function train_test_split(x: float[][], y: int[], test_size: float, seed: int) -> TrainTestSplit;
 function cross_val_split(x: float[][], y: int[], k: int, seed: int) -> TrainTestSplit[];
 class ConfusionMatrix;
@@ -233,6 +246,7 @@ class ConfusionMatrix field tp_val: int;
 class ConfusionMatrix field fp_val: int;
 class ConfusionMatrix field fn_val: int;
 class ConfusionMatrix field tn_val: int;
+// ctor ConfusionMatrix (tp: int, fp: int, fn: int, tn: int)
 class ConfusionMatrix function tp() -> int;
 class ConfusionMatrix function fp() -> int;
 class ConfusionMatrix function fn() -> int;
@@ -252,6 +266,7 @@ class PolynomialFeatures field n_output_features: int;
 class PolynomialFeatures field fitted: int;
 class PolynomialFeatures field combos: str[];
 class PolynomialFeatures field n_combos: int;
+// ctor PolynomialFeatures (degree: int)
 class PolynomialFeatures function inter_only() -> null;
 class PolynomialFeatures function fit(x: float[][]) -> null;
 class PolynomialFeatures function decode_index(encoded: str, idx: int) -> int;
@@ -265,6 +280,7 @@ class SurrogateNode field feature_idx: int;
 class SurrogateNode field threshold: float;
 class SurrogateNode field left: SurrogateNode;
 class SurrogateNode field right: SurrogateNode;
+// ctor SurrogateNode (is_leaf: int, value: float, feature_idx: int, threshold: float, left: SurrogateNode, right: SurrogateNode)
 local function surrogate_leaf(value: float) -> SurrogateNode;
 local function surrogate_node(feature_idx: int, threshold: float, left: SurrogateNode, right: SurrogateNode) -> SurrogateNode;
 class SurrogateRF;
@@ -273,6 +289,7 @@ class SurrogateRF field max_depth: int;
 class SurrogateRF field roots: SurrogateNode[];
 class SurrogateRF field n_features: int;
 class SurrogateRF field fitted: int;
+// ctor SurrogateRF (n_trees: int, max_depth: int)
 class SurrogateRF function build_surrogate(x: float[][], y: float[], n: int, depth: int) -> SurrogateNode;
 class SurrogateRF function predict_one_surrogate(sample: float[], node: SurrogateNode) -> float;
 class SurrogateRF function fit_surrogate(x: float[][], y: float[], n: int) -> null;
@@ -283,10 +300,12 @@ class ParamSpec field name: str;
 class ParamSpec field low: float;
 class ParamSpec field high: float;
 class ParamSpec field is_int: int;
+// ctor ParamSpec (name: str, low: float, high: float, is_int: int)
 class SearchResult;
 class SearchResult field best_params: float[];
 class SearchResult field best_score: float;
 class SearchResult field n_params: int;
+// ctor SearchResult (best_params: float[], best_score: float, n_params: int)
 class SearchResult function print_result() -> null;
 class BayesianSearch;
 class BayesianSearch field n_warmup: int;
@@ -297,6 +316,7 @@ class BayesianSearch field history_x: float[][];
 class BayesianSearch field history_y: float[];
 class BayesianSearch field n_history: int;
 class BayesianSearch field max_history: int;
+// ctor BayesianSearch (n_warmup: int, n_iterations: int)
 class BayesianSearch function add_int_param(name: str, low: int, high: int) -> null;
 class BayesianSearch function add_float_param(name: str, low: float, high: float) -> null;
 class BayesianSearch function sample_random() -> float[];
@@ -322,6 +342,7 @@ class GradientBoosting field roots: SurrogateNode[];
 class GradientBoosting field base_pred: float;
 class GradientBoosting field fitted: int;
 class GradientBoosting field mode: str;
+// ctor GradientBoosting (n_trees: int, max_depth: int, lr: float, subsample: float)
 class GradientBoosting function use_classification() -> null;
 class GradientBoosting function fit(x: float[][], y: int[]) -> null;
 class GradientBoosting function predict(x: float[][]) -> float[];

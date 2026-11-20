@@ -16,6 +16,7 @@ class DSValue field int_val: int;
 class DSValue field flt_val: float;
 class DSValue field str_val: str;
 class DSValue field bool_val: bool;
+// ctor DSValue (kind: DSKind, int_val: int, flt_val: float, str_val: str, bool_val: bool)
 function ds_int(v: int) -> DSValue;
 function ds_float(v: float) -> DSValue;
 function ds_str(v: str) -> DSValue;
@@ -25,9 +26,11 @@ function ds_to_str(v: DSValue) -> str;
 class SLNode;
 class SLNode field data: DSValue;
 class SLNode field next: SLNode;
+// ctor SLNode (data: DSValue, next: SLNode)
 class SinglyLL;
 class SinglyLL field head: SLNode;
 class SinglyLL field size: int;
+// ctor SinglyLL ()
 class SinglyLL function prepend(data: DSValue) -> null;
 class SinglyLL function append(data: DSValue) -> null;
 class SinglyLL function remove(data: DSValue) -> bool;
@@ -39,10 +42,12 @@ class DLNode;
 class DLNode field data: DSValue;
 class DLNode field next: DLNode;
 class DLNode field prev: DLNode;
+// ctor DLNode (data: DSValue, next: DLNode, prev: DLNode)
 class DoublyLL;
 class DoublyLL field head: DLNode;
 class DoublyLL field tail: DLNode;
 class DoublyLL field size: int;
+// ctor DoublyLL ()
 class DoublyLL function push_front(data: DSValue) -> null;
 class DoublyLL function push_back(data: DSValue) -> null;
 class DoublyLL function pop_front() -> DSValue;
@@ -58,6 +63,7 @@ class Stack;
 class Stack field list: SinglyLL;
 class Stack field top: DSValue;
 class Stack field size: int;
+// ctor Stack ()
 class Stack function push(data: DSValue) -> null;
 class Stack function pop() -> DSValue;
 class Stack function print_all() -> null;
@@ -66,6 +72,7 @@ class Queue;
 class Queue field list: DoublyLL;
 class Queue field front: DSValue;
 class Queue field size: int;
+// ctor Queue ()
 class Queue function enqueue(data: DSValue) -> null;
 class Queue function dequeue() -> DSValue;
 class Queue function print_all() -> null;
@@ -75,6 +82,7 @@ class Deck field list: DoublyLL;
 class Deck field front: DSValue;
 class Deck field back: DSValue;
 class Deck field size: int;
+// ctor Deck ()
 class Deck function push_front(data: DSValue) -> null;
 class Deck function push_back(data: DSValue) -> null;
 class Deck function pop_front() -> DSValue;
@@ -87,6 +95,7 @@ class Heap field data: DSValue[];
 class Heap field kind: HeapKind;
 class Heap field top: DSValue;
 class Heap field size: int;
+// ctor Heap (kind: HeapKind)
 class Heap function should_swap(a: DSValue, b: DSValue) -> bool;
 class Heap function sift_up(i: int) -> null;
 class Heap function sift_down(i: int) -> null;
@@ -99,9 +108,11 @@ class AVLNode field key: DSValue;
 class AVLNode field left: AVLNode;
 class AVLNode field right: AVLNode;
 class AVLNode field height: int;
+// ctor AVLNode (key: DSValue)
 class AVLTree;
 class AVLTree field root: AVLNode;
 class AVLTree field size: int;
+// ctor AVLTree ()
 class AVLTree function node_height(n: AVLNode) -> int;
 class AVLTree function balance_factor(n: AVLNode) -> int;
 class AVLTree function update_height(n: AVLNode) -> null;
@@ -134,10 +145,12 @@ class RBNode field color: RBColor;
 class RBNode field left: RBNode;
 class RBNode field right: RBNode;
 class RBNode field parent: RBNode;
+// ctor RBNode (key: DSValue, color: RBColor, left: RBNode, right: RBNode, parent: RBNode)
 class RBTree;
 class RBTree field nil: RBNode;
 class RBTree field root: RBNode;
 class RBTree field size: int;
+// ctor RBTree ()
 class RBTree function cmp(a: DSValue, b: DSValue) -> int;
 class RBTree function rotate_left(x: RBNode) -> null;
 class RBTree function rotate_right(y: RBNode) -> null;
@@ -164,6 +177,7 @@ class RBTree function is_empty() -> bool;
 class BallPoint;
 class BallPoint field coords: float[];
 class BallPoint field label: DSValue;
+// ctor BallPoint (coords: float[], label: DSValue)
 class BallNode;
 class BallNode field centroid: float[];
 class BallNode field radius: float;
@@ -172,6 +186,7 @@ class BallNode field point: BallPoint;
 class BallNode field left: BallNode;
 class BallNode field right: BallNode;
 class BallNode field is_leaf: bool;
+// ctor BallNode (point: BallPoint, k: int)
 class BallTree;
 class BallTree field root: BallNode;
 class BallTree field k: int;
@@ -182,6 +197,7 @@ class BallTree field ratio_sum: float;
 class BallTree field ratio_count: int;
 class BallTree field nn_best_dist: float;
 class BallTree field nn_best_label: DSValue;
+// ctor BallTree (k: int)
 class BallTree function dist_sq(a: float[], b: float[]) -> float;
 class BallTree function dist(a: float[], b: float[]) -> float;
 class BallTree function compute_centroid(points: BallPoint[]) -> float[];
@@ -206,10 +222,12 @@ class PatriciaNode field is_terminal: bool;
 class PatriciaNode field value: DSValue;
 class PatriciaNode field edge_labels: str[];
 class PatriciaNode field edge_children: PatriciaNode[];
+// ctor PatriciaNode ()
 class Patricia;
 class Patricia field root: PatriciaNode;
 class Patricia field size: int;
 class Patricia field delete_found: bool;
+// ctor Patricia ()
 class Patricia function char_at(s: str, i: int) -> str;
 class Patricia function common_prefix_len(a: str, b: str) -> int;
 class Patricia function substr(s: str, begin: int) -> str;
@@ -228,13 +246,16 @@ class Patricia function is_empty() -> bool;
 class GraphEdge;
 class GraphEdge field to: str;
 class GraphEdge field weight: float;
+// ctor GraphEdge (to: str, weight: float)
 class GraphNode;
 class GraphNode field label: str;
 class GraphNode field edges: GraphEdge[];
+// ctor GraphNode (label: str)
 class Graph;
 class Graph field nodes: GraphNode[];
 class Graph field is_directed: bool;
 class Graph field size: int;
+// ctor Graph (is_directed: bool)
 class Graph function index_of(label: str) -> int;
 class Graph function contains(label: str) -> bool;
 class Graph function add_node(label: str) -> null;
@@ -262,6 +283,7 @@ class BloomFilter field bits: bool[];
 class BloomFilter field m: int;
 class BloomFilter field k: int;
 class BloomFilter field count: int;
+// ctor BloomFilter (expected_items: int, false_positive_rate: float)
 class BloomFilter function index_for(item: str, i: int) -> int;
 class BloomFilter function add(item: str) -> null;
 class BloomFilter function contains(item: str) -> bool;
@@ -271,6 +293,7 @@ class CountingBloomFilter field counters: int[];
 class CountingBloomFilter field m: int;
 class CountingBloomFilter field k: int;
 class CountingBloomFilter field count: int;
+// ctor CountingBloomFilter (expected_items: int, false_positive_rate: float)
 class CountingBloomFilter function index_for(item: str, i: int) -> int;
 class CountingBloomFilter function add(item: str) -> null;
 class CountingBloomFilter function contains(item: str) -> bool;
