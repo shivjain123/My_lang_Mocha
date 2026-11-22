@@ -280,6 +280,12 @@ extend CodeGen {
     // --------------------------------------------------------
 
     function genVarDecl(node: ASTNode) -> null {
+        this.expected_assign_type = node.type_str;
+        this.genVarDeclInner(node);
+        this.expected_assign_type = "";
+    };
+
+    function genVarDeclInner(node: ASTNode) -> null {
         var mocha_type: str = node.type_str;
         var name:       str = node.value;
         var ptr_name:   str = "%" + this.uniquePtrName(name) + ".ptr";
@@ -335,7 +341,7 @@ extend CodeGen {
         // User class / struct
         var llvm_type: str = this.toLLVMType(mocha_type);
         if (llvm_type.length >= 8) {
-            if (llvm_type.substring(0, 7) == "%struct") {
+            if (llvm_type.substring(0, 6) == "%struct") {
                 var val_result: str = this.genExpr(node.left);
                 var val_reg:    str = this.exprReg(val_result);
                 this.emit("  " + ptr_name + " = alloca " + llvm_type);
@@ -403,8 +409,33 @@ extend CodeGen {
     // Assignment
     // --------------------------------------------------------
 
+    function assignTargetType(left: ASTNode) -> str {
+        if (left.kind == "Identifier") {
+            if (this.hasLocal(left.value)) { return this.getLocalMochaType(left.value); };
+            return "";
+        };
+        if (left.kind == "MemberAccess") {
+            var holder: str = "";
+            if (left.left.kind == "Identifier") { holder = left.left.value; };
+            if (left.left.kind == "This")       { holder = "this"; };
+            if (holder != "") {
+                if (this.hasLocal(holder)) {
+                    var ot: str = this.getLocalType(holder);
+                    if (ot.length > 8) {
+                        if (ot.substring(0, 6) == "%struct") {
+                            return this.getFieldMochaType(this.inferClassName(ot), left.value);
+                        };
+                    };
+                };
+            };
+        };
+        return "";
+    };
+
     function genAssignment(node: ASTNode) -> null {
+        this.expected_assign_type = this.assignTargetType(node.left);
         var val_result: str = this.genExpr(node.right);
+        this.expected_assign_type = "";
         var val_reg:    str = this.exprReg(val_result);
         var val_type:   str = this.exprType(val_result);
 
@@ -427,7 +458,7 @@ extend CodeGen {
             var obj_reg:    str = this.exprReg(obj_result);
             var obj_type:   str = this.exprType(obj_result);
             if (obj_type.length < 8) { return; };
-            if (obj_type.substring(0, 7) != "%struct") { return; };
+            if (obj_type.substring(0, 6) != "%struct") { return; };
             var class_name: str = this.inferClassName(obj_type);
             var field_idx:  int = this.getFieldIndex(class_name, node.left.value);
             var field_type: str = this.getFieldLLVMType(class_name, node.left.value);
@@ -492,7 +523,7 @@ extend CodeGen {
             var obj_reg:    str = this.exprReg(obj_result);
             var obj_type:   str = this.exprType(obj_result);
             if (obj_type.length < 8) { return; };
-            if (obj_type.substring(0, 7) != "%struct") { return; };
+            if (obj_type.substring(0, 6) != "%struct") { return; };
             var class_name: str = this.inferClassName(obj_type);
             var field_idx:  int = this.getFieldIndex(class_name, node.left.value);
             if (field_idx < 0) {

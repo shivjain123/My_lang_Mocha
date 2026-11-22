@@ -2267,7 +2267,7 @@ class CodeGen:
                 ext_fresh.append((arr_reg, recv_fk))
         for arg in node.args:
             if isinstance(arg, Assignment):
-                continue
+                raise MochaCodeGenError(f"named arguments are not supported on array method '{member}' yet", node.line, node.col)
             reg, typ = self.gen_expr(arg)
             args_ir.append(f"{typ} {reg}")
             fk = self.fresh_array_arg_kind(arg, typ)
@@ -2468,7 +2468,7 @@ class CodeGen:
                 ext_fresh.append((arr_reg, recv_fk))
         for arg in node.args:
             if isinstance(arg, Assignment):
-                continue
+                raise MochaCodeGenError(f"named arguments are not supported on 2D array method '{member}' yet", node.line, node.col)
             reg, typ = self.gen_expr(arg)
             args_ir.append(f"{typ} {reg}")
             fk = self.fresh_array_arg_kind(arg, typ)
@@ -2680,6 +2680,8 @@ class CodeGen:
             args = [f"i8* {s_reg}"]  # this is always first arg
             fresh_str_args = []      # RC: string args built for this call (not variables/fields/2D elements)
             for arg in node.args:
+                if isinstance(arg, Assignment):
+                    raise MochaCodeGenError(f"named arguments are not supported on str method '{member}' yet", node.line, node.col)
                 arg_reg, arg_type = self.gen_expr(arg)
                 args.append(f"{arg_type} {arg_reg}")
                 if arg_type == "i8*" and not isinstance(arg, (Identifier, MemberAccess, Index2DAccess)):
@@ -2825,7 +2827,7 @@ class CodeGen:
             if obj_name in self.class_nodes:
                 mangled  = f"{obj_name}_{member}"
                 ret_type = self.get_return_type(mangled, node)
-                args     = self._collect_args(node)
+                args     = self._collect_args(node, mangled)
                 arg_str  = ", ".join(f"{t} {r}" for r, t in args)
                 tmp      = self.fresh_temp()
                 if ret_type == "void":
@@ -2942,15 +2944,7 @@ class CodeGen:
                     self.emit(f"  {obj_reg} = load double, double* {obj_ptr}")
                     method_key  = f"mocha_ext_float_{member}"
                     actual_name = self.ext_native_names.get(method_key, method_key)
-                    args = []
-                    for arg in node.args:
-                        if isinstance(arg, Assignment):
-                            if isinstance(arg.target, Identifier):
-                                reg, typ = self.gen_expr(arg.value)
-                                args.append((reg, typ))
-                        else:
-                            reg, typ = self.gen_expr(arg)
-                            args.append((reg, typ))
+                    args = self._collect_args(node, method_key)
                     if method_key in self.method_return_types:
                         ret_type = self.method_return_types[method_key]
                         all_args = [(obj_reg, "double")] + args
@@ -2969,15 +2963,7 @@ class CodeGen:
             elif obj_type == "double":
                 method_key  = f"mocha_ext_float_{member}"
                 actual_name = self.ext_native_names.get(method_key, method_key)
-                args = []
-                for arg in node.args:
-                    if isinstance(arg, Assignment):
-                        if isinstance(arg.target, Identifier):
-                            reg, typ = self.gen_expr(arg.value)
-                            args.append((reg, typ))
-                    else:
-                        reg, typ = self.gen_expr(arg)
-                        args.append((reg, typ))
+                args = self._collect_args(node, method_key)
                 if method_key in self.method_return_types:
                     ret_type = self.method_return_types[method_key]
                     all_args = [(obj_reg, "double")] + args
@@ -2986,15 +2972,7 @@ class CodeGen:
             elif obj_type == "i32":
                 method_key  = f"mocha_ext_int_{member}"
                 actual_name = self.ext_native_names.get(method_key, method_key)
-                args = []
-                for arg in node.args:
-                    if isinstance(arg, Assignment):
-                        if isinstance(arg.target, Identifier):
-                            reg, typ = self.gen_expr(arg.value)
-                            args.append((reg, typ))
-                    else:
-                        reg, typ = self.gen_expr(arg)
-                        args.append((reg, typ))
+                args = self._collect_args(node, method_key)
                 if method_key in self.method_return_types:
                     ret_type = self.method_return_types[method_key]
                     all_args = [(obj_reg, "i32")] + args
@@ -3045,15 +3023,7 @@ class CodeGen:
             elif obj_type == "double":
                 method_key  = f"mocha_ext_float_{member}"
                 actual_name = self.ext_native_names.get(method_key, method_key)
-                args = []
-                for arg in node.args:
-                    if isinstance(arg, Assignment):
-                        if isinstance(arg.target, Identifier):
-                            reg, typ = self.gen_expr(arg.value)
-                            args.append((reg, typ))
-                    else:
-                        reg, typ = self.gen_expr(arg)
-                        args.append((reg, typ))
+                args = self._collect_args(node, method_key)
                 if method_key in self.method_return_types:
                     ret_type = self.method_return_types[method_key]
                     all_args = [(obj_reg, "double")] + args
@@ -3062,15 +3032,7 @@ class CodeGen:
             elif obj_type == "i32":
                 method_key  = f"mocha_ext_int_{member}"
                 actual_name = self.ext_native_names.get(method_key, method_key)
-                args = []
-                for arg in node.args:
-                    if isinstance(arg, Assignment):
-                        if isinstance(arg.target, Identifier):
-                            reg, typ = self.gen_expr(arg.value)
-                            args.append((reg, typ))
-                    else:
-                        reg, typ = self.gen_expr(arg)
-                        args.append((reg, typ))
+                args = self._collect_args(node, method_key)
                 if method_key in self.method_return_types:
                     ret_type = self.method_return_types[method_key]
                     all_args = [(obj_reg, "i32")] + args
@@ -3091,15 +3053,7 @@ class CodeGen:
             elif obj_type == "double":
                 method_key  = f"mocha_ext_float_{member}"
                 actual_name = self.ext_native_names.get(method_key, method_key)
-                args = []
-                for arg in node.args:
-                    if isinstance(arg, Assignment):
-                        if isinstance(arg.target, Identifier):
-                            reg, typ = self.gen_expr(arg.value)
-                            args.append((reg, typ))
-                    else:
-                        reg, typ = self.gen_expr(arg)
-                        args.append((reg, typ))
+                args = self._collect_args(node, method_key)
                 if method_key in self.method_return_types:
                     ret_type = self.method_return_types[method_key]
                     all_args = [(obj_reg, "double")] + args
@@ -3126,7 +3080,7 @@ class CodeGen:
                 if class_name in self.class_nodes:
                     mangled  = f"{class_name}_{member}"
                     ret_type = self.get_return_type(mangled, node)
-                    args     = self._collect_args(node)
+                    args     = self._collect_args(node, mangled)
                     all_args = [(obj_reg, obj_type)] + args
                     return self._emit_call(ret_type, mangled, all_args)
                 # imported class (not in class_nodes): same path as call-result receivers
@@ -3143,15 +3097,7 @@ class CodeGen:
 
             method_key  = f"mocha_ext_{('float' if obj_type == 'double' else 'int')}_{member}"
             actual_name = self.ext_native_names.get(method_key, method_key)
-            args = []
-            for arg in node.args:
-                if isinstance(arg, Assignment):
-                    if isinstance(arg.target, Identifier):
-                        reg, typ = self.gen_expr(arg.value)
-                        args.append((reg, typ))
-                else:
-                    reg, typ = self.gen_expr(arg)
-                    args.append((reg, typ))
+            args = self._collect_args(node, method_key)
             if method_key in self.method_return_types:
                 ret_type = self.method_return_types[method_key]
                 all_args = [(obj_reg, obj_type)] + args
@@ -3485,6 +3431,7 @@ class CodeGen:
         # Step 6: Normal function call
         # -------------------------------------------------------
         tmp      = self.fresh_temp()
+        args     = self._complete_args(func_name, args, named_args, node)
         arg_str  = ", ".join(f"{t} {r}" for r, t in args)
         # Try bare name first
         ret_type = self.method_return_types.get(func_name)
@@ -7152,6 +7099,10 @@ class CodeGen:
                 ret_llvm = to_llvm_type(node.return_type)
                 self.method_return_types[node.name] = ret_llvm
                 self.func_mocha_return_types[node.name] = node.return_type
+                self.method_params[node.name] = [
+                    (p.name, to_llvm_type(p.type), getattr(p, 'default', None))
+                    for p in node.params
+                ]
                 if node.has_didLoad:
                     entry_func = (node.name, node.params)
                     self.method_return_types[f"mocha_entry_{node.name}"] = ret_llvm
@@ -7177,6 +7128,10 @@ class CodeGen:
             elif isinstance(node, MethodDecl):
                 ret_llvm = to_llvm_type(node.return_type)
                 self.method_return_types[node.name] = ret_llvm
+                self.method_params[node.name] = [
+                    (p.name, to_llvm_type(p.type), getattr(p, 'default', None))
+                    for p in node.params
+                ]
                 if node.has_didLoad:
                     entry_func = (node.name, node.params)
                     self.method_return_types[f"mocha_entry_{node.name}"] = ret_llvm

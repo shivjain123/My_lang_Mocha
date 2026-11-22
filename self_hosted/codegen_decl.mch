@@ -141,8 +141,8 @@ extend CodeGen {
             var this_ptr:  str = "%this.ptr";
             this.entry_allocas.push("  " + this_ptr + " = alloca " + this_type);
             this.emit("  store " + this_type + " %this, " + this_type + "* " + this_ptr);
-            this.local_ptrs.put("this", this_ptr);
-            this.local_types.put("this", this_type);
+            this.local_ptrs.put("this", this_ptr); this.keep.push(this_ptr);
+            this.local_types.put("this", this_type); this.keep.push(this_type);
             this.local_mocha_types.put("this", this.current_class);
         };
 
@@ -155,12 +155,18 @@ extend CodeGen {
             var ptr: str = "%" + p3.value + ".ptr";
             this.entry_allocas.push("  " + ptr + " = alloca " + pt);
             this.emit("  store " + pt + " %" + p3.value + ", " + pt + "* " + ptr);
-            this.local_ptrs.put(p3.value, ptr);
-            this.local_types.put(p3.value, pt);
+            this.local_ptrs.put(p3.value, ptr); this.keep.push(ptr);
+            this.local_types.put(p3.value, pt); this.keep.push(pt);
             this.local_mocha_types.put(p3.value, p3.type_str);
             pi3 = pi3 + 1;
         };
 
+        // zero every field before the constructor body runs
+        if (this.current_class != "") {
+            if (node.value == this.current_class + "_constructor") {
+                this.emitFieldZeroInits(this.current_class, "%this");
+            };
+        };
         // Body
         var bi: int = 0;
         while (bi < node.body.length) {
@@ -194,8 +200,8 @@ extend CodeGen {
         if (node.children.length > 0) {
             var parent_name: str = node.children[0].value;
             if (this.class_fields.has(parent_name)) {
-                var parent_encoded: str = this.class_fields.get(parent_name);
-                var child_encoded:  str = this.class_fields.get(node.value);
+                var parent_encoded: str = this.class_fields.get(parent_name); this.keep.push(parent_encoded);
+                var child_encoded:  str = this.class_fields.get(node.value); this.keep.push(child_encoded);
                 if (parent_encoded != "" && child_encoded != "") {
                     this.putCF(node.value, parent_encoded + "," + child_encoded);
                 } else if (parent_encoded != "") {
@@ -237,7 +243,7 @@ extend CodeGen {
         // Emit struct type declaration
         var fields_encoded: str = "";
         if (this.class_fields.has(node.value)) {
-            fields_encoded = this.class_fields.get(node.value);
+            fields_encoded = this.class_fields.get(node.value); this.keep.push(fields_encoded);
         };
         var field_list: str[] = splitComma(fields_encoded);
         var type_list: str = "";
@@ -247,6 +253,7 @@ extend CodeGen {
             type_list = type_list + this.fieldType(field_list[fi]);
             fi = fi + 1;
         };
+        if (type_list == "") { type_list = "i32"; };
         this.type_declarations.push("%struct." + node.value + " = type { " + type_list + " }");
 
         // Inheritance delegation wrappers
@@ -263,7 +270,7 @@ extend CodeGen {
         var parent_idx: int = -1;
         var pi: int = 0;
         while (pi < this.class_node_list.length) {
-            var key: str = this.class_node_index.get(this.class_node_list[pi].value);
+            var key: str = this.class_node_index.get(this.class_node_list[pi].value); this.keep.push(key);
             if (this.class_node_list[pi].value == parent_name) {
                 parent_idx = pi;
             };
@@ -409,8 +416,8 @@ extend CodeGen {
             var this_ptr: str = "%this.ptr";
             this.entry_allocas.push("  " + this_ptr + " = alloca " + this_llvm);
             this.emit("  store " + this_llvm + " %this, " + this_llvm + "* " + this_ptr);
-            this.local_ptrs.put("this", this_ptr);
-            this.local_types.put("this", this_llvm);
+            this.local_ptrs.put("this", this_ptr); this.keep.push(this_ptr);
+            this.local_types.put("this", this_llvm); this.keep.push(this_llvm);
             this.local_mocha_types.put("this", node.value);
 
             // Store params
@@ -421,8 +428,8 @@ extend CodeGen {
                 var ptr: str = "%" + p2.value + ".ptr";
                 this.entry_allocas.push("  " + ptr + " = alloca " + pt);
                 this.emit("  store " + pt + " %" + p2.value + ", " + pt + "* " + ptr);
-                this.local_ptrs.put(p2.value, ptr);
-                this.local_types.put(p2.value, pt);
+                this.local_ptrs.put(p2.value, ptr); this.keep.push(ptr);
+                this.local_types.put(p2.value, pt); this.keep.push(pt);
                 this.local_mocha_types.put(p2.value, p2.type_str);
                 pi2 = pi2 + 1;
             };

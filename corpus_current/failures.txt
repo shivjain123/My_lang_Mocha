@@ -288,7 +288,7 @@ test_ng
          MochaTypeError at line 2, col 5: 'weak' only applies to a field whose type is a single class, not 'dict'
 
 test_nv
-    ≡ƒöÑ Mocha Compiler v1.7
+    ≡ƒöÑ Mocha Compiler v1.8
     ≡ƒôä Compiling: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\test_nv.mch
       Γ¥î mocha-native file not found: C:\Users\shiv jain\Coding_Projects\My_Codes\Mocha\Python_AND_ExecutableFiles\some_folder\fake.a
 

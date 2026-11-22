@@ -48,6 +48,7 @@ class PCAReducer field mean_vec: float[];
 class PCAReducer field fitted: int;
 class PCAReducer field n_samples: int;
 class PCAReducer field n_features: int;
+class PCAReducer field total_variance: float;
 // ctor PCAReducer (n_components: int)
 class PCAReducer function fit(data: float[][]) -> null;
 class PCAReducer function transform(data: float[][]) -> float[][];

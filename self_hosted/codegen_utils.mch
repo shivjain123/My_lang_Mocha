@@ -118,10 +118,10 @@ class CodeGen {
         this.putCF("File",          "handle|i8*,path|i8*,mode|i8*,is_open|i8");
         this.putCF("HashTable",     "entries|i8*,capacity|i32,count|i32,used|i32");
 
-        this.class_mocha_fields.put("StringBuilder", "data|str,length|int,capacity|int");
-        this.class_mocha_fields.put("Complex",       "real|float,imag|float");
-        this.class_mocha_fields.put("File",          "handle|str,path|str,mode|str,is_open|bool");
-        this.class_mocha_fields.put("HashTable",     "entries|str,capacity|int,count|int,used|int");
+        this.putCMF("StringBuilder", "data|str,length|int,capacity|int");
+        this.putCMF("Complex", "real|float,imag|float");
+        this.putCMF("File", "handle|str,path|str,mode|str,is_open|bool");
+        this.putCMF("HashTable", "entries|str,capacity|int,count|int,used|int");
 
         // Built-in method return types
         this.putMRT("StringBuilder_toString", "i8*");
@@ -207,7 +207,7 @@ class CodeGen {
             if (mocha_type.charAt(0) == "(") { return "%MochaTuple*"; };
         };
         if (mocha_type.length >= 4) {
-            if (mocha_type.substring(0, 3) == "set") { return "%MochaSet*"; };
+            if (mocha_type.substring(0, 2) == "set") { return "%MochaSet*"; };
         };
         if (mocha_type.contains("[][]")) { return "%MochaArray2D*"; };
         if (mocha_type.contains("["))    { return "%MochaArray*"; };
@@ -278,9 +278,9 @@ class CodeGen {
     };
 
     function declareLocal(name: str, ptr: str, llvm_type: str, mocha_type: str) -> null {
-        this.local_ptrs.put(name, ptr);
-        this.local_types.put(name, llvm_type);
-        this.local_mocha_types.put(name, mocha_type);
+        this.local_ptrs.put(name, ptr); this.keep.push(ptr);
+        this.local_types.put(name, llvm_type); this.keep.push(llvm_type);
+        this.local_mocha_types.put(name, mocha_type); this.keep.push(mocha_type);
         // a HashTable does not keep its values alive: keep them here
         this.keep.push(ptr);
         this.keep.push(llvm_type);
@@ -292,6 +292,7 @@ class CodeGen {
     function putGP(k: str, v: str) -> null  { this.global_ptrs.put(k, v);         this.keep.push(v); };
     function putGMT(k: str, v: str) -> null { this.global_mocha_types.put(k, v);  this.keep.push(v); };
     function putCNI(k: str, v: str) -> null { this.class_node_index.put(k, v);    this.keep.push(v); };
+    function putCMF(k: str, v: str) -> null { this.class_mocha_fields.put(k, v); this.keep.push(v); };
 
     // a HashTable does not keep its values alive: put + keep
     function putKept(table: HashTable, key: str, value: str) -> null {
@@ -330,46 +331,58 @@ class CodeGen {
 
     function getFieldIndex(class_name: str, field_name: str) -> int {
         if (this.class_fields.has(class_name) == false) { return -1; };
-        var encoded: str = this.class_fields.get(class_name);
-        var fields: str[] = splitComma(encoded);
-        var i: int = 0;
+        var fields: str[] = splitComma(this.class_fields.get(class_name));
+        var pair:   str = "";
+        var result: int = -1;
+        var i:      int = 0;
         while (i < fields.length) {
-            var pair: str = fields[i];
-            var fname: str = this.fieldName(pair);
-            if (fname == field_name) { return i; };
+            pair = fields[i];
+            if (result == -1) {
+                if (this.fieldName(pair) == field_name) { result = i; };
+            };
             i = i + 1;
         };
-        return -1;
+        return result;
     };
 
     function getFieldLLVMType(class_name: str, field_name: str) -> str {
         if (this.class_fields.has(class_name) == false) { return "i8*"; };
-        var encoded: str = this.class_fields.get(class_name);
-        var fields: str[] = splitComma(encoded);
-        var i: int = 0;
+        var fields: str[] = splitComma(this.class_fields.get(class_name));
+        var result: str = "i8*";
+        var pair:   str = "";
+        var found:  bool = false;
+        var i:      int = 0;
         while (i < fields.length) {
-            var pair: str = fields[i];
-            if (this.fieldName(pair) == field_name) {
-                return this.fieldType(pair);
+            pair = fields[i];
+            if (found == false) {
+                if (this.fieldName(pair) == field_name) {
+                    result = this.fieldType(pair);
+                    found = true;
+                };
             };
             i = i + 1;
         };
-        return "i8*";
+        return result;
     };
 
     function getFieldMochaType(class_name: str, field_name: str) -> str {
         if (this.class_mocha_fields.has(class_name) == false) { return "unknown"; };
-        var encoded: str = this.class_mocha_fields.get(class_name);
-        var fields: str[] = splitComma(encoded);
-        var i: int = 0;
+        var fields: str[] = splitComma(this.class_mocha_fields.get(class_name));
+        var result: str = "unknown";
+        var pair:   str = "";
+        var found:  bool = false;
+        var i:      int = 0;
         while (i < fields.length) {
-            var pair: str = fields[i];
-            if (this.fieldName(pair) == field_name) {
-                return this.fieldType(pair);
+            pair = fields[i];
+            if (found == false) {
+                if (this.fieldName(pair) == field_name) {
+                    result = this.fieldType(pair);
+                    found = true;
+                };
             };
             i = i + 1;
         };
-        return "unknown";
+        return result;
     };
 
     // "name|type" -> "name"
@@ -418,7 +431,7 @@ class CodeGen {
             i = i + 1;
         };
         this.putCF(class_name, llvm_encoded);
-        this.class_mocha_fields.put(class_name, mocha_encoded);
+        this.putCMF(class_name, mocha_encoded);
     };
 
     // --------------------------------------------------------

@@ -129,6 +129,11 @@ def native_ret_kinds(funcs, g):
             cm = CALL_RE.match(i.text) if i.op == "call" else None
             if cm and (cm.group(2) == "mocha_print_str" or cm.group(2).startswith("mocha_str_")):
                 stro.update(a.split()[-1] for a in split_top_level(cm.group(3)))
+        rel = set()                    # values passed to rc_release: a slot that gets released holds a refcounted str, not an opaque handle
+        for i in ins:
+            cm = CALL_RE.match(i.text) if i.op == "call" else None
+            if cm and cm.group(2) == "rc_release":
+                rel.update(a.split()[-1] for a in split_top_level(cm.group(3)))
         for i in ins:
             cm = CALL_RE.match(i.text) if i.op == "call" else None
             name = cm.group(2) if cm else None
@@ -137,7 +142,7 @@ def native_ret_kinds(funcs, g):
                 continue
             hit = i.result in stro
             for sm in (STORE_RE.match(x.text) for x in ins if x.op == "store"):
-                if sm and sm.group(2) == i.result and any(lv in stro for lv in loads.get(sm.group(4), [])):
+                if sm and sm.group(2) == i.result and any(lv in stro or lv in rel for lv in loads.get(sm.group(4), [])):
                     hit = True
             if hit:
                 kinds[name] = "str"
@@ -1842,6 +1847,13 @@ def emit_function(fn, g):
             return f"alloc {ty[:-2]}[{value(toks[0])}]"
         if callee in TO_STR:
             return f"str({value(toks[0])})"
+        if callee == "mocha_ffi_ptr_of" and toks:      # ptr_of_int / ptr_of_float / ...: four source names for one symbol; the array's element type picks the name
+            pd_ = defs.get(toks[0])
+            pl_ = LOAD_RE.match(pd_.text) if pd_ is not None and pd_.op == "load" else None
+            pty_ = infer_collections(fn).get(pl_.group(3), (None, ""))[0] if pl_ else None
+            pnm_ = {"int[]": "ptr_of_int", "float[]": "ptr_of_float", "vast[]": "ptr_of_vast", "bool[]": "ptr_of_bool"}.get(pty_)
+            if pnm_:
+                return f"{pnm_}({value(toks[0])})"
         if callee in RENAME:
             return f"{RENAME[callee]}({', '.join(value(t) for t in toks)})"
         if callee in NATIVE_ALIAS:             # lib\*.mch: function line(...) -> LinePlot native ink_new_line_mocha;

@@ -1322,10 +1322,13 @@ def generate_manifest(ast, mchi_path: str, source_file: str):
                     d = getattr(p, 'default', None)
                     kind = type(d).__name__ if d is not None else ""
                     if kind == "BoolLiteral":
+                        assert d is not None
                         lines.append(f"// default {node.type_name}.{func.name} {p.name} = {1 if d.value else 0} i8")
                     elif kind == "IntLiteral":
+                        assert d is not None
                         lines.append(f"// default {node.type_name}.{func.name} {p.name} = {d.value} i32")
                     elif kind == "FloatLiteral":
+                        assert d is not None
                         lines.append(f"// default {node.type_name}.{func.name} {p.name} = {d.value} double")
 
         elif isinstance(node, ClassDecl):
@@ -1433,7 +1436,7 @@ def compile_mocha(source_file: str, output_name: str = "a.out", debug: bool = Fa
     import time
     start = time.time()
 
-    print(f"🔥 Mocha Compiler v1.7")
+    print(f"🔥 Mocha Compiler v1.8")
     print(f"📄 Compiling: {source_file}\n")
 
     if not source_file.endswith('.mch'):

@@ -241,6 +241,7 @@ class PCAReducer {
     var fitted: int;
     var n_samples: int;
     var n_features: int;
+    var total_variance: float;
 
     function constructor(n_components: int) -> null {
         this.n_components = n_components;
@@ -250,6 +251,7 @@ class PCAReducer {
         this.fitted = 0;
         this.n_samples = 0;
         this.n_features = 0;
+        this.total_variance = 0.0;
     };
 
     // ───────────────────────────────────────────────
@@ -260,6 +262,16 @@ class PCAReducer {
         var p: int = data.cols;
         this.n_samples = n;
         this.n_features = p;
+        if (n < 2) {
+            c_print_err("MochaForgeError (PCAReducer): fit needs at least 2 samples.");
+            c_exit(2);
+            return;
+        };
+        if (this.n_components < 1 || this.n_components > p || this.n_components > n) {
+            c_print_err("MochaForgeError (PCAReducer): n_components must be between 1 and min(n_samples, n_features).");
+            c_exit(2);
+            return;
+        };
 
         // ── Step 1: compute mean of each feature ──
         this.mean_vec = alloc float[p];
@@ -315,6 +327,7 @@ class PCAReducer {
         };
 
         // ── Step 5: store top n_components rows of Vt ──
+        this.total_variance = total_var / float(n - 1);
         var k: int = this.n_components;
         if (k > n_sv) { k = n_sv; };
         if (k > p)    { k = p; };
@@ -429,16 +442,12 @@ class PCAReducer {
             c_exit(2);
             return [];
         };
-        var total: float = 0.0;
-        var i: int = 0;
-        while (i < this.n_components) {
-            total = total + this.explained_variance[i];
-            i++;
-        };
+        var total: float = this.total_variance;
         if (total == 0.0) { return this.explained_variance; };
-        var ratio: float[] = alloc float[this.n_components];
+        var k: int = this.explained_variance.length;
+        var ratio: float[] = alloc float[k];
         var ri: int = 0;
-        while (ri < this.n_components) {
+        while (ri < k) {
             ratio[ri] = this.explained_variance[ri] / total;
             ri++;
         };
@@ -456,16 +465,28 @@ class PCAReducer {
             c_exit(2);
             return 0;
         };
+        if (threshold <= 0.0 || threshold > 1.0) {
+            c_print_err("MochaForgeError (PCAReducer): n_components_for_variance threshold must be in (0, 1].");
+            c_exit(2);
+            return 0;
+        };
         var ratio: float[] = this.explained_variance_ratio();
+        var k: int = ratio.length;
         var cumulative: float = 0.0;
         var i: int = 0;
-        while (i < this.n_components) {
+        while (i < k) {
             cumulative = cumulative + ratio[i];
             if (cumulative >= threshold) {
                 return i + 1;
             };
             i++;
         };
-        return this.n_components;
+        if (k == this.n_features) {
+            // all components kept: the total is 1.0 up to rounding
+            return k;
+        };
+        c_print_err("MochaForgeError (PCAReducer): the kept components do not reach this variance threshold. Fit with more components.");
+        c_exit(2);
+        return 0;
     };
 };

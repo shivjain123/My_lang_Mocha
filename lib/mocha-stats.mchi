@@ -8,6 +8,7 @@
 local function c_print_err(msg: str) -> null;
 local function c_exit(code: int) -> null;
 local function c_erf(x: float) -> float;
+local function c_erfc(x: float) -> float;
 local function c_tgamma(x: float) -> float;
 local function c_lgamma(x: float) -> float;
 local function c_exp(x: float) -> float;

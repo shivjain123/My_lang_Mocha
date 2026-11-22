@@ -43,7 +43,7 @@ def main():
         if r.returncode != 0:
             sys.exit(f"mocha_build_tables: {script} failed:\n{r.stdout}{r.stderr}")
         print(f"{script}: ok")
-    print("done. Commit: native_aliases.json native_rets.json lib_sigs.json runtime_prelude.json")
+    print("done. Commit: native_aliases.json native_rets.json lib_sigs.json lib_defaults.json runtime_prelude.json")
 
 
 if __name__ == "__main__":

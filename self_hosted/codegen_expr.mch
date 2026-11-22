@@ -191,8 +191,8 @@ extend CodeGen {
 
         // globals
         if (this.global_ptrs.has(node.value)) {
-            var gptr:  str = this.global_ptrs.get(node.value);
-            var gtype: str = this.global_mocha_types.get(node.value);
+            var gptr:  str = this.global_ptrs.get(node.value); this.keep.push(gptr);
+            var gtype: str = this.global_mocha_types.get(node.value); this.keep.push(gtype);
             var llvm_t: str = this.toLLVMType(gtype);
             this.emit("  " + tmp + " = load " + llvm_t + ", " + llvm_t + "* " + gptr);
             return this.exprResult(tmp, llvm_t);
@@ -204,7 +204,7 @@ extend CodeGen {
 
     function genThis(node: ASTNode) -> str {
         var tmp: str = this.freshTemp();
-        var ptr: str = this.getLocalPtr("self");
+        var ptr: str = this.getLocalPtr("this");
         var cls: str = "%struct." + this.current_class + "*";
         this.emit("  " + tmp + " = load " + cls + ", " + cls + "* " + ptr);
         return this.exprResult(tmp, cls);
@@ -378,7 +378,7 @@ extend CodeGen {
         if (op_kind == "bool_ne")  { cmp_instr = "icmp ne"; };
 
         if (cmp_instr != "") {
-            if (op_kind.substring(0, 4) == "floa") {
+            if (op_kind.substring(0, 3) == "floa") {
                 if (left_type == "i32") {
                     var fp1: str = this.freshTemp();
                     this.emit("  " + fp1 + " = sitofp i32 " + left_reg + " to double");
@@ -619,7 +619,7 @@ extend CodeGen {
     // infer class name from llvm type e.g. "%struct.Dog*" -> "Dog"
     function inferClassName(llvm_type: str) -> str {
         if (llvm_type.length < 9) { return ""; };
-        if (llvm_type.substring(0, 7) != "%struct") { return ""; };
+        if (llvm_type.substring(0, 6) != "%struct") { return ""; };
         // "%struct.Dog*" -> "Dog"
         var str_start: int = 8; // after "%struct."
         var end:   int = llvm_type.length - 2; // before "*"
@@ -674,23 +674,83 @@ extend CodeGen {
     };
 
     function llvmTypeSize(llvm_type: str) -> int {
+        if (llvm_type == "i1")     { return 1; };
+        if (llvm_type == "i8")     { return 1; };
         if (llvm_type == "i32")    { return 4; };
         if (llvm_type == "i64")    { return 8; };
         if (llvm_type == "double") { return 8; };
-        if (llvm_type == "i8")     { return 1; };
         if (llvm_type == "i8*")    { return 8; };
         return 8; // pointer default
+    };
+
+    // byte size of a class struct the way LLVM lays it out
+    function computeStructSize(class_name: str) -> int {
+        var offset:    int = 0;
+        var max_align: int = 1;
+        if (this.class_fields.has(class_name)) {
+            var fields: str[] = splitComma(this.class_fields.get(class_name));
+            var fi: int = 0;
+            while (fi < fields.length) {
+                var fsize: int = this.llvmTypeSize(this.fieldType(fields[fi]));
+                offset = ((offset + fsize - 1) / fsize) * fsize;
+                offset = offset + fsize;
+                if (fsize > max_align) { max_align = fsize; };
+                fi = fi + 1;
+            };
+        };
+        offset = ((offset + max_align - 1) / max_align) * max_align;
+        var size: int = ((offset + 15) / 16) * 16;
+        if (size < 16) { size = 16; };
+        return size;
+    };
+
+    function getZeroValue(lt: str) -> str {
+        if (lt == "i32" || lt == "i64" || lt == "i8" || lt == "i16") { return lt + " 0"; };
+        if (lt == "double") { return "double 0.0"; };
+        if (lt == "i1") { return "i1 0"; };
+        return lt + " null";
+    };
+
+    // store a zero/null into every field of class_name through the pointer register self_name
+    function emitFieldZeroInits(class_name: str, self_name: str) -> null {
+        if (this.class_fields.has(class_name) == false) { return; };
+        var fields: str[] = splitComma(this.class_fields.get(class_name));
+        var zi: int = 0;
+        while (zi < fields.length) {
+            var zt:  str = this.fieldType(fields[zi]);
+            var zn:  str = this.fieldName(fields[zi]);
+            var zp:  str = this.freshTemp();
+            this.emit("  " + zp + " = getelementptr %struct." + class_name + ", %struct." + class_name + "* " + self_name + ", i32 0, i32 " + str(zi) + "  ; field " + zn);
+            this.emit("  store " + this.getZeroValue(zt) + ", " + zt + "* " + zp);
+            zi = zi + 1;
+        };
+    };
+    // allocate a zeroed, RC-tracked instance of class_name
+    function emitClassAlloc(class_name: str) -> str {
+        var size: int = this.computeStructSize(class_name);
+        var raw:  str = this.freshTemp();
+        var obj:  str = this.freshTemp();
+        this.emit("  " + raw + " = call i8* @rc_alloc(i64 " + str(size) + ")  ; sizeof " + class_name);
+        this.emit("  call void @llvm.memset.p0i8.i64(i8* " + raw + ", i8 0, i64 " + str(size) + ", i1 false)");
+        this.emit("  " + obj + " = bitcast i8* " + raw + " to %struct." + class_name + "*");
+        return obj;
     };
 
     // --------------------------------------------------------
     // Array literal
     // --------------------------------------------------------
 
+    function elemSizeFromExpected(t: str) -> int {
+        if (t == "int[]")  { return 4; };
+        if (t == "bool[]") { return 1; };
+        return 8;
+    };
+
     function genArrayLiteral(node: ASTNode) -> str {
         if (node.children.length == 0) {
-            // empty array — size 0
             var arr: str = this.freshTemp();
-            this.emit("  " + arr + " = call %MochaArray* @mocha_array_new(i32 0, i32 8, i32 0)");
+            var esz: int = this.elemSizeFromExpected(this.expected_assign_type);
+            this.emit("  " + arr + " = call %MochaArray* @mocha_array_new(i32 0, i32 " + str(esz) + ", i32 0)");
             return this.exprResult(arr, "%MochaArray*");
         };
 
@@ -830,21 +890,106 @@ extend CodeGen {
     // Index 2D access — stub
     // --------------------------------------------------------
 
+    function isBorrowedKind(kind: str) -> bool {
+        if (kind == "Identifier") { return true; };
+        if (kind == "MemberAccess") { return true; };
+        if (kind == "Index2DAccess") { return true; };
+        return false;
+    };
+
     function genIndex2DAccess(node: ASTNode) -> str {
         var obj_result: str = this.genExpr(node.left);
         var obj_reg:    str = this.exprReg(obj_result);
+        var obj_llvm:   str = this.exprType(obj_result);
         var row_result: str = this.genExpr(node.condition);
         var row_reg:    str = this.exprReg(row_result);
         var col_result: str = this.genExpr(node.right);
         var col_reg:    str = this.exprReg(col_result);
-        var mocha_type: str = this.getLocalMochaType(node.left.value);
-        var elem_mocha: str = this.extractElemMocha(this.extractElemMocha(mocha_type));
-        var elem_llvm:  str = this.toLLVMType(elem_mocha);
-        var cast:       str = this.freshTemp();
-        var result:     str = this.freshTemp();
-        this.emit("  " + cast + " = alloca " + elem_llvm);
+
+        var obj_mocha: str = "";
+        if (node.left.kind == "Identifier") {
+            if (this.hasLocal(node.left.value)) {
+                obj_mocha = this.getLocalMochaType(node.left.value);
+            };
+        };
+
+        // chained dict access: d["a"]["b"]
+        if (obj_llvm == "%MochaDict*" || obj_mocha == "dict") {
+            var d_inner: str = this.freshTemp();
+            this.emit("  " + d_inner + " = call i8* @mocha_dict_get(%MochaDict* " + obj_reg + ", i8* " + row_reg + ")");
+            if (this.isBorrowedKind(node.condition.kind) == false) {
+                this.emit("  call void @rc_release(i8* " + row_reg + ")");
+            };
+            var d_cast: str = this.freshTemp();
+            this.emit("  " + d_cast + " = bitcast i8* " + d_inner + " to %MochaDict*");
+
+            var expected: str = this.expected_assign_type;
+            var tag_int: int = -1;
+            if (expected == "int")   { tag_int = 0; };
+            if (expected == "float") { tag_int = 1; };
+            if (expected == "str")   { tag_int = 2; };
+            if (expected == "bool")  { tag_int = 3; };
+            if (expected == "dict")  { tag_int = 4; };
+            if (expected == "vast")  { tag_int = 6; };
+
+            var d_val: str = this.freshTemp();
+            if (tag_int == -1) {
+                this.emit("  " + d_val + " = call i8* @mocha_dict_get(%MochaDict* " + d_cast + ", i8* " + col_reg + ")");
+            } else {
+                this.emit("  " + d_val + " = call i8* @mocha_dict_get_typed(%MochaDict* " + d_cast + ", i8* " + col_reg + ", i32 " + str(tag_int) + ")");
+            };
+            if (this.isBorrowedKind(node.right.kind) == false) {
+                this.emit("  call void @rc_release(i8* " + col_reg + ")");
+            };
+
+            var d_ptr: str = "";
+            var d_out: str = "";
+            if (expected == "int") {
+                d_ptr = this.freshTemp();
+                d_out = this.freshTemp();
+                this.emit("  " + d_ptr + " = bitcast i8* " + d_val + " to i32*");
+                this.emit("  " + d_out + " = load i32, i32* " + d_ptr);
+                return this.exprResult(d_out, "i32");
+            };
+            if (expected == "float") {
+                d_ptr = this.freshTemp();
+                d_out = this.freshTemp();
+                this.emit("  " + d_ptr + " = bitcast i8* " + d_val + " to double*");
+                this.emit("  " + d_out + " = load double, double* " + d_ptr);
+                return this.exprResult(d_out, "double");
+            };
+            if (expected == "bool") {
+                d_out = this.freshTemp();
+                this.emit("  " + d_out + " = load i8, i8* " + d_val);
+                return this.exprResult(d_out, "i8");
+            };
+            if (expected == "vast") {
+                d_ptr = this.freshTemp();
+                d_out = this.freshTemp();
+                this.emit("  " + d_ptr + " = bitcast i8* " + d_val + " to i64*");
+                this.emit("  " + d_out + " = load i64, i64* " + d_ptr);
+                return this.exprResult(d_out, "i64");
+            };
+            if (expected == "str") {
+                this.emit("  call void @rc_retain(i8* " + d_val + ")");
+                return this.exprResult(d_val, "i8*");
+            };
+            return this.exprResult(d_val, "i8*");
+        };
+
+        // 2D array read: element type from the variable or the field (T[][] -> T)
+        var elem_llvm: str = "i32";
+        var arr_mocha: str = this.assignTargetType(node.left);
+        if (arr_mocha != "" && arr_mocha != "unknown") {
+            var elem_mocha: str = this.extractElemMocha(this.extractElemMocha(arr_mocha));
+            elem_llvm = this.toLLVMType(elem_mocha);
+        };
+        var slot:   str = this.allocaAtEntry(elem_llvm);
+        var cast:   str = this.freshTemp();
+        var result: str = this.freshTemp();
+        this.emit("  " + cast + " = bitcast " + elem_llvm + "* " + slot + " to i8*");
         this.emit("  call void @mocha_array2d_get(%MochaArray2D* " + obj_reg + ", i32 " + row_reg + ", i32 " + col_reg + ", i8* " + cast + ")");
-        this.emit("  " + result + " = load " + elem_llvm + ", " + elem_llvm + "* " + cast);
+        this.emit("  " + result + " = load " + elem_llvm + ", " + elem_llvm + "* " + slot);
         return this.exprResult(result, elem_llvm);
     };
 

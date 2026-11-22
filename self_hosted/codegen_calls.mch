@@ -111,7 +111,7 @@ extend CodeGen {
         // Extension method fallback (mocha-string library)
         var ext_key: str = "mocha_ext_str_" + member;
         if (this.method_return_types.has(ext_key)) {
-            var ret_type: str = this.method_return_types.get(ext_key);
+            var ret_type: str = this.method_return_types.get(ext_key); this.keep.push(ret_type);
             var arg_str:  str = "i8* " + s_reg;
             var i: int = 0;
             while (i < node.args.length) {
@@ -195,12 +195,12 @@ extend CodeGen {
         var obj_type: str = "int[]";
         if (obj_name != "") {
             if (this.local_mocha_types.has(obj_name)) {
-                obj_type = this.local_mocha_types.get(obj_name);
+                obj_type = this.local_mocha_types.get(obj_name); this.keep.push(obj_type);
             };
         };
         var san_key: str = "mocha_ext_" + this.sanitizeTypeName(obj_type) + "_" + member;
         if (this.method_return_types.has(san_key)) {
-            var ret_type: str = this.method_return_types.get(san_key);
+            var ret_type: str = this.method_return_types.get(san_key); this.keep.push(ret_type);
             var arg_str:  str = "%MochaArray* " + arr_reg;
             var j: int = 0;
             while (j < node.args.length) {
@@ -287,7 +287,7 @@ extend CodeGen {
         var mangled:    str = class_name + "_" + member;
         var ret_type:   str = "i32";
         if (this.method_return_types.has(mangled)) {
-            ret_type = this.method_return_types.get(mangled);
+            ret_type = this.method_return_types.get(mangled); this.keep.push(ret_type);
         };
         var args: str[] = this.collectArgs(node);
         var arg_str: str = obj_type + " " + obj_reg;
@@ -363,7 +363,7 @@ extend CodeGen {
             var sb_mangled: str = "StringBuilder_" + member;
             var sb_ret: str = "void";
             if (this.method_return_types.has(sb_mangled)) {
-                sb_ret = this.method_return_types.get(sb_mangled);
+                sb_ret = this.method_return_types.get(sb_mangled); this.keep.push(sb_ret);
             };
             var sb_args: str[] = this.collectArgs(node);
             var sb_arg_str: str = "%struct.MochaStringBuilder* " + obj_reg;
@@ -418,7 +418,7 @@ extend CodeGen {
 
         // User class methods
         if (obj_type.length >= 8) {
-            if (obj_type.substring(0, 7) == "%struct") {
+            if (obj_type.substring(0, 6) == "%struct") {
                 return this.genStructMethodCall(obj_reg, obj_type, member, node);
             };
         };
@@ -624,13 +624,7 @@ extend CodeGen {
         // User constructor — func_name starts with uppercase
         if (func_name.charAt(0) != func_name.toLower().charAt(0)) {
             var struct_ptr_type: str = "%struct." + func_name + "*";
-            var raw:  str = this.freshTemp();
-            var obj:  str = this.freshTemp();
-            var size: str = this.freshTemp();
-            this.emit("  " + size + " = add i64 0, 1024");
-            this.emit("  " + raw + " = call i8* @malloc(i64 " + size + ")");
-            this.emit("  call void @llvm.memset.p0i8.i64(i8* " + raw + ", i8 0, i64 1024, i1 false)");
-            this.emit("  " + obj + " = bitcast i8* " + raw + " to " + struct_ptr_type);
+            var obj: str = this.emitClassAlloc(func_name);
 
             var has_ctor: bool = false;
             var ci: int = 0;
@@ -655,7 +649,7 @@ extend CodeGen {
 
         // Lib function
         if (this.lib_functions.has(func_name)) {
-            var lf_encoded: str = this.lib_functions.get(func_name);
+            var lf_encoded: str = this.lib_functions.get(func_name); this.keep.push(lf_encoded);
             // encoded as "c_name|ret_type"
             var lf_cname: str = this.fieldName(lf_encoded);
             var lf_ret:   str = this.fieldType(lf_encoded);
@@ -687,11 +681,11 @@ extend CodeGen {
 
         var ret_type: str = "i32";
         if (this.method_return_types.has(func_name)) {
-            ret_type = this.method_return_types.get(func_name);
+            ret_type = this.method_return_types.get(func_name); this.keep.push(ret_type);
         } else if (this.current_class != "") {
             var mangled: str = this.current_class + "_" + func_name;
             if (this.method_return_types.has(mangled)) {
-                ret_type  = this.method_return_types.get(mangled);
+                ret_type  = this.method_return_types.get(mangled); this.keep.push(ret_type);
                 func_name = mangled;
             };
         };

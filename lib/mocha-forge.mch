@@ -646,12 +646,7 @@ class LinearRegression {
                 if (this.reg_type == "ridge") {
                     dw[k] = dw[k] + 2.0 * this.reg_lambda * this.weights[k];
                 };
-                if (this.reg_type == "lasso") {
-                    var sign: float = 0.0;
-                    if (this.weights[k] > 0.0) { sign = 1.0; };
-                    if (this.weights[k] < 0.0) { sign = -1.0; };
-                    dw[k] = dw[k] + this.reg_lambda * sign;
-                };
+                // lasso is applied as soft-thresholding in the update step below
 
                 k++;
             };
@@ -669,6 +664,14 @@ class LinearRegression {
             var u: int = 0;
             while (u < n_features) {
                 this.weights[u] = this.weights[u] - this.lr * dw[u];
+                if (this.reg_type == "lasso") {
+                    // soft-threshold: shrink toward zero by lr * lambda, exact zero inside the band
+                    var thr: float = this.lr * this.reg_lambda;
+                    var wv: float = this.weights[u];
+                    if (wv > thr) { this.weights[u] = wv - thr; };
+                    if (wv < 0.0 - thr) { this.weights[u] = wv + thr; };
+                    if (wv <= thr && wv >= 0.0 - thr) { this.weights[u] = 0.0; };
+                };
                 u++;
             };
             this.bias = this.bias - this.lr * db;
@@ -1231,7 +1234,7 @@ class KNNClassifier {
     function compute_distance(a: float[], b: float[]) -> float {
         if (this.distance_metric == "euclidean") { return euclidean(a, b); };
         if (this.distance_metric == "manhattan") { return manhattan(a, b); };
-        if (this.distance_metric == "cosine")    { return cosine(a, b); };
+        if (this.distance_metric == "cosine")    { return 1.0 - cosine(a, b); };
         if (this.distance_metric == "chebyshev") { return chebyshev(a, b); };
         return euclidean(a, b);
     };
@@ -1541,10 +1544,49 @@ class KMeans {
 
         var ki: int = 0;
         while (ki < this.k) {
-            var idx: int = rand_int(0, n - 1);
-            // avoid duplicate centroids
-            while (used[idx] == 1) {
+            var idx: int = 0;
+            if (ki == 0) {
                 idx = rand_int(0, n - 1);
+            };
+            if (ki > 0) {
+                // k-means++: next centroid is drawn with probability proportional to its
+                // squared distance to the nearest centroid chosen so far
+                var d2: float[] = alloc float[n];
+                var total: float = 0.0;
+                var pi: int = 0;
+                while (pi < n) {
+                    var nearest: float = -1.0;
+                    var cj: int = 0;
+                    while (cj < ki) {
+                        var dsum: float = 0.0;
+                        var fd: int = 0;
+                        var x_p: float[][] = x;
+                        var c_p: float[][] = this.centroids;
+                        while (fd < n_feat) {
+                            var dd: float = x_p[pi][fd] - c_p[cj][fd];
+                            dsum = dsum + dd * dd;
+                            fd++;
+                        };
+                        if (nearest < 0.0 || dsum < nearest) { nearest = dsum; };
+                        cj++;
+                    };
+                    d2[pi] = nearest;
+                    total = total + nearest;
+                    pi++;
+                };
+                var target: float = rand_float(0.0, total);
+                var run: float = 0.0;
+                idx = n - 1;
+                var pk: int = 0;
+                var found: int = 0;
+                while (pk < n && found == 0) {
+                    run = run + d2[pk];
+                    if (run >= target && d2[pk] > 0.0) {
+                        idx = pk;
+                        found = 1;
+                    };
+                    pk++;
+                };
             };
             used[idx] = 1;
             var fi: int = 0;

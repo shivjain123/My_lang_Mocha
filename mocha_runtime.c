@@ -4712,6 +4712,7 @@ double mocha_wrap_hypot(double x, double y) {
 }
 double mocha_wrap_fmod(double x, double y)  { return fmod(x, y);   }
 double mocha_wrap_erf(double x)    { return erf(x);    }
+double mocha_wrap_erfc(double x)   { return erfc(x);   }
 double mocha_wrap_tgamma(double x) { return tgamma(x); }
 double mocha_wrap_lgamma(double x) { return lgamma(x); }
 double mocha_wrap_exp(double x)    { return exp(x);    }

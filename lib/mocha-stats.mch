@@ -5,6 +5,7 @@
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
 local function c_erf(x: float) -> float native mocha_wrap_erf;
+local function c_erfc(x: float) -> float native mocha_wrap_erfc;
 local function c_tgamma(x: float) -> float native mocha_wrap_tgamma;
 local function c_lgamma(x: float) -> float native mocha_wrap_lgamma;
 local function c_exp(x: float) -> float native mocha_wrap_exp;
@@ -629,7 +630,9 @@ class NormalDist {
     };
 
     function survival(x: float) -> float {
-        return 1.0 - this.cdf(x);
+        // upper tail directly: 0.5 * erfc(z / sqrt 2), no 1 - cdf
+        var z: float = (x - this.mean_val) / (this.std_val * (2.0).sqrt().real);
+        return 0.5 * c_erfc(z);
     };
 
     function contains(x: float, prob: float) -> bool {
@@ -662,8 +665,10 @@ class PoissonDist {
             c_exit(2);
             return 0.0;
         };
-        var k_fact: float = c_tgamma(float(k) + 1.0);
-        return c_exp(-this.rate) * c_pow(this.rate, float(k)) / k_fact;
+        var r: float = this.rate;
+        var ln_rate: float = r.log().real;
+        var kf: float = float(k);
+        return c_exp(kf * ln_rate - r - c_lgamma(kf + 1.0));
     };
 
     function cdf(k: int) -> float {
@@ -682,7 +687,24 @@ class PoissonDist {
     };
 
     function survival(k: int) -> float {
-        return 1.0 - this.cdf(k);
+        if (k < 0) {
+            c_print_err("MochaLibError (mocha-stats): PoissonDist survival() k must be >= 0.");
+            c_exit(2);
+            return 0.0;
+        };
+        // upper tail: pmf(k+1) * (1 + x1 * (1 + x2 * (1 + ...))), built from the far end
+        var n_terms: int = 60 + int(this.rate) * 10;
+        var acc: float = 1.0;
+        var j: int = n_terms;
+        while (j >= 1) {
+            acc = 1.0 + (this.rate / float(k + 1 + j)) * acc;
+            j--;
+        };
+        var kf: float = float(k + 1);
+        var r: float = this.rate;
+        var ln_rate: float = r.log().real;
+        var ln_acc: float = acc.log().real;
+        return c_exp(kf * ln_rate - r - c_lgamma(kf + 1.0) + ln_acc);
     };
 
     function mean() -> float {
@@ -728,7 +750,21 @@ class BinomialDist {
             c_exit(2);
             return 0.0;
         };
-        return this.choose(k) * c_pow(this.p, float(k)) * c_pow(1.0 - this.p, float(this.n - k));
+        if (this.p == 0.0) {
+            if (k == 0) { return 1.0; };
+            return 0.0;
+        };
+        if (this.p == 1.0) {
+            if (k == this.n) { return 1.0; };
+            return 0.0;
+        };
+        var nf: float = float(this.n);
+        var kf: float = float(k);
+        var pv: float = this.p;
+        var qv: float = 1.0 - this.p;
+        var ln_p: float = pv.log().real;
+        var ln_q: float = qv.log().real;
+        return c_exp(c_lgamma(nf + 1.0) - c_lgamma(kf + 1.0) - c_lgamma(nf - kf + 1.0) + kf * ln_p + (nf - kf) * ln_q);
     };
 
     function cdf(k: int) -> float {
@@ -750,7 +786,36 @@ class BinomialDist {
     };
 
     function survival(k: int) -> float {
-        return 1.0 - this.cdf(k);
+        if (k < 0) {
+            c_print_err("MochaLibError (mocha-stats): BinomialDist survival() k must be >= 0.");
+            c_exit(2);
+            return 0.0;
+        };
+        if (k >= this.n) {
+            return 0.0;
+        };
+        if (this.p == 0.0) {
+            return 0.0;
+        };
+        if (this.p == 1.0) {
+            return 1.0;
+        };
+        var nf: float = float(this.n);
+        var pv: float = this.p;
+        var qv: float = 1.0 - this.p;
+        var odds: float = pv / qv;
+        // upper tail: pmf(k+1) * (1 + r1 * (1 + r2 * (1 + ...))), built from the far end
+        var acc: float = 1.0;
+        var j: int = this.n - k - 1;
+        while (j >= 1) {
+            acc = 1.0 + (float(this.n - k - j) / float(k + j + 1)) * odds * acc;
+            j = j - 1;
+        };
+        var k1: float = float(k + 1);
+        var ln_p: float = pv.log().real;
+        var ln_q: float = qv.log().real;
+        var ln_acc: float = acc.log().real;
+        return c_exp(c_lgamma(nf + 1.0) - c_lgamma(k1 + 1.0) - c_lgamma(nf - k1 + 1.0) + k1 * ln_p + (nf - k1) * ln_q + ln_acc);
     };
 
     function mean() -> float {
@@ -1186,7 +1251,12 @@ class FDist {
     // survival: P(X > x) = 1 - cdf(x)
     // ─────────────────────────────────────────
     function survival(x: float) -> float {
-        return 1.0 - this.cdf(x);
+        if (x <= 0.0) {
+            return 1.0;
+        };
+        // upper tail directly (no 1 - cdf, so tiny tails survive)
+        var t: float = this.d2 / (this.d2 + this.d1 * x);
+        return this.reg_incomplete_beta(t, this.d2 / 2.0, this.d1 / 2.0);
     };
 
     // ─────────────────────────────────────────

@@ -16,6 +16,17 @@ extend CodeGen {
     // get_ir — assemble final IR string
     // --------------------------------------------------------
 
+    function typeDeclSeenBefore(idx: int) -> bool {
+        if (this.type_declarations[idx] == "") { return false; };
+        var j: int = 0;
+        var seen: bool = false;
+        while (j < idx) {
+            if (this.type_declarations[j] == this.type_declarations[idx]) { seen = true; };
+            j = j + 1;
+        };
+        return seen;
+    };
+
     function getIR() -> str {
         var result: str = "";
         var i: int = 0;
@@ -214,7 +225,7 @@ extend CodeGen {
                 this.registerClassFields(node.value, node.body);
                 var fields_enc: str = "";
                 if (this.class_fields.has(node.value)) {
-                    fields_enc = this.class_fields.get(node.value);
+                    fields_enc = this.class_fields.get(node.value); this.keep.push(fields_enc);
                 };
                 if (fields_enc == "") {
                     this.type_declarations.push("%struct." + node.value + " = type { i32 }");
@@ -377,7 +388,7 @@ extend CodeGen {
 
                 var entry_ret: str = "void";
                 if (this.method_return_types.has(ir_func_name)) {
-                    entry_ret = this.method_return_types.get(ir_func_name);
+                    entry_ret = this.method_return_types.get(ir_func_name); this.keep.push(entry_ret);
                 };
                 if (entry_ret == "void") {
                     this.emit("  call void @" + ir_func_name + "(" + args_str + ")");
@@ -428,7 +439,7 @@ extend CodeGen {
 
         var tdeci: int = 0;
         while (tdeci < this.type_declarations.length) {
-            result = result + this.type_declarations[tdeci] + "\n";
+            if (this.typeDeclSeenBefore(tdeci) == false) { result = result + this.type_declarations[tdeci] + "\n"; };
             tdeci = tdeci + 1;
         };
 

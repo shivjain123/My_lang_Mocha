@@ -1988,7 +1988,7 @@ class TypeChecker {
 
         // native functions have no body (the parser stores the native name in extra;
         // flag2 can't be used here because it also means "local")
-        if (node.extra == "") {
+        if (node.extra == "" || node.kind == "MethodDecl") {
             this.checkStmtList(node.body);
 
             if (node.type_str != "null") {

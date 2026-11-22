@@ -124,7 +124,7 @@ for f in files:
 
 print(f"files: {len(files)}   functions (excluding main): {n_funcs}")
 print(f"✅ emitted + round-trip clean: {n_ok}")
-print(f"🟡 emitted but mismatched:     {n_mismatch}")
+# the mismatch count is printed below, once the known losses are set aside
 print(f"❌ unsupported / crash:        {n_funcs - n_ok - n_mismatch}")
 if stmts_total:
     print(f"statements: {stmts_good}/{stmts_total} match their source line")
@@ -141,10 +141,94 @@ for r, n in reasons.most_common(20):
 
 LOSS_OURS = re.compile(r'\bink_\w+|\bfield\d+')      # library alias, unnamed class field
 LOSS_SRC = re.compile(r'(?<![\w."])[A-Z][A-Z0-9_]*\b|0\.00000\d')   # folded constant names (PI, GM_SUN...), floats too small for the IR
+def norm_loss(s):
+    """Our line with the two accepted losses undone: tests that predate the unified lib say plain ptr_of, and an unused native result leaves no trace of str."""
+    s = re.sub(r'\bptr_of_(?:float|int|vast|bool)\(', 'ptr_of(', s.strip())
+    return re.sub(r'^var (\w+): null = ', r'var \1: str = ', s)
+
+_dfn = {}
+
+
+def default_fns(ll_name):
+    """Functions the source declares with default parameters ('function add(a: int, b: int = 10)'): the IR only has the values the compiler filled in."""
+    if ll_name not in _dfn:
+        try:
+            txt = open(os.path.join("..", ll_name[:-3] + ".mch"), encoding="utf-8", errors="replace").read()
+        except OSError:
+            txt = ""
+        _dfn[ll_name] = set(re.findall(r'\bfunction\s+(\w+)\s*\([^)]*=[^)]*\)', txt))
+    return _dfn[ll_name]
+
+
+def norm_defaults(s, names):
+    """A line with default parameters set aside: a header loses its '= value', and a call to one of those functions becomes name(...)."""
+    rx = re.compile(r'\bfunction\s+\w+\s*\(|\b(?:' + '|'.join(map(re.escape, sorted(names))) + r')\(')
+    out, i = "", 0
+    while True:
+        m = rx.search(s, i)
+        if not m:
+            return re.sub(r'\s+', '', out + s[i:])
+        d, j = 1, m.end()
+        while j < len(s) and d:
+            d += (s[j] == '(') - (s[j] == ')')
+            j += 1
+        if m.group(0).startswith("function"):
+            parts, d, cur = [], 0, ""
+            for ch in s[m.end():j - 1]:
+                d += (ch in "([{") - (ch in ")]}")
+                if ch == "," and d == 0:
+                    parts.append(cur)
+                    cur = ""
+                else:
+                    cur += ch
+            parts.append(cur)
+            out += s[i:m.end()] + ",".join(p.split("=")[0] for p in parts) + ")"
+        else:
+            out += s[i:m.start()] + m.group(0) + "...)"
+        i = j
+
+
+def default_loss(f, s, sl):
+    names = default_fns(f)
+    return bool(names) and any(re.search(r'\b' + re.escape(n) + r'\b', sl) for n in names) \
+        and norm_defaults(s, names) in norm_defaults(sl, names)
+
+
+def norm_named(s):
+    """Call arguments with names stripped and put in sorted order: the IR only has the positional order, and a source may name or reorder them (Rbm(hidden_size=3, visible_size=5))."""
+    rx = re.compile(r'\b(?!print\b)(\w+)\(')
+    out, i = "", 0
+    while True:
+        m = rx.search(s, i)
+        if not m:
+            return re.sub(r'\s+', '', out + s[i:])
+        d, j = 1, m.end()
+        while j < len(s) and d:
+            d += (s[j] == '(') - (s[j] == ')')
+            j += 1
+        args, d, cur = [], 0, ""
+        for ch in s[m.end():j - 1]:
+            d += (ch in "([{") - (ch in ")]}")
+            if ch == "," and d == 0:
+                args.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        args.append(cur)
+        args = sorted(re.sub(r'^\s*[A-Za-z_]\w*\s*=(?!=)\s*', '', a).strip() for a in args)
+        out += s[i:m.end()] + ",".join(args) + ")"
+        i = j
+
+
+def named_loss(s, sl):
+    return bool(re.search(r'[(,]\s*(?!newLine\b)[A-Za-z_]\w*\s*=(?!=)', sl)) and norm_named(s) == norm_named(sl)
+
+
 known, other = [], []
 for f, name, items in mismatch_list:
-    lost = all(LOSS_OURS.search(s) or LOSS_SRC.search(re.sub(r'"(?:\\.|[^"\\])*"', '""', sl)) for _, s, sl in items)
+    lost = all(LOSS_OURS.search(s) or LOSS_SRC.search(re.sub(r'"(?:\\.|[^"\\])*"', '""', sl)) or norm_loss(s) == sl.strip() or default_loss(f, s, sl) or named_loss(s, sl) for _, s, sl in items)
     (known if lost else other).append((f, name, items))
+print(f"\n🟡 emitted but mismatched:     {len(other)}" + (f"   (+{len(known)} known losses, listed below)" if known else ""))
 
 if other:
     print("\nMismatches to look at (up to 3 differing lines each):")
