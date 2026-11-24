@@ -2915,7 +2915,11 @@ class Svm {
             };
 
             if (num_changed == 0) {
-                iter = this.max_iter;
+                // stuck on one partner per sample: retry violators with every partner
+                var rescued: int = this.smo_rescue(n);
+                if (rescued == 0) {
+                    iter = this.max_iter;
+                };
             };
             iter++;
         };
@@ -2924,6 +2928,86 @@ class Svm {
     // ─────────────────────────────────────────
     // decision_rbf: f(xᵢ) using precomputed kernel
     // ─────────────────────────────────────────
+    // smo_step: try to optimise the pair (i, j); returns 1 if the alphas changed
+    function smo_step(i: int, j: int, ei: float) -> int {
+        var ej: float = this.decision_rbf(j) - this.support_y[j];
+        var ai_old: float = this.alphas[i];
+        var aj_old: float = this.alphas[j];
+        var yi: float = this.support_y[i];
+        var yj: float = this.support_y[j];
+
+        var lo: float = 0.0;
+        var hi: float = this.c_param;
+        if (yi == yj) {
+            lo = ai_old + aj_old - this.c_param;
+            if (lo < 0.0) { lo = 0.0; };
+            hi = ai_old + aj_old;
+            if (hi > this.c_param) { hi = this.c_param; };
+        };
+        if (yi != yj) {
+            lo = aj_old - ai_old;
+            if (lo < 0.0) { lo = 0.0; };
+            hi = this.c_param + aj_old - ai_old;
+            if (hi > this.c_param) { hi = this.c_param; };
+        };
+        if (lo >= hi) { return 0; };
+
+        var eta: float = 2.0 * this.kernel_matrix[i][j] - this.kernel_matrix[i][i] - this.kernel_matrix[j][j];
+        if (eta >= 0.0) { return 0; };
+
+        var aj_new: float = aj_old - yj * (ei - ej) / eta;
+        if (aj_new < lo) { aj_new = lo; };
+        if (aj_new > hi) { aj_new = hi; };
+        var step: float = aj_new - aj_old;
+        if (step < 0.0) { step = 0.0 - step; };
+        if (step < 0.00001) { return 0; };
+
+        var ai_new: float = ai_old + yi * yj * (aj_old - aj_new);
+        this.alphas[i] = ai_new;
+        this.alphas[j] = aj_new;
+
+        var b1: float = this.bias - ei
+                      - yi * (ai_new - ai_old) * this.kernel_matrix[i][i]
+                      - yj * (aj_new - aj_old) * this.kernel_matrix[i][j];
+        var b2: float = this.bias - ej
+                      - yi * (ai_new - ai_old) * this.kernel_matrix[i][j]
+                      - yj * (aj_new - aj_old) * this.kernel_matrix[j][j];
+        if (ai_new > 0.0 && ai_new < this.c_param) { this.bias = b1; };
+        if (aj_new > 0.0 && aj_new < this.c_param) { this.bias = b2; };
+        if (ai_new <= 0.0 || ai_new >= this.c_param) {
+            if (aj_new <= 0.0 || aj_new >= this.c_param) {
+                this.bias = (b1 + b2) / 2.0;
+            };
+        };
+        return 1;
+    };
+
+    // smo_rescue: the normal pass is stuck, so retry every KKT violator with every
+    // other partner until one pair moves; returns how many violators were improved
+    function smo_rescue(n: int) -> int {
+        var moved_total: int = 0;
+        var i: int = 0;
+        while (i < n) {
+            var ei: float = this.decision_rbf(i) - this.support_y[i];
+            var yi: float = this.support_y[i];
+            var ai: float = this.alphas[i];
+            var violated: int = 0;
+            if (yi * ei < -0.001 && ai < this.c_param) { violated = 1; };
+            if (yi * ei > 0.001 && ai > 0.0) { violated = 1; };
+            if (violated == 1) {
+                var moved: int = 0;
+                var j: int = 0;
+                while (moved == 0 && j < n) {
+                    if (j != i) { moved = this.smo_step(i, j, ei); };
+                    j++;
+                };
+                moved_total = moved_total + moved;
+            };
+            i++;
+        };
+        return moved_total;
+    };
+
     function decision_rbf(idx: int) -> float {
         var result: float = this.bias;
         var i: int = 0;

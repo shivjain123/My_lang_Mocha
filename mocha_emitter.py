@@ -80,7 +80,8 @@ SUPPORTED_FAMILIES = {"while_cond", "while_body", "while_end", "if_then", "if_el
                       "for_cond", "for_body", "for_step", "for_end",
                       "foreach_cond", "foreach_body", "foreach_step", "foreach_end",
                       "foreach_set_cond", "foreach_set_body", "foreach_set_step", "foreach_set_end",
-                      "lc_loop", "lc_body", "lc_append", "lc_skip", "lc_end", "lc_then", "lc_else", "lc_merge", "dowhile_body", "dowhile_end",
+                      "lc_loop", "lc_body", "lc_append", "lc_skip", "lc_end", "lc_then", "lc_else", "lc_merge",
+                      "dowhile_body", "dowhile_cond", "dowhile_end",
                       "match_case", "match_body", "match_default", "match_end",
                       "try_body", "rescue_body", "after_try"}
 
@@ -2328,7 +2329,7 @@ def emit_function(fn, g):
         if m is None:
             raise EmitError(f"{fn.name}: a do-while whose branch I can't read")
         entries.append((state["cur"], "stmt", "do {", ind))
-        loop_stack.append((hdr, lp["end"], hdr))
+        loop_stack.append((hdr, lp["end"], cb_))
         saved_ = loops.pop(hdr, None)              # so emit_from walks the header as a plain block, not as a new loop
         try:
             if cb_ == hdr:
@@ -2638,7 +2639,7 @@ def src_norm(src, n):
                 break
         return "".join(parts).replace(",}", "}")
     k, depth, parts = n - 1, 0, []
-    while k < len(src) and len(parts) < 40:
+    while k < len(src) and len(parts) < 1000:
         line = src[k]
         parts.append(norm(line))
         flat = re.sub(r'//.*$', '', re.sub(r'"(?:\\.|[^"\\])*"', '""', line))

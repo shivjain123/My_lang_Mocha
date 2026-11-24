@@ -4688,17 +4688,20 @@ class CodeGen:
     def gen_do_while(self, node):
         count    = self.temp_count
         body_lbl = f"dowhile_body_{count}"
+        cond_lbl = f"dowhile_cond_{count}"
         end_lbl  = f"dowhile_end_{count}"
         self.temp_count += 1
 
         prev_break    = getattr(self, 'break_label',    None)
         prev_continue = getattr(self, 'continue_label', None)
         self.break_label    = end_lbl
-        self.continue_label = body_lbl
+        self.continue_label = cond_lbl
 
         self.emit(f"  br label %{body_lbl}")
         self.emit(f"{body_lbl}:")
         self.gen_scoped_body(node.body)
+        self.emit_br_if_needed(cond_lbl)
+        self.emit(f"{cond_lbl}:")
         cond_reg, cond_type = self.gen_expr(node.condition)
         cond_i1 = self.bool_to_i1(cond_reg, cond_type)
         self.emit(f"  br i1 {cond_i1}, label %{body_lbl}, label %{end_lbl}")
@@ -6421,10 +6424,8 @@ class CodeGen:
                     # (float[][]) — homogeneous, no count, single type
                     elem_llvm = to_llvm_type(parts[0])
                 else:
-                    # mixed — index into elements
-                    elems = [t.strip() for t in inner.split(",")]
-                    if node.index < len(elems):
-                        elem_llvm = to_llvm_type(elems[node.index])
+                    # mixed (not allowed in Mocha)
+                    pass
 
         raw = self.fresh_temp()
         self.emit(f"  {raw} = call i8* @mocha_tuple_get(%MochaTuple* {tup_reg}, i32 {node.index})")
@@ -6432,6 +6433,9 @@ class CodeGen:
         # Unbox back to correct type
         # Pointer types: just bitcast from i8*
         # Value types: bitcast to ptr then load
+        if elem_llvm == "i8*":
+            # a str slot holds the string pointer itself (mocha_tuple_set stores it unboxed)
+            return (raw, "i8*")
         if elem_llvm.endswith("*"):
             box_ptr = self.fresh_temp()
             result  = self.fresh_temp()
@@ -7128,10 +7132,6 @@ class CodeGen:
             elif isinstance(node, MethodDecl):
                 ret_llvm = to_llvm_type(node.return_type)
                 self.method_return_types[node.name] = ret_llvm
-                self.method_params[node.name] = [
-                    (p.name, to_llvm_type(p.type), getattr(p, 'default', None))
-                    for p in node.params
-                ]
                 if node.has_didLoad:
                     entry_func = (node.name, node.params)
                     self.method_return_types[f"mocha_entry_{node.name}"] = ret_llvm

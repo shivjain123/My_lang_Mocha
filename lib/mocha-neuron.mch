@@ -1029,7 +1029,6 @@ class Gru {
     // @param dX: output, [seq_len x input_size], row k = gradient w.r.t input at step k
     function backward_steps(dH: Tensor, dX: Tensor, lr: float) -> null {
         this.t = this.t + 1;
-        this.t = this.t + 1;
         var beta1t: float = fast_pow(0.9, this.t);
         var beta2t: float = fast_pow(0.999, this.t);
         var combined: int = this.input_size + this.hidden_size;

@@ -81,6 +81,7 @@ extend CodeGen {
             case "Index2DAccess":  return this.genIndex2DAccess(node);
             case "ArrayLiteral":   return this.genArrayLiteral(node);
             case "TupleLiteral":   return this.genTupleLiteral(node);
+            case "TupleAccess":    return this.genTupleAccess(node);
             case "AllocArray":     return this.genAllocArray(node);
             case "RowSlice":       return this.genRowSlice(node);
             case "ColSlice":       return this.genColSlice(node);
@@ -634,30 +635,76 @@ extend CodeGen {
     function genIndexAccess(node: ASTNode) -> str {
         var obj_result: str = this.genExpr(node.left);
         var obj_reg:    str = this.exprReg(obj_result);
-        var obj_type:   str = this.exprType(obj_result);
         var idx_result: str = this.genExpr(node.right);
         var idx_reg:    str = this.exprReg(idx_result);
 
-        var mocha_type: str = this.getLocalMochaType(node.left.value);
-        var elem_mocha: str = this.extractElemMocha(mocha_type);
-        var elem_llvm:  str = this.toLLVMType(elem_mocha);
-        var elem_size:  int = this.llvmTypeSize(elem_llvm);
+        // element type from the variable, field, or nested index (default i32, as in Python)
+        var elem_llvm: str = "i32";
+        var arr_mocha: str = this.inferMochaType(node.left);
+        if (arr_mocha != "") {
+            elem_llvm = this.toLLVMType(this.extractElemMocha(arr_mocha));
+        };
 
+        var slot:   str = this.allocaAtEntry(elem_llvm);
         var cast:   str = this.freshTemp();
         var result: str = this.freshTemp();
-
-        this.emit("  " + cast + " = alloca " + elem_llvm);
+        this.emit("  " + cast + " = bitcast " + elem_llvm + "* " + slot + " to i8*");
         this.emit("  call void @mocha_array_get(%MochaArray* " + obj_reg + ", i32 " + idx_reg + ", i8* " + cast + ")");
-
-        // bitcast alloca ptr to elem type ptr, then load
-        var typed_ptr: str = this.freshTemp();
-        this.emit("  " + typed_ptr + " = bitcast " + elem_llvm + "* " + cast + " to i8*");
-        // actually we need to load from cast directly
-        this.emit("  " + result + " = load " + elem_llvm + ", " + elem_llvm + "* " + cast);
+        this.emit("  " + result + " = load " + elem_llvm + ", " + elem_llvm + "* " + slot);
         return this.exprResult(result, elem_llvm);
     };
 
     // extract element mocha type from array mocha type
+    // remove every "[]" from a type name: int[][] -> int
+    function stripArrayBrackets(t: str) -> str {
+        var res: str = "";
+        var i: int = 0;
+        while (i < t.length) {
+            var ch: str = t.charAt(i);
+            var skip: bool = false;
+            if (ch == "[") {
+                if (i + 1 < t.length) {
+                    if (t.charAt(i + 1) == "]") { skip = true; };
+                };
+            };
+            if (skip) {
+                i = i + 2;
+            } else {
+                res = res + ch;
+                i = i + 1;
+            };
+        };
+        return res;
+    };
+
+    // Mocha type of an expression: this, variable, field, or index (same rules as the Python codegen)
+    function inferMochaType(node: ASTNode) -> str {
+        if (node == null) { return ""; };
+        if (node.kind == "This") { return this.current_class; };
+        if (node.kind == "Identifier") {
+            if (node.value == "this") { return this.current_class; };
+            if (this.hasLocal(node.value)) { return this.getLocalMochaType(node.value); };
+            return "";
+        };
+        if (node.kind == "MemberAccess") {
+            var base_t: str = this.stripArrayBrackets(this.inferMochaType(node.left));
+            var ft: str = this.getFieldMochaType(base_t, node.value);
+            if (ft == "unknown") { return ""; };
+            return ft;
+        };
+        if (node.kind == "IndexAccess") {
+            return this.stripArrayBrackets(this.inferMochaType(node.left));
+        };
+        return "";
+    };
+
+    function getReturnType(name: str, node: ASTNode) -> str {
+        if (this.method_return_types.has(name) == false) {
+            mocha_error("MochaCodeGenError", "Unknown function or method '" + name + "' - did you forget to import a library?");
+            return "void";
+        };
+        var rt: str = this.method_return_types.get(name); this.keep.push(rt); return rt;
+    };
     function extractElemMocha(arr_mocha: str) -> str {
         if (arr_mocha.length < 3) { return "unknown"; };
         var last: str = arr_mocha.charAt(arr_mocha.length - 1);
@@ -817,23 +864,116 @@ extend CodeGen {
     // Tuple literal
     // --------------------------------------------------------
 
+    function trimSpaces(s: str) -> str {
+        var a: int = 0;
+        var b: int = s.length - 1;
+        while (a <= b && s.charAt(a) == " ") { a = a + 1; };
+        while (b >= a && s.charAt(b) == " ") { b = b - 1; };
+        if (a > b) { return ""; };
+        return s.substring(a, b);
+    };
+
+    function isAllDigits(s: str) -> bool {
+        if (s.length == 0) { return false; };
+        var digits: str = "0123456789";
+        var i: int = 0;
+        var ok_all: bool = true;
+        while (i < s.length) {
+            if (digits.contains(s.charAt(i)) == false) { ok_all = false; };
+            i = i + 1;
+        };
+        return ok_all;
+    };
+
+    // Mocha type of slot idx of a tuple type like "(int, str, float)" or "(float, 3)"
+    function tupleSlotType(mocha_tuple: str, idx: int) -> str {
+        if (mocha_tuple.length < 3) { return ""; };
+        if (mocha_tuple.charAt(0) != "(") { return ""; };
+        var inner: str = mocha_tuple.substring(1, mocha_tuple.length - 2);
+        var raw:  str[] = splitComma(inner);
+        var toks: str[] = [];
+        var i: int = 0;
+        while (i < raw.length) {
+            toks.push(this.trimSpaces(raw[i]));
+            i = i + 1;
+        };
+        if (toks.length == 0) { return ""; };
+        if (toks.length == 1) { return toks[0]; };
+        if (toks.length == 2) {
+            if (this.isAllDigits(toks[1])) { return toks[0]; };
+        };
+        if (idx < toks.length) { return toks[idx]; };
+        return "";
+    };
+
+    function genTupleAccess(node: ASTNode) -> str {
+        var tup_result: str = this.genExpr(node.left);
+        var tup_reg:    str = this.exprReg(tup_result);
+        var tup_mocha:  str = this.inferMochaType(node.left);
+        if (tup_mocha == "") {
+            if (node.left.kind == "Identifier") {
+                if (this.global_mocha_types.has(node.left.value)) {
+                    tup_mocha = this.global_mocha_types.get(node.left.value); this.keep.push(tup_mocha);
+                };
+            };
+        };
+        var elem_llvm: str = "i32";
+        var slot_t: str = this.tupleSlotType(tup_mocha, node.int_val);
+        if (slot_t != "") { elem_llvm = this.toLLVMType(slot_t); };
+
+        var raw: str = this.freshTemp();
+        this.emit("  " + raw + " = call i8* @mocha_tuple_get(%MochaTuple* " + tup_reg + ", i32 " + str(node.int_val) + ")");
+        if (elem_llvm == "i8*") {
+            return this.exprResult(raw, "i8*");
+        };
+        var ptr:    str = this.freshTemp();
+        var result: str = this.freshTemp();
+        this.emit("  " + ptr + " = bitcast i8* " + raw + " to " + elem_llvm + "*");
+        this.emit("  " + result + " = load " + elem_llvm + ", " + elem_llvm + "* " + ptr);
+        return this.exprResult(result, elem_llvm);
+    };
     function genTupleLiteral(node: ASTNode) -> str {
         var count: int = node.children.length;
-        var tup:   str = this.freshTemp();
-        this.emit("  " + tup + " = call %MochaTuple* @mocha_tuple_new(i32 " + str(count) + ")");
+        // evaluate every element first: the slot kind depends on the first element's type
+        var regs: str[] = [];
+        var typs: str[] = [];
         var i: int = 0;
-        while (i < node.children.length) {
-            var er:  str = this.genExpr(node.children[i]);
-            var reg: str = this.exprReg(er);
-            var typ: str = this.exprType(er);
-            var cast: str = this.freshTemp();
+        while (i < count) {
+            var er: str = this.genExpr(node.children[i]);
+            regs.push(this.exprReg(er));
+            typs.push(this.exprType(er));
+            i = i + 1;
+        };
+
+        var is_ptr: int = 0;
+        if (count > 0) {
+            if (typs[0] == "i8*") { is_ptr = 1; };
+        };
+        var wide: bool = false;
+        var ex: str = this.expected_assign_type;
+        if (ex.length >= 5) {
+            if (ex.substring(0, 4) == "(vast") { wide = true; };
+        };
+
+        var tup: str = this.freshTemp();
+        this.emit("  " + tup + " = call %MochaTuple* @mocha_tuple_new(i32 " + str(count) + ", i32 " + str(is_ptr) + ")");
+        i = 0;
+        while (i < count) {
+            var reg: str = regs[i];
+            var typ: str = typs[i];
+            if (typ == "i32" && wide) {
+                var wreg: str = this.freshTemp();
+                this.emit("  " + wreg + " = sext i32 " + reg + " to i64");
+                reg = wreg;
+                typ = "i64";
+            };
             if (typ == "i8*") {
+                if (node.children[i].kind == "Identifier") {
+                    this.emit("  call void @rc_retain(i8* " + reg + ")");
+                };
                 this.emit("  call void @mocha_tuple_set(%MochaTuple* " + tup + ", i32 " + str(i) + ", i8* " + reg + ")");
             } else {
-                var alloca: str = this.freshTemp();
-                this.emit("  " + alloca + " = alloca " + typ);
-                this.emit("  store " + typ + " " + reg + ", " + typ + "* " + alloca);
-                this.emit("  " + cast + " = bitcast " + typ + "* " + alloca + " to i8*");
+                var cast: str = this.boxValue(reg, typ);
                 this.emit("  call void @mocha_tuple_set(%MochaTuple* " + tup + ", i32 " + str(i) + ", i8* " + cast + ")");
             };
             i = i + 1;

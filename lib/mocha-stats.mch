@@ -604,6 +604,162 @@ function hamming(a: str, b: str) -> int {
     return count;
 };
 
+function mahalanobis(a: float[], b: float[], vi: float[][]) -> float {
+    if (a.length != b.length) {
+        c_print_err("MochaLibError (mocha-stats): mahalanobis() requires arrays of equal length.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (a.length == 0) {
+        c_print_err("MochaLibError (mocha-stats): mahalanobis() called on empty arrays.");
+        c_exit(2);
+        return 0.0;
+    };
+    var n: int = a.length;
+    if (vi.length != n) {
+        c_print_err("MochaLibError (mocha-stats): mahalanobis() inverse covariance matrix must be n x n, with n the array length.");
+        c_exit(2);
+        return 0.0;
+    };
+    var r: int = 0;
+    while (r < n) {
+        if (vi[r].length != n) {
+            c_print_err("MochaLibError (mocha-stats): mahalanobis() inverse covariance matrix must be n x n, with n the array length.");
+            c_exit(2);
+            return 0.0;
+        };
+        r++;
+    };
+    var quad: float = 0.0;
+    var i: int = 0;
+    while (i < n) {
+        var row_sum: float = 0.0;
+        var j: int = 0;
+        while (j < n) {
+            row_sum = row_sum + vi[i][j] * (a[j] - b[j]);
+            j++;
+        };
+        quad = quad + (a[i] - b[i]) * row_sum;
+        i++;
+    };
+    if (quad < 0.0) {
+        if (quad > 0.0 - 0.000000001) {
+            quad = 0.0;
+        } else {
+            c_print_err("MochaLibError (mocha-stats): mahalanobis() inverse covariance matrix is not positive semi-definite.");
+            c_exit(2);
+            return 0.0;
+        };
+    };
+    return quad.sqrt().real;
+};
+
+function mahalanobis_data(x: float[], data: float[][]) -> float {
+    var d: int = x.length;
+    var n: int = data.length;
+    if (d == 0) {
+        c_print_err("MochaLibError (mocha-stats): mahalanobis_data() called on an empty point.");
+        c_exit(2);
+        return 0.0;
+    };
+    if (n <= d) {
+        c_print_err("MochaLibError (mocha-stats): mahalanobis_data() needs more observations (rows) than variables (columns).");
+        c_exit(2);
+        return 0.0;
+    };
+    var r: int = 0;
+    while (r < n) {
+        if (data[r].length != d) {
+            c_print_err("MochaLibError (mocha-stats): mahalanobis_data() every row of data must have the same length as the point.");
+            c_exit(2);
+            return 0.0;
+        };
+        r++;
+    };
+
+    // column means
+    var mu: float[] = [];
+    var c: int = 0;
+    while (c < d) {
+        var s: float = 0.0;
+        var k: int = 0;
+        while (k < n) {
+            s = s + data[k][c];
+            k++;
+        };
+        mu.push(s / float(n));
+        c++;
+    };
+
+    // sample covariance (divides by n - 1, like numpy.cov), lower triangle only
+    var cov: float[][] = alloc float[d][d];
+    var i: int = 0;
+    while (i < d) {
+        var j: int = 0;
+        while (j <= i) {
+            var acc: float = 0.0;
+            var k2: int = 0;
+            while (k2 < n) {
+                acc = acc + (data[k2][i] - mu[i]) * (data[k2][j] - mu[j]);
+                k2++;
+            };
+            cov[i][j] = acc / float(n - 1);
+            j++;
+        };
+        i++;
+    };
+
+    // Cholesky factor: cov = L * L^T
+    var chol: float[][] = alloc float[d][d];
+    var p: int = 0;
+    while (p < d) {
+        if (cov[p][p] <= 0.0) {
+            c_print_err("MochaLibError (mocha-stats): mahalanobis_data() a column of data has zero variance.");
+            c_exit(2);
+            return 0.0;
+        };
+        var q: int = 0;
+        while (q <= p) {
+            var sum: float = cov[p][q];
+            var m: int = 0;
+            while (m < q) {
+                sum = sum - chol[p][m] * chol[q][m];
+                m++;
+            };
+            if (p == q) {
+                if (sum <= 0.0000000001 * cov[p][p]) {
+                    c_print_err("MochaLibError (mocha-stats): mahalanobis_data() covariance matrix is singular or nearly singular (collinear columns).");
+                    c_exit(2);
+                    return 0.0;
+                };
+                chol[p][p] = sum.sqrt().real;
+            } else {
+                chol[p][q] = sum / chol[q][q];
+            };
+            q++;
+        };
+        p++;
+    };
+
+    // solve L * y = (x - mean) by forward substitution, distance = norm of y
+    var y: float[] = [];
+    var dist2: float = 0.0;
+    var t: int = 0;
+    while (t < d) {
+        var rhs: float = x[t] - mu[t];
+        var u: int = 0;
+        while (u < t) {
+            rhs = rhs - chol[t][u] * y[u];
+            u++;
+        };
+        var yt: float = rhs / chol[t][t];
+        y.push(yt);
+        dist2 = dist2 + yt * yt;
+        t++;
+    };
+    return dist2.sqrt().real;
+};
+
 class NormalDist {
     var mean_val: float;
     var std_val: float;

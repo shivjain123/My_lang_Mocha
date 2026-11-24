@@ -10,13 +10,16 @@ extend CodeGen {
     // --------------------------------------------------------
 
     function boxValue(val_reg: str, val_type: str) -> str {
-        if (val_type == "i8*") { return val_reg; };
-        var slot: str = this.freshTemp();
+        var bsize: int = 8;
+        if (val_type == "i32") { bsize = 4; };
+        if (val_type == "i8")  { bsize = 1; };
+        if (val_type == "i1")  { bsize = 1; };
+        var ptr:  str = this.freshTemp();
         var cast: str = this.freshTemp();
-        this.emit("  " + slot + " = alloca " + val_type);
-        this.emit("  store " + val_type + " " + val_reg + ", " + val_type + "* " + slot);
-        this.emit("  " + cast + " = bitcast " + val_type + "* " + slot + " to i8*");
-        return cast;
+        this.emit("  " + ptr + " = call i8* @malloc(i64 " + str(bsize) + ")");
+        this.emit("  " + cast + " = bitcast i8* " + ptr + " to " + val_type + "*");
+        this.emit("  store " + val_type + " " + val_reg + ", " + val_type + "* " + cast);
+        return ptr;
     };
 
     // --------------------------------------------------------
@@ -285,10 +288,7 @@ extend CodeGen {
     function genStructMethodCall(obj_reg: str, obj_type: str, member: str, node: ASTNode) -> str {
         var class_name: str = this.inferClassName(obj_type);
         var mangled:    str = class_name + "_" + member;
-        var ret_type:   str = "i32";
-        if (this.method_return_types.has(mangled)) {
-            ret_type = this.method_return_types.get(mangled); this.keep.push(ret_type);
-        };
+        var ret_type: str = this.getReturnType(mangled, node); this.keep.push(ret_type);
         var args: str[] = this.collectArgs(node);
         var arg_str: str = obj_type + " " + obj_reg;
         var i: int = 0;
@@ -680,14 +680,20 @@ extend CodeGen {
         };
 
         var ret_type: str = "i32";
+        var found_ret: bool = false;
         if (this.method_return_types.has(func_name)) {
-            ret_type = this.method_return_types.get(func_name); this.keep.push(ret_type);
+            ret_type = this.getReturnType(func_name, node); this.keep.push(ret_type);
+            found_ret = true;
         } else if (this.current_class != "") {
             var mangled: str = this.current_class + "_" + func_name;
             if (this.method_return_types.has(mangled)) {
-                ret_type  = this.method_return_types.get(mangled); this.keep.push(ret_type);
+                ret_type  = this.getReturnType(mangled, node); this.keep.push(ret_type);
                 func_name = mangled;
+                found_ret = true;
             };
+        };
+        if (found_ret == false) {
+            ret_type = this.getReturnType(func_name, node);
         };
 
         if (ret_type == "void") {

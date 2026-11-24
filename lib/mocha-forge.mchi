@@ -220,6 +220,8 @@ class Svm function kernel(a: float[], b: float[], n_feat: int) -> float;
 class Svm function fit(x: float[][], y: int[]) -> null;
 class Svm function fit_linear(x: float[][], y: int[]) -> null;
 class Svm function fit_rbf(x: float[][], y: int[]) -> null;
+class Svm function smo_step(i: int, j: int, ei: float) -> int;
+class Svm function smo_rescue(n: int) -> int;
 class Svm function decision_rbf(idx: int) -> float;
 class Svm function predict(x: float[][]) -> int[];
 class Svm function predict_linear(x: float[][]) -> int[];

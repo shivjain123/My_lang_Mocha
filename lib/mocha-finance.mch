@@ -15,7 +15,7 @@
 // Part of the Mocha Scientific Library Ecosystem
 // License: Apache 2.0
 
-// mocha-lib-deps: mocha-math
+// mocha-lib-deps: mocha-math, mocha-stats
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;

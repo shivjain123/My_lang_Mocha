@@ -42,6 +42,8 @@ function minkowski(a: float[], b: float[], p: float) -> float;
 function cosine(a: float[], b: float[]) -> float;
 function haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float;
 function hamming(a: str, b: str) -> int;
+function mahalanobis(a: float[], b: float[], vi: float[][]) -> float;
+function mahalanobis_data(x: float[], data: float[][]) -> float;
 class NormalDist;
 class NormalDist field mean_val: float;
 class NormalDist field std_val: float;

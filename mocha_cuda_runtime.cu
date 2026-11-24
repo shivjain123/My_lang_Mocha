@@ -546,7 +546,8 @@ extern "C" double mocha_tensor_ce_loss(MochaTensor* out, MochaTensor* labels) {
     float h_loss = 0.0f;
     cudaMemcpy(&h_loss, d_loss, sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(d_loss);
-    return (double)h_loss;
+    // kernel averages over every cell; multiply by cols to get the mean over rows (standard cross-entropy)
+    return (double)h_loss * (double)out->cols;
 }
 
 /* ── Adam optimizer update ────────────────────────────────────────────────── */
@@ -890,7 +891,7 @@ __global__ void kernel_layer_norm_grad(float* dout, float* x, float* gamma,
 
     for (int j = 0; j < cols; j++) {
         dxr[j] = doutr[j] * gamma[j] / std
-               + dstd  * 2.0f * (xr[j] - mean) / cols
+               + dstd  * (xr[j] - mean) / (cols * std)
                + dmean / cols;
     };
 }

@@ -3,7 +3,7 @@
 
 // mocha-lib-type: compiled
 
-// mocha-lib-deps: mocha-math
+// mocha-lib-deps: mocha-math, mocha-stats
 
 local function c_print_err(msg: str) -> null;
 local function c_exit(code: int) -> null;
