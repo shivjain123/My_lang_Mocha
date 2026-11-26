@@ -5,8 +5,8 @@
 
 // mocha-lib-deps: mocha-math
 
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
+local function c_print_err(msg: str) -> null;
+local function c_exit(code: int) -> null;
 const NUM: int = 0;
 const VAR: int = 1;
 const ADD: int = 2;
@@ -68,9 +68,11 @@ function sym_simplify_fix(prev: Expr, next: Expr) -> Expr;
 function sym_simplify_full(e: Expr) -> Expr;
 function sym_diff(e: Expr, var_name: str) -> Expr;
 function sym_eval(e: Expr, var_name: str, val: float) -> float;
+function sym_has_var(e: Expr, var_name: str) -> bool;
 function linear_coeff(e: Expr, var_name: str) -> float;
 function sym_antidv(e: Expr, var_name: str) -> Expr;
 function sym_print_antidv(e: Expr, var_name: str) -> str;
+function sym_antidv_valid(f: Expr, anti: Expr, var_name: str, a: float, b: float) -> bool;
 function sym_integral(e: Expr, var_name: str, a: float, b: float) -> float;
 function sym_has_div(e: Expr) -> bool;
 function sym_lhopital(orig: Expr, lh_num: Expr, lh_den: Expr, var_name: str, point: float, iter: int) -> float;

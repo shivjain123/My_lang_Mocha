@@ -1,33 +1,91 @@
 // mocha-lib-deps: mocha-math
+
 """
-mocha-matvec — Vector and Matrix operations for Mocha
-Extends int[], float[], int[][], float[][] with mathematical operations.
+mocha-matvec v0.6 — Vector and Matrix Operations for Mocha
 
-Operations:
-  .scalar(n)        — multiply every element by n
-  .vector(arr)      — dot product (1D) / matrix multiply (2D)
-  .hadamard(arr)    — element-wise multiplication
-  .add(arr)         — element-wise addition
-  .sub(arr)         — element-wise subtraction
-  .magn()           — magnitude / norm (always float)
-  .transpose()      — rows <-> cols (2D only)
-  .trace()          — sum of diagonal (2D only)
-  .det()            — determinant (2D only, float)
-  .rank()           — rank of matrix (2D only, int)
-  .svd()
-  .singular_values()
+Extends int[], float[], int[][] and float[][] with linear algebra operations.
 
-Free functions:
-  complex_dot(a, b)   — dot product of two Complex vectors (no conjugation)
-  complex_norm(v)     — magnitude of a Complex vector
+Section 1: Vectors (int[], float[])
+  .scalar(n)          multiply every element by n
+  .vector(v)          dot product
+  .hadamard(v)        element-wise multiplication
+  .add(v) / .sub(v)   element-wise addition / subtraction
+  .magn()             magnitude (norm), always float
+  .unit_vector()      the vector scaled to length 1, always float[]
 
-v0.4 changes:
-  - complex_dot() and complex_norm() are now public (previously internal-only)
-  - Both dropped their old 'n: int' length parameter — length is now read
-    from the array itself. If you were calling these directly before,
-    drop the third argument: complex_dot(a, b, n) -> complex_dot(a, b)
-  - newton_sqrt() is now local (internal-only) — was never documented,
-    no public behavior change
+Section 2: Complex Vector Helpers (free functions)
+  complex_dot(a, b)   dot product of two Complex vectors (no conjugation)
+  complex_norm(v)     magnitude of a Complex vector
+
+Section 3: Matrices (int[][], float[][])
+  .scalar(n)          multiply every element by n
+  .vector(m)          matrix multiplication
+  .hadamard(m)        element-wise multiplication
+  .add(m) / .sub(m)   element-wise addition / subtraction
+  .transpose()        rows <-> cols
+  .trace()            sum of the diagonal
+  .rank()             rank of the matrix (int)
+
+Section 4: Determinant, Inverse & Linear Systems
+  .det()              determinant (float)
+  .minor(i, j)        the matrix with row i and column j removed
+  .cofactor()         cofactor matrix (float[][])
+  .inverse()          inverse matrix (float[][])
+  .solve(b)           solves A x = b by Gaussian elimination with
+                      partial pivoting (float[][] only, returns float[])
+
+Section 5: Eigen Decomposition
+  .eigenvalues()           Complex[]; complex roots come out correctly
+  .eigenvectors()          Complex[][]; each COLUMN is one normalised
+                           eigenvector; errors on defective matrices
+  .eigenvectors_relaxed()  same, without the defective check (float[][] only)
+  .diagonalise()           Complex[][] diagonal matrix of the eigenvalues
+  eigenvalues() picks its method by size: 1x1 direct, 2x2 quadratic formula,
+  3x3 Cardano / trigonometric, larger via shifted QR iteration.
+  eigenvalues_2x2(), eigenvalues_3x3() and eigenvalues_qr() can also be
+  called directly on float[][].
+
+Section 6: Singular Value Decomposition
+  .svd()              returns (U, Sigma, V), all float[][]. The third item is
+                      V itself (its COLUMNS are the right singular vectors),
+                      not V transposed. To rebuild A: U * Sigma * V.transpose()
+  .svd_thin()         float[][] only; returns (Sigma, Vt), where Sigma is
+                      k x k and Vt is V transposed (what PCA wants)
+  .singular_values()  the non-zero singular values, largest first
+
+Notes:
+  - int[][] methods that need real arithmetic (rank, cofactor, inverse, the
+    eigen functions, svd) convert to float[][] and delegate.
+  - det(), cofactor() and inverse() use cofactor expansion, which grows
+    factorially with matrix size. Fine for small matrices; use solve() for
+    larger linear systems.
+  - inverse() only rejects an exactly zero determinant; solve() rejects a
+    pivot smaller than 1e-12. rank() tests pivots against exactly zero.
+  - SVD uses the eigendecomposition of A^T A (symmetric, so its eigenvalues
+    are real).
+
+Changes:
+  v0.4
+    - complex_dot() and complex_norm() are now public (previously
+      internal-only). Both dropped their old 'n: int' length parameter,
+      since length is read from the array itself. If you were calling these
+      directly before, drop the third argument:
+      complex_dot(a, b, n) -> complex_dot(a, b)
+    - newton_sqrt() is now local (internal-only); it was never documented,
+      so no public behaviour change.
+  Earlier (complex matrix operations)
+    - eigenvalues() returns Complex[] (handles complex roots correctly)
+    - eigenvectors() returns Complex[][] (each column is one eigenvector)
+    - diagonalise() returns Complex[][] (diagonal entries are Complex)
+    - SVD stays float[][] (A^T A is symmetric, eigenvalues guaranteed real)
+    - defective matrices are detected and error loudly instead of silently
+      returning corrupted eigenvectors
+    - fixed free-column detection in null-space extraction
+    - fixed V column indexing in SVD
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
 """
 
 // ============================================================
@@ -194,20 +252,6 @@ extend float[] {
         return result;
     };
 };
-
-"""
-mocha-matvec v3 — Complex Matrix Operations
-Changes from v2:
-  - eigenvalues()   now returns Complex[] (handles complex roots correctly)
-  - eigenvectors()  now returns Complex[][] (each column is one eigenvector)
-  - diagonalise()   now returns Complex[][] (diagonal entries are Complex)
-  - SVD stays float[][] (AᵀA is symmetric, eigenvalues guaranteed real)
-  - Defective matrix detection: errors loudly instead of silently corrupting
-  - Fixed free-column detection in null space extraction
-  - Fixed V column indexing in SVD
-
-Dependencies: mocha-math (already a dep of mocha-matvec)
-"""
 
 local function newton_sqrt(x: float) -> float {
     if (x <= 0.0) { return 0.0; };

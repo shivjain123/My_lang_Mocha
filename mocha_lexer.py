@@ -441,7 +441,7 @@ class Lexer:
             if self.current() == "\\":
                 self.advance()
                 esc = self.advance()
-                result += {"n": "\n", "t": "\t", '"': '"',
+                result += {"n": "\n", "t": "\t", "r": "\r", '"': '"',
                            "\\": "\\"}.get(esc, "\\" + esc)
             else:
                 result += self.advance()

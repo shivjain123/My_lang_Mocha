@@ -15,7 +15,7 @@ function mse_of(net: Network, x: Tensor, ys: float[]) -> float {
 };
 
 function main(didLoad) -> null {
-    var r: File = open("diabetes.csv", "read");
+    var r: File = open("diabetes_progression.csv", "read");
     var raw: float[] = [];
     var n: int = 0;
     while (!r.eof()) {

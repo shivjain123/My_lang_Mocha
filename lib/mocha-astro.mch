@@ -1,18 +1,35 @@
-"""
- mocha-astro — Vedic Astrology (Jyotish) Computation Library for Mocha
-
- NOTE ON PRECISION: This library uses mean orbital elements and linear
- ayanamsa models (the same approach as Meeus's "Astronomical Algorithms"
- and most pre-2000 astrology software), not VSOP87/JPL-grade numerical
- ephemerides. Expect arcminute-level accuracy — sufficient for dasha,
- varga, and aspect work, but not observatory-grade. Ayanamsa constants
- are approximate mean models; exact values from Swiss Ephemeris-based
- software may differ by a few arcminutes due to periodic correction terms.
-
- Part of the Mocha Scientific Library Ecosystem
- License: Apache 2.0
-"""
 // mocha-lib-deps: mocha-math
+
+"""
+mocha-astro v0.2 — Vedic Astrology (Jyotish) Computation Library for Mocha
+
+Section 1: Ayanamsa & Sidereal Foundations (Julian day, Lahiri / Raman / KP /
+           Fagan-Bradley ayanamsa, tropical <-> sidereal conversion)
+Section 2: Planetary Positions (Sun, Moon, Mercury to Pluto, Rahu / Ketu,
+           Kepler solver)
+Section 3: House Systems (sidereal time, MC, Ascendant, equal house, whole
+           sign, Placidus cusps)
+Section 4: Vedic Aspects & Planetary Relationships (drishti, combustion)
+Section 5: Vimshottari Dasha (DashaLord tag, birth balance, antardasha)
+Section 6: Divisional Charts D2 to D16 (Hora, Drekkana, Chaturthamsa,
+           Saptamsa, Navamsa, Dasamsa, Dwadasamsa, Shodasamsa)
+Section 7: Transits (Gochara from Moon or Ascendant, Sade Sati, orb checks)
+
+Notes: Positions use mean orbital elements and linear ayanamsa models, in the
+style of Meeus, not VSOP87 or JPL ephemerides, so expect arcminute-level
+accuracy: enough for dasha, varga and aspect work, not observatory grade.
+Ayanamsa values are approximate and may differ from Swiss Ephemeris by a few
+arcminutes. Angles are in degrees, and planets are treated as coplanar with
+the ecliptic, which is weakest for Pluto. Ayanamsa functions are valid for
+roughly 1800-2200 (Fagan-Bradley 1650-2150), and Placidus stops working
+beyond 66 degrees latitude. Divisional chart functions return a sign index
+(0-11, 0 = Aries). Aspects count houses by whole sign, and Rahu / Ketu use the
+Jupiter aspect convention. Invalid input stops with a MochaLibError.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
@@ -32,6 +49,10 @@ const RAMAN_OFFSET: float = 1.4463;
 ~~ Standard astronomical algorithm (Meeus). Reference: JD(2000-01-01 12:00 UT) = 2451545.0.
 ~~ Requires month in [1, 12], day in [1, 31], hour in [0, 24).
 function julian_day_number(year: int, month: int, day: int, hour: float) -> float {
+    if (year < 1582 || (year == 1582 && (month < 10 || (month == 10 && day < 15)))) {
+        c_print_err("MochaLibError (mocha-astro): Gregorian calendar only — date must be 1582-10-15 or later.");
+        c_exit(2);
+    };
     if (month < 1 || month > 12) {
         c_print_err("MochaLibError (mocha-astro): Month must be in [1, 12].");
         c_exit(2);
@@ -412,6 +433,7 @@ function mercury_ecliptic_longitude(t: float) -> float {
     var nu: float = true_anomaly_from_eccentric(ecc_anom, ECC);
     var r: float = heliocentric_distance(A, ecc_anom, ECC);
     var helio_lon: float = heliocentric_longitude(nu, PERI);
+    helio_lon = normalize_degrees(helio_lon + 1.396971 * t);
 
     var sun_lon: float = sun_ecliptic_longitude(t);
     var earth_lon: float = normalize_degrees(sun_lon + 180.0);
@@ -642,10 +664,7 @@ function pluto_ecliptic_longitude(t: float) -> float {
 // ================================================================
 // SECTION 3: HOUSE SYSTEMS
 // ================================================================
-// IMPORTANT: In all quadrant house systems (Placidus included), house
-// number DECREASES as ecliptic longitude increases — this is a real,
-// verified property of the geometry (houses represent the sky's fast
-// diurnal rotation, not the slow zodiacal direction), not a typo.
+// House numbers increase with ecliptic longitude: MC (10), 11, 12, Ascendant (1)
 
 ~~ Local Sidereal Time in degrees from Julian Day and observer's longitude (east positive, west negative).
 ~~ LST = GMST(JD) + longitude. Uses standard Meeus GMST formula. Requires jd > 0.
@@ -698,8 +717,8 @@ function ascendant_longitude(lst_deg: float, latitude_deg: float, obliquity_deg:
     var cos_obl: float = obliquity_deg.cos(DEG);
     var sin_obl: float = obliquity_deg.sin(DEG);
     var tan_lat: float = latitude_deg.tan(DEG);
-    var y: float = -cos_lst;
-    var x: float = sin_lst * cos_obl + tan_lat * sin_obl;
+    var y: float = cos_lst;
+    var x: float = -(sin_lst * cos_obl + tan_lat * sin_obl);
     return atan2_degrees(y, x);
 };
 
@@ -754,7 +773,7 @@ function semi_diurnal_arc(declination_deg: float, latitude_deg: float) -> float 
 
 ~~ General Placidus intermediate cusp solver via semi-arc trisection (iterative fixed-point method).
 ~~ ramc_deg = right ascension of MC (= LST), latitude_deg in (-66, 66) for Placidus validity,
-~~ obliquity_deg in [20, 30), fraction in (0, 1), sign = -1.0 (Asc-MC quadrant) or +1.0 (MC-Desc quadrant).
+~~ obliquity_deg in [20, 30), fraction in (0, 1), sign = +1.0 (MC-Asc quadrant) or -1.0 (Desc-MC quadrant).
 ~~ Errors if iteration does not converge in 25 steps.
 function placidus_intermediate_cusp(ramc_deg: float, latitude_deg: float, obliquity_deg: float, fraction: float, sign: float) -> float {
     if (latitude_deg <= -66.0 || latitude_deg >= 66.0) {
@@ -804,22 +823,22 @@ function placidus_intermediate_cusp(ramc_deg: float, latitude_deg: float, obliqu
 
 ~~ Placidus house 11 cusp.
 function placidus_cusp_11(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
-    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 1.0 / 3.0, -1.0);
+    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 1.0 / 3.0, 1.0);
 };
 
 ~~ Placidus house 12 cusp.
 function placidus_cusp_12(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
-    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 2.0 / 3.0, -1.0);
+    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 2.0 / 3.0, 1.0);
 };
 
 ~~ Placidus house 9 cusp.
 function placidus_cusp_9(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
-    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 1.0 / 3.0, 1.0);
+    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 1.0 / 3.0, -1.0);
 };
 
 ~~ Placidus house 8 cusp.
 function placidus_cusp_8(ramc_deg: float, latitude_deg: float, obliquity_deg: float) -> float {
-    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 2.0 / 3.0, 1.0);
+    return placidus_intermediate_cusp(ramc_deg, latitude_deg, obliquity_deg, 2.0 / 3.0, -1.0);
 };
 
 ~~ Placidus house 2 cusp — point opposite house 8.

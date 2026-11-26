@@ -33,6 +33,7 @@ class Stopwatch field running: int;
 class Stopwatch field has_result: int;
 class Stopwatch field use_wall: int;
 // ctor Stopwatch ()
+class Stopwatch function switch_clock(mode: int) -> null;
 class Stopwatch function use_cpu_time() -> null;
 class Stopwatch function use_wall_time() -> null;
 class Stopwatch function begin() -> null;

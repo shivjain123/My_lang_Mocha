@@ -285,7 +285,7 @@ class CodeGen:
             if ch == '\\': escaped += '\\5C'
             elif ch == '"': escaped += '\\22'
             elif ch == '\n': escaped += '\\0A'
-            elif ch == '\t': escaped += '\\09'
+            elif ch in '\t\r': escaped += '\\09' if ch == '\t' else '\\0D'
             elif ord(ch) < 128: escaped += ch
             else:
                 for byte in ch.encode('utf-8'):

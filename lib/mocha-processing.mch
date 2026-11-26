@@ -1,11 +1,27 @@
 // mocha-lib-deps: mocha-stats, mocha-matvec
 
 """
-mocha-processing — Functional Utilities & Data Preprocessing Library for Mocha
-Functions: filter/map/reduce (int, float, str variants)
-Classes: StandardScaler, MinMaxScaler, RobustScaler, PCAReducer
+mocha-processing v0.2 — Functional Utilities & Data Preprocessing Library for Mocha
+
+Section 1: Functional Utilities (filter, map, reduce, with Float and Str variants)
+Section 2: Scalers (StandardScaler, MinMaxScaler, RobustScaler)
+Section 3: Dimensionality Reduction (PCAReducer)
+
+Notes: The functional helpers take a lambda, and the plain versions work on
+int[] (filterFloat, mapStr and so on for the other types). Scalers work on a
+single float[] column, so scale each feature separately. They stop with a
+MochaLibError if used before fit() or if the spread is zero (std, range or IQR).
+PCAReducer takes float[][] with one row per sample, centres the data, and
+uses svd_thin() from mocha-matvec. It needs at least 2 samples, and
+n_components must be between 1 and min(n_samples, n_features).
+explained_variance_ratio() is relative to the total variance of all components,
+and n_components_for_variance(0.95) tells you how many components reach that share.
+
 Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
 """
+
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
 
@@ -263,12 +279,12 @@ class PCAReducer {
         this.n_samples = n;
         this.n_features = p;
         if (n < 2) {
-            c_print_err("MochaForgeError (PCAReducer): fit needs at least 2 samples.");
+            c_print_err("MochaForgeError (mocha-processing): fit needs at least 2 samples.");
             c_exit(2);
             return;
         };
         if (this.n_components < 1 || this.n_components > p || this.n_components > n) {
-            c_print_err("MochaForgeError (PCAReducer): n_components must be between 1 and min(n_samples, n_features).");
+            c_print_err("MochaForgeError (mocha-processing): n_components must be between 1 and min(n_samples, n_features).");
             c_exit(2);
             return;
         };
@@ -356,7 +372,7 @@ class PCAReducer {
     // ─────────────────────────────────────────
     function transform(data: float[][]) -> float[][] {
         if (this.fitted == 0) {
-            c_print_err("MochaForgeError (PCAReducer): transform called before fit.");
+            c_print_err("MochaForgeError (mocha-processing): transform called before fit.");
             c_exit(2);
             return alloc float[0][0];
         };
@@ -405,7 +421,7 @@ class PCAReducer {
     // ─────────────────────────────────────────
     function inverse_transform(data: float[][]) -> float[][] {
         if (this.fitted == 0) {
-            c_print_err("MochaForgeError (PCAReducer): inverse_transform called before fit.");
+            c_print_err("MochaForgeError (mocha-processing): inverse_transform called before fit.");
             c_exit(2);
             return alloc float[0][0];
         };
@@ -438,7 +454,7 @@ class PCAReducer {
     // ─────────────────────────────────────────
     function explained_variance_ratio() -> float[] {
         if (this.fitted == 0) {
-            c_print_err("MochaForgeError (PCAReducer): explained_variance_ratio called before fit.");
+            c_print_err("MochaForgeError (mocha-processing): explained_variance_ratio called before fit.");
             c_exit(2);
             return [];
         };
@@ -461,12 +477,12 @@ class PCAReducer {
     // ─────────────────────────────────────────
     function n_components_for_variance(threshold: float) -> int {
         if (this.fitted == 0) {
-            c_print_err("MochaForgeError (PCAReducer): n_components_for_variance called before fit.");
+            c_print_err("MochaForgeError (mocha-processing): n_components_for_variance called before fit.");
             c_exit(2);
             return 0;
         };
         if (threshold <= 0.0 || threshold > 1.0) {
-            c_print_err("MochaForgeError (PCAReducer): n_components_for_variance threshold must be in (0, 1].");
+            c_print_err("MochaForgeError (mocha-processing): n_components_for_variance threshold must be in (0, 1].");
             c_exit(2);
             return 0;
         };
@@ -485,7 +501,7 @@ class PCAReducer {
             // all components kept: the total is 1.0 up to rounding
             return k;
         };
-        c_print_err("MochaForgeError (PCAReducer): the kept components do not reach this variance threshold. Fit with more components.");
+        c_print_err("MochaForgeError (mocha-processing): the kept components do not reach this variance threshold. Fit with more components.");
         c_exit(2);
         return 0;
     };

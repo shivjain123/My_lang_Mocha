@@ -1,7 +1,37 @@
 """
-   mocha-ink v0.1 — Mocha SVG Visualization Library
-   Save as: lib/mocha-ink.mch
-   Compile with: mocha --lib lib/mocha-ink.mch
+mocha-ink v0.2 — SVG Visualization Library for Mocha
+
+Section 1:  Constructors (line, scatter, bar, heatmap, pie, histogram, boxplot,
+            violin, area, bubble, curve, errorplot, lmplot, network, sankey,
+            skewt)
+Section 2:  LinePlot and ScatterPlot (extra lines or points on the same axes)
+Section 3:  BarChart (multiple series, horizontal)
+Section 4:  Heatmap (row / column labels, three colour schemes)
+Section 5:  PieChart (percent and value labels, per-slice colours)
+Section 6:  Histogram (bins, density, normal curve overlay)
+Section 7:  BoxPlot and ViolinPlot (multiple groups, horizontal, confidence
+            notches, KDE bandwidth)
+Section 8:  AreaChart and BubbleChart (layered areas, size by radius or area)
+Section 9:  CurvePlot and ErrorPlot (KDE curve with fill, symmetric or
+            asymmetric error bars)
+Section 10: LMPlot (scatter with regression line and confidence band)
+Section 11: NetworkChart and SankeyChart (nodes, edges, weights, flows)
+Section 12: SkewTPlot (Skew-T log-p sounding with adiabat and mixing ratio
+            overlays)
+
+Notes: Every plot is an opaque handle that builds an SVG, backed by native
+code. Create one with its constructor, set options through its methods, then
+call save(path) to write the SVG or show() to display it, and dispose() when
+you are done. The title, axis label, colour, label and grid methods are the
+same on most plots, and colours are passed as strings. add_* and add()
+methods layer more series onto the same plot. SkewTPlot expects pressure,
+temperature and dewpoint in the units used by mocha-meteoro (mb and Celsius),
+with wind speed and direction. Colour-scheme methods on Heatmap, and
+asymmetric() on ErrorPlot, replace the default.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
 """
 
 // =============================================
@@ -18,7 +48,7 @@ class ViolinPlot {};
 class AreaChart {};
 class BubbleChart {};
 class CurvePlot {};
-class ErrorPlot{};
+class ErrorPlot {};
 class LMPlot {};
 class NetworkChart {};
 class SankeyChart {};

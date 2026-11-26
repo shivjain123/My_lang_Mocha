@@ -1,4 +1,35 @@
 // mocha-lib-deps: mocha-math, mocha-string, mocha-sqlite
+
+"""
+mocha-neuron v0.2 — Neural Network Library for Mocha
+
+Section 1: Tensors (GPU-backed Tensor class, SQLite save / load helpers)
+Section 2: Feed-Forward (Activation tag, Dense, Network)
+Section 3: Recurrent (Gru, BiGru)
+Section 4: Hopfield (Hopfield network, flip_bits)
+Section 5: Attention (Attention, MultiHeadAttention, LayerNorm, BertLayer)
+Section 6: Reservoir Computing (Lsm, liquid state machine)
+Section 7: Boltzmann Machines (Rbm, with CD-1 and persistent CD)
+Section 8: Text Models (Embedding, PositionalEncoding, BertClassifier,
+           GruClassifier)
+
+Notes: Tensor is a GPU-backed matrix. Call dispose() when you are done (a
+Tensor that is no longer referenced frees itself through finalize()), and
+using one after dispose stops with a MochaLibError. All layers train with
+Adam and save / load through SQLite. Gru.backward() handles a single step,
+so train sequences with forward_seq() + backward_seq(), or use BiGru.
+Hopfield.recall() updates every neuron at once and can oscillate;
+recall_async() always settles, and normalize() goes after the last store().
+Call BertLayer.use_heads() once, right after the constructor. Lsm supports
+output_size 1 only, and Rbm.train_step() takes pers=true for persistent CD.
+BertClassifier and GruClassifier are binary (positive and negative texts)
+and use the Tokenizer from mocha-string.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
+
 // =============================================
 // CUDA NATIVE BINDINGS (internal)
 // =============================================
@@ -335,10 +366,6 @@ function neuron_load_tensor(db: null, name: str) -> Tensor {
     mocha_tensor_upload(t.ptr);
     return t;
 };
-
-// =============================================
-// DENSE LAYER
-// =============================================
 
 // =============================================
 // ACTIVATION TAG
@@ -1612,7 +1639,6 @@ class Hopfield {
             i0 = i0 + 1;
         };
         var sweep: int = 0;
-        var settled: bool = false;
         while (sweep < max_sweeps) {
             // reshuffle the update order
             var j: int = this.size - 1;
@@ -1644,12 +1670,7 @@ class Hopfield {
                 };
                 k = k + 1;
             };
-            if (changed == false) {
-                settled = true;
-                break;
-            } else {
-                sweep = sweep + 1;
-            };
+            if (changed == false) { break; } else { sweep++; };
         };
         return state;
     };
@@ -1916,7 +1937,7 @@ class Attention {
 
 // =============================================
 // MULTI-HEAD ATTENTION
-// n_heads independent Attention heads of size d_model / n_heads, outputs summed.
+// n_heads independent Attention heads, each of size d_k, outputs summed.
 // Equivalent to concat(heads) @ Wo, because Wo splits by rows per head.
 // =============================================
 
@@ -3287,11 +3308,12 @@ class BertClassifier {
 
     function dispose() -> null {
         this.emb.dispose();
+        this.pe.dispose();
         this.bert.dispose();
         this.head.dispose();
     };
 
-        function save(path: str) -> null {
+    function save(path: str) -> null {
         this.emb.save(path + ".emb");
         this.bert.save(path + ".bert");
         this.head.save(path + ".head");

@@ -1,7 +1,36 @@
-~~ Mocha-SQLite3 Library
-~~ Provides SQLite3 database access for Mocha programs.
-~~ Use sqlite3_open() to open a database and sqlite3_close() when done.
-~~ Note: SQL strings are passed directly — sanitize user input to avoid injection.
+"""
+mocha-sqlite v0.2 — SQLite3 Database Library for Mocha
+
+Section 1: Connections (sqlite3_open, sqlite3_close)
+Section 2: Running SQL (sqlite3_exec, sqlite3_query)
+Section 3: Reading Results (sqlite3_query_run, sqlite3_query_rows,
+           sqlite3_query_cols, sqlite3_query_cell, sqlite3_query_is_null,
+           sqlite3_query_colname, sqlite3_query_free)
+Section 4: Status & Helpers (sqlite3_errmsg, sqlite3_last_rowid,
+           sqlite3_changes, sqlite3_table_exists)
+
+Notes: sqlite3_open() creates the file if it does not exist and returns an
+opaque handle that the other functions take first. Close it with
+sqlite3_close; closing twice is safe (the second call warns and is ignored).
+SQL strings are passed straight to SQLite, so sanitise user input to avoid
+injection. sqlite3_exec and sqlite3_query return 0 on success, otherwise a
+SQLite error code (-1 for a null handle), print the error message, and
+sqlite3_errmsg() gives it again. sqlite3_query only prints rows to the screen;
+to read results in code, use sqlite3_query_run, which returns a result handle
+(1 or more, or 0 if the query failed). Read it with rows, cols, cell and
+colname (all zero-based, an out-of-range index gives an empty string), then
+free it with sqlite3_query_free; every result must be freed, and freeing twice
+is safe. Several results can be open at once. A SQL NULL comes back from
+sqlite3_query_cell as the text "NULL", so use sqlite3_query_is_null to tell
+it from a real "NULL" string. A query with no rows has 0 rows and 0 columns,
+with no column names. All statements in one sqlite3_query_run must return the
+same number of columns. sqlite3_last_rowid is limited to int, so row IDs above
+2147483647 come back wrong.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 ~~ Opens a SQLite3 database file. Creates it if it does not exist.
 ~~ @param path  file path to the .db file
@@ -28,20 +57,8 @@ function sqlite3_query(db: null, sql: str) -> int native mocha_sqlite3_query;
 ~~ @param db  the database handle
 function sqlite3_close(db: null) -> null native mocha_sqlite3_close;
 
-~~ ── Reading query results ──
-~~ 1. Call sqlite3_query_run(db, sql) to run a SELECT. It returns a result handle (an int, 1 or more),
-~~    or 0 if the query failed.
-~~ 2. Ask for the size with sqlite3_query_rows(res) and sqlite3_query_cols(res).
-~~ 3. Read values with sqlite3_query_cell(res, row, col) and column names with sqlite3_query_colname(res, col).
-~~ 4. When you are done, call sqlite3_query_free(res). Every result from sqlite3_query_run() must be freed.
-~~ Each sqlite3_query_run() gives its own handle, so you can run another query while still reading an earlier result.
-~~ Rows and columns are zero-based. An index that is out of range returns an empty string.
-~~ A SQL NULL is returned by sqlite3_query_cell as the text "NULL". To tell it apart from a real
-~~ "NULL" string, use sqlite3_query_is_null().
-~~ If the query returns no rows, rows and cols are both 0 and column names are not available.
-~~ All statements in one sqlite3_query_run() must return the same number of columns.
-~~ If the query fails, sqlite3_query_run() returns 0 and the error is printed. Reading from handle 0
-~~ gives 0 rows, 0 columns and empty text, and freeing it does nothing.
+~~ Reading results: sqlite3_query_run returns a handle (0 if the query failed); 
+~~ read it with rows, cols, cell and colname (zero-based), then free it with sqlite3_query_free.
 
 ~~ Runs a SQL query and keeps its whole result for row/cell access.
 ~~ Returns a result handle (1 or more), or 0 if the query failed.

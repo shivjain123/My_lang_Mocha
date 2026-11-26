@@ -1,6 +1,25 @@
 // mocha-lib-deps: mocha-math
 
-""" MOCHA STATS LIB """
+"""
+mocha-stats — Statistics Library for Mocha
+
+Section 1: Descriptive Statistics
+Section 2: Covariance, Correlation & Chi-Square
+Section 3: Distances
+Section 4: Probability Distributions
+Section 5: Analysis of Variance (ANOVA)
+Section 6: Matrix Column Normalization
+
+Conventions: _popu and _sample suffixes mark population (divide by n) and
+sample (divide by n - 1) versions. Covariance and covariance-based functions
+(covar, corr, mahalanobis_data) use n - 1. survival() on the distribution
+classes is computed directly from the upper tail, not as 1 - cdf(), so very
+small tail probabilities stay accurate.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
@@ -12,6 +31,7 @@ local function c_exp(x: float) -> float native mocha_wrap_exp;
 
 const EARTH_RADIUS_KM: float = 6371.0;
 
+// ─── Section 1: Descriptive Statistics ──────────────────────────────────── 
 extend float[] {
     function mean() -> float {
         if (this.length == 0) {
@@ -307,6 +327,7 @@ extend float[] {
     };
 };
 
+// ─── Section 2: Covariance, Correlation & Chi-Square ──────────────────────
 function covar(x: float[], y: float[]) -> float {
     if (x.length != y.length) {
         c_print_err("MochaLibError (mocha-stats): covar() requires arrays of equal length.");
@@ -445,8 +466,7 @@ function chi(observed: float[], expected: float[]) -> float {
         return corr(rx, ry);
     };
 
-"""     DISTANCES    """
-
+// ─── Section 3: Distances ───────────────────────────────────────────────── 
 function euclidean(a: float[], b: float[]) -> float {
     if (a.length != b.length) {
         c_print_err("MochaLibError (mocha-stats): euclidean() requires arrays of equal length.");
@@ -760,6 +780,7 @@ function mahalanobis_data(x: float[], data: float[][]) -> float {
     return dist2.sqrt().real;
 };
 
+// ─── Section 4: Probability Distributions ─────────────────────────────────
 class NormalDist {
     var mean_val: float;
     var std_val: float;
@@ -1443,6 +1464,8 @@ class FDist {
     };
 };
 
+// ─── Section 5: Analysis of Variance (ANOVA) ────────────────────────────── 
+
 // ─────────────────────────────────────────
 // one_way_anova: one-way ANOVA test
 // groups: float[][] — each row is a group
@@ -1627,6 +1650,7 @@ function one_way_anova_unequal(groups: float[][], sizes: int[]) -> (float, 4) {
     return (f, p_value, df_between, df_within);
 };
 
+// ─── Section 6: Matrix Column Normalization ─────────────────────────────── 
 extend float[][] {
     function normalize_col(col: int) -> float[][] {
         if (this.length == 0) {

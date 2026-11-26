@@ -1,5 +1,32 @@
 // mocha-lib-deps: mocha-stats, mocha-string, mocha-sqlite
 
+"""
+mocha-forge v0.2 — Classical Machine Learning Library for Mocha
+
+Section 1: Encoders (OneHotEncoder, OrdinalEncoder, TargetEncoder)
+Section 2: Linear Models (LinearRegression with ridge / lasso, LogisticClassification)
+Section 3: Nearest Neighbours & Clustering (KNNClassifier, KMeans)
+Section 4: Trees & Ensembles (DecisionTree, RandomForest, GradientBoosting)
+Section 5: Support Vector Machine (Svm, linear and RBF)
+Section 6: Data Splitting & Evaluation (train_test_split, cross_val_split, confusion_matrix)
+Section 7: Feature Expansion (PolynomialFeatures)
+Section 8: Hyperparameter Search (BayesianSearch for KNN, DecisionTree and linear Svm)
+
+Notes: x is float[][] and labels are int[] of 0 or 1; all classifiers are
+binary. Models stop with a MochaForgeError if used before fit(), and save() /
+load() keep a model in an SQLite file. KMeans, RandomForest and BayesianSearch
+seed the generator with 42, so results repeat; pass -999999 as the seed to the
+split functions for a random one. Tree models and Svm RBF cost roughly the
+square of the row count, so they suit a few thousand rows, not large datasets.
+Lasso uses soft-thresholding (exact zeros), KMeans starts from k-means++, KNN
+cosine is measured as 1 - similarity, and Svm RBF retries every partner when
+training stalls.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
+
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
 local function c_exp(x: float) -> float native mocha_wrap_exp;
@@ -1155,7 +1182,7 @@ class LogisticClassification {
         this.weights = alloc float[wlen];
         var wvals: str[] = forge_db_read_array_all(db, "weights");
         if (wvals.length < wlen) {
-            c_print_err("MochaLibError (mocha-forge): LinearRegression.load saved weights are shorter than weights_len.");
+            c_print_err("MochaLibError (mocha-forge): LogisticClassification.load saved weights are shorter than weights_len.");
             c_exit(2);
         };
         var i: int = 0;

@@ -88,6 +88,8 @@ extend CodeGen {
             case "LambdaExpr":     return this.genLambda(node);
             case "AwaitExpr":      return this.genExpr(node.left);
             case "ListComprehension": return this.genListComprehension(node);
+            case "DictLiteral":    return this.genDictLiteral(node);
+            case "SetLiteral":     return this.genSetLiteral(node);
             default:
                 mocha_error("MochaCodeGenError", "Unknown expression kind: " + node.kind);
                 return this.exprResult("%t0", "i32");
@@ -632,11 +634,65 @@ extend CodeGen {
     // Index access
     // --------------------------------------------------------
 
+    function genDictRead(node: ASTNode, d_reg: str, key_reg: str) -> str {
+        var dr_expected: str = this.expected_assign_type;
+        var dr_tag: int = -1;
+        if (dr_expected == "int")   { dr_tag = 0; };
+        if (dr_expected == "float") { dr_tag = 1; };
+        if (dr_expected == "str")   { dr_tag = 2; };
+        if (dr_expected == "bool")  { dr_tag = 3; };
+        if (dr_expected == "dict")  { dr_tag = 4; };
+        if (dr_expected == "vast")  { dr_tag = 6; };
+        var dr_raw: str = this.freshTemp();
+        if (dr_tag == -1) {
+            this.emit("  " + dr_raw + " = call i8* @mocha_dict_get(%MochaDict* " + d_reg + ", i8* " + key_reg + ")");
+        } else {
+            this.emit("  " + dr_raw + " = call i8* @mocha_dict_get_typed(%MochaDict* " + d_reg + ", i8* " + key_reg + ", i32 " + str(dr_tag) + ")");
+        };
+        if (this.isBorrowedKind(node.right.kind) == false) {
+            this.emit("  call void @rc_release(i8* " + key_reg + ")");
+        };
+        var dr_ptr: str = "";
+        var dr_val: str = "";
+        if (dr_expected == "int") {
+            dr_ptr = this.freshTemp();
+            dr_val = this.freshTemp();
+            this.emit("  " + dr_ptr + " = bitcast i8* " + dr_raw + " to i32*");
+            this.emit("  " + dr_val + " = load i32, i32* " + dr_ptr);
+            return this.exprResult(dr_val, "i32");
+        };
+        if (dr_expected == "float") {
+            dr_ptr = this.freshTemp();
+            dr_val = this.freshTemp();
+            this.emit("  " + dr_ptr + " = bitcast i8* " + dr_raw + " to double*");
+            this.emit("  " + dr_val + " = load double, double* " + dr_ptr);
+            return this.exprResult(dr_val, "double");
+        };
+        if (dr_expected == "bool") {
+            dr_val = this.freshTemp();
+            this.emit("  " + dr_val + " = load i8, i8* " + dr_raw);
+            return this.exprResult(dr_val, "i8");
+        };
+        if (dr_expected == "vast") {
+            dr_ptr = this.freshTemp();
+            dr_val = this.freshTemp();
+            this.emit("  " + dr_ptr + " = bitcast i8* " + dr_raw + " to i64*");
+            this.emit("  " + dr_val + " = load i64, i64* " + dr_ptr);
+            return this.exprResult(dr_val, "i64");
+        };
+        if (dr_expected == "str") {
+            this.emit("  call void @rc_retain(i8* " + dr_raw + ")");
+            return this.exprResult(dr_raw, "i8*");
+        };
+        return this.exprResult(dr_raw, "i8*");
+    };
+
     function genIndexAccess(node: ASTNode) -> str {
         var obj_result: str = this.genExpr(node.left);
         var obj_reg:    str = this.exprReg(obj_result);
         var idx_result: str = this.genExpr(node.right);
         var idx_reg:    str = this.exprReg(idx_result);
+        if (this.exprType(obj_result) == "%MochaDict*") { return this.genDictRead(node, obj_reg, idx_reg); };
 
         // element type from the variable, field, or nested index (default i32, as in Python)
         var elem_llvm: str = "i32";
@@ -1009,21 +1065,685 @@ extend CodeGen {
     // Lambda — stub (deferred)
     // --------------------------------------------------------
 
+    function lamHasName(list: str[], nm: str) -> bool {
+        var li: int = 0;
+        while (li < list.length) {
+            if (list[li] == nm) { return true; };
+            li = li + 1;
+        };
+        return false;
+    };
+
+    function collectCapturedList(items: ASTNode[]) -> null {
+        var ci2: int = 0;
+        while (ci2 < items.length) {
+            this.collectCaptured(items[ci2]);
+            ci2 = ci2 + 1;
+        };
+    };
+
+    function collectCaptured(n: ASTNode) -> null {
+        if (n != null) {
+            if (n.kind == "Identifier") {
+                var idn: str = n.value;
+                if (this.hasLocal(idn)) {
+                    if (this.lamHasName(this.cap_params, idn) == false) {
+                        if (this.lamHasName(this.cap_names, idn) == false) {
+                            this.cap_names.push(idn);
+                        };
+                    };
+                };
+            };
+            this.collectCaptured(n.left);
+            this.collectCaptured(n.right);
+            this.collectCaptured(n.condition);
+            this.collectCapturedList(n.body);
+            this.collectCapturedList(n.children);
+            this.collectCapturedList(n.params);
+            this.collectCapturedList(n.args);
+            this.collectCapturedList(n.else_body);
+            this.collectCapturedList(n.else_ifs);
+            this.collectCapturedList(n.cases);
+        };
+    };
+
+    function emitBundle(fn_cast: str, env_reg: str, ret_tag: int) -> str {
+        var bundle:  str = this.freshTemp();
+        var slot0:   str = this.freshTemp();
+        var slot1:   str = this.freshTemp();
+        var slot2:   str = this.freshTemp();
+        var tag_ptr: str = this.freshTemp();
+        this.emit("  " + bundle + " = call i8* @malloc(i64 24)");
+        this.emit("  " + slot0 + " = bitcast i8* " + bundle + " to i8**");
+        this.emit("  store i8* " + fn_cast + ", i8** " + slot0);
+        this.emit("  " + slot1 + " = getelementptr i8*, i8** " + slot0 + ", i32 1");
+        this.emit("  store i8* " + env_reg + ", i8** " + slot1);
+        this.emit("  " + slot2 + " = getelementptr i8*, i8** " + slot0 + ", i32 2");
+        this.emit("  " + tag_ptr + " = bitcast i8** " + slot2 + " to i32*");
+        this.emit("  store i32 " + str(ret_tag) + ", i32* " + tag_ptr);
+        return bundle;
+    };
+
     function genLambda(node: ASTNode) -> str {
-        // full lambda codegen deferred — return null ptr for now
-        var tmp: str = this.freshTemp();
-        this.emit("  " + tmp + " = add i32 0, 0");
-        return this.exprResult(tmp, "i8*");
+        var lname: str = "mocha_lambda_" + str(this.temp_count);
+        this.temp_count = this.temp_count + 1;
+
+        // 1. captured variables
+        this.cap_params = [];
+        this.cap_names = [];
+        var pi1: int = 0;
+        while (pi1 < node.params.length) {
+            this.cap_params.push(node.params[pi1].value);
+            pi1 = pi1 + 1;
+        };
+        this.collectCaptured(node.left);
+        var ncap: int = this.cap_names.length;
+        var has_cap: bool = ncap > 0;
+
+        var cptrs:   str[] = [];
+        var ctypes:  str[] = [];
+        var cmochas: str[] = [];
+        var cn_i: int = 0;
+        while (cn_i < ncap) {
+            var cn: str = this.cap_names[cn_i];
+            var c_ptr: str = this.getLocalPtr(cn);   this.keep.push(c_ptr);
+            var c_ty:  str = this.getLocalType(cn);  this.keep.push(c_ty);
+            var c_mt:  str = this.getLocalMochaType(cn); this.keep.push(c_mt);
+            cptrs.push(c_ptr);
+            ctypes.push(c_ty);
+            cmochas.push(c_mt);
+            cn_i = cn_i + 1;
+        };
+
+        // 2. env struct + allocation (in the OUTER function)
+        var env_type: str = "%env_" + lname;
+        var env_reg:  str = "null";
+        var env_cast: str = "";
+        if (has_cap) {
+            var ftypes: str = "";
+            var ft_i: int = 0;
+            while (ft_i < ncap) {
+                if (ft_i > 0) { ftypes = ftypes + ", "; };
+                ftypes = ftypes + ctypes[ft_i];
+                ft_i = ft_i + 1;
+            };
+            this.type_declarations.push(env_type + " = type { " + ftypes + " }");
+            var env_alloc: str = this.freshTemp();
+            env_cast = this.freshTemp();
+            this.emit("  " + env_alloc + " = call i8* @malloc(i64 " + str(ncap * 8) + ")");
+            this.emit("  " + env_cast + " = bitcast i8* " + env_alloc + " to " + env_type + "*");
+            var ev_i: int = 0;
+            while (ev_i < ncap) {
+                var ev_val: str = this.freshTemp();
+                var ev_fp:  str = this.freshTemp();
+                this.emit("  " + ev_val + " = load " + ctypes[ev_i] + ", " + ctypes[ev_i] + "* " + cptrs[ev_i]);
+                this.emit("  " + ev_fp + " = getelementptr " + env_type + ", " + env_type + "* " + env_cast + ", i32 0, i32 " + str(ev_i));
+                this.emit("  store " + ctypes[ev_i] + " " + ev_val + ", " + ctypes[ev_i] + "* " + ev_fp);
+                ev_i = ev_i + 1;
+            };
+            env_reg = env_cast;
+        };
+
+        // 3. lambda function text
+        var ret_llvm: str = "i8";
+        if (node.type_str != "") { ret_llvm = this.toLLVMType(node.type_str); };
+        var param_str: str = "";
+        var sig_str:   str = "";
+        var ps_i: int = 0;
+        while (ps_i < node.params.length) {
+            param_str = param_str + "i8* %" + node.params[ps_i].value + "_raw, ";
+            sig_str = sig_str + "i8*, ";
+            ps_i = ps_i + 1;
+        };
+        if (has_cap) {
+            param_str = param_str + env_type + "* %env";
+            sig_str = sig_str + env_type + "*";
+        } else {
+            param_str = param_str + "i8* %env_unused";
+            sig_str = sig_str + "i8*";
+        };
+
+        var out_start: int = this.output.length;
+        var al_start:  int = this.entry_allocas.length;
+        this.emit("define " + ret_llvm + " @" + lname + "(" + param_str + ") {");
+        this.emit("entry:");
+
+        // remember outer locals that the lambda shadows
+        var sv_names:  str[] = [];
+        var sv_ptrs:   str[] = [];
+        var sv_types:  str[] = [];
+        var sv_mochas: str[] = [];
+        var sh_i: int = 0;
+        while (sh_i < this.cap_params.length) {
+            var sh_n: str = this.cap_params[sh_i];
+            if (this.hasLocal(sh_n)) {
+                var sh_p: str = this.getLocalPtr(sh_n);        this.keep.push(sh_p);
+                var sh_t: str = this.getLocalType(sh_n);       this.keep.push(sh_t);
+                var sh_m: str = this.getLocalMochaType(sh_n);  this.keep.push(sh_m);
+                sv_names.push(sh_n); sv_ptrs.push(sh_p); sv_types.push(sh_t); sv_mochas.push(sh_m);
+            };
+            sh_i = sh_i + 1;
+        };
+        var sc_i: int = 0;
+        while (sc_i < ncap) {
+            sv_names.push(this.cap_names[sc_i]); sv_ptrs.push(cptrs[sc_i]);
+            sv_types.push(ctypes[sc_i]); sv_mochas.push(cmochas[sc_i]);
+            sc_i = sc_i + 1;
+        };
+
+        // params: unpack from i8* into a local slot
+        var pl_i: int = 0;
+        while (pl_i < node.params.length) {
+            var pnode: ASTNode = node.params[pl_i];
+            var p_llvm: str = this.toLLVMType(pnode.type_str);
+            var p_cast: str = this.freshTemp();
+            var p_val:  str = this.freshTemp();
+            var p_slot: str = "%" + pnode.value + ".ptr";
+            this.emit("  " + p_cast + " = bitcast i8* %" + pnode.value + "_raw to " + p_llvm + "*");
+            this.emit("  " + p_val + " = load " + p_llvm + ", " + p_llvm + "* " + p_cast);
+            this.emit("  " + p_slot + " = alloca " + p_llvm);
+            this.emit("  store " + p_llvm + " " + p_val + ", " + p_llvm + "* " + p_slot);
+            this.declareLocal(pnode.value, p_slot, p_llvm, pnode.type_str);
+            pl_i = pl_i + 1;
+        };
+
+        // captured: load from %env into a local slot
+        var cl_i: int = 0;
+        while (cl_i < ncap) {
+            var cl_name: str = this.cap_names[cl_i];
+            var cl_fp:   str = this.freshTemp();
+            var cl_val:  str = this.freshTemp();
+            var cl_slot: str = "%captured_" + cl_name + ".ptr";
+            this.emit("  " + cl_fp + " = getelementptr " + env_type + ", " + env_type + "* %env, i32 0, i32 " + str(cl_i));
+            this.emit("  " + cl_val + " = load " + ctypes[cl_i] + ", " + ctypes[cl_i] + "* " + cl_fp);
+            this.emit("  " + cl_slot + " = alloca " + ctypes[cl_i]);
+            this.emit("  store " + ctypes[cl_i] + " " + cl_val + ", " + ctypes[cl_i] + "* " + cl_slot);
+            this.declareLocal(cl_name, cl_slot, ctypes[cl_i], cmochas[cl_i]);
+            cl_i = cl_i + 1;
+        };
+
+        // body
+        var body_res: str = this.genExpr(node.left);
+        var body_reg: str = this.exprReg(body_res);
+        var body_ty:  str = this.exprType(body_res);
+        var fin_reg:  str = this.coerceToType(body_reg, body_ty, ret_llvm);
+        this.emit("  ret " + ret_llvm + " " + fin_reg);
+        this.emit("}");
+        this.emitBlank();
+
+        // cut the lambda out of output into type_declarations; allocas go right after "entry:"
+        var lam_lines: str[] = [];
+        lam_lines.push(this.output[out_start]);
+        lam_lines.push(this.output[out_start + 1]);
+        var la_i: int = al_start;
+        while (la_i < this.entry_allocas.length) {
+            lam_lines.push(this.entry_allocas[la_i]);
+            la_i = la_i + 1;
+        };
+        var lb_i: int = out_start + 2;
+        while (lb_i < this.output.length) {
+            lam_lines.push(this.output[lb_i]);
+            lb_i = lb_i + 1;
+        };
+        var out_keep: str[] = [];
+        var ok_i: int = 0;
+        while (ok_i < out_start) {
+            out_keep.push(this.output[ok_i]);
+            ok_i = ok_i + 1;
+        };
+        this.output = out_keep;
+        var al_keep: str[] = [];
+        var ak_i: int = 0;
+        while (ak_i < al_start) {
+            al_keep.push(this.entry_allocas[ak_i]);
+            ak_i = ak_i + 1;
+        };
+        this.entry_allocas = al_keep;
+        var lt_i: int = 0;
+        while (lt_i < lam_lines.length) {
+            this.type_declarations.push(lam_lines[lt_i]);
+            lt_i = lt_i + 1;
+        };
+
+        // put the shadowed outer locals back
+        var rs_i: int = 0;
+        while (rs_i < sv_names.length) {
+            this.declareLocal(sv_names[rs_i], sv_ptrs[rs_i], sv_types[rs_i], sv_mochas[rs_i]);
+            rs_i = rs_i + 1;
+        };
+
+        // 4. closure bundle
+        var ret_tag: int = 0;
+        if (ret_llvm == "double") { ret_tag = 1; };
+        if (ret_llvm == "i8*")    { ret_tag = 2; };
+        var fn_cast: str = this.freshTemp();
+        this.emit("  " + fn_cast + " = bitcast " + ret_llvm + " (" + sig_str + ")* @" + lname + " to i8*");
+        var env_i8: str = "null";
+        if (has_cap) {
+            env_i8 = this.freshTemp();
+            this.emit("  " + env_i8 + " = bitcast " + env_type + "* " + env_cast + " to i8*");
+        };
+        var bundle_reg: str = this.emitBundle(fn_cast, env_i8, ret_tag);
+        return this.exprResult(bundle_reg, "i8*");
     };
 
     // --------------------------------------------------------
     // List comprehension — stub (deferred)
     // --------------------------------------------------------
 
+    function dictArraySetter(t: str) -> str {
+        var dl: int = t.length;
+        if (dl < 3) { return ""; };
+        if (t.charAt(dl - 1) != "]") { return ""; };
+        if (t.charAt(dl - 2) != "[") { return ""; };
+        var dbase: str = t.substring(0, dl - 3);
+        if (dbase == "int")   { return "mocha_dict_set_arr_int"; };
+        if (dbase == "float") { return "mocha_dict_set_arr_float"; };
+        if (dbase == "str")   { return "mocha_dict_set_arr_str"; };
+        if (dbase == "bool")  { return "mocha_dict_set_arr_bool"; };
+        if (dbase == "vast")  { return "mocha_dict_set_arr_vast"; };
+        return "";
+    };
+
+    function genDictLiteral(node: ASTNode) -> str {
+        var dd: str = this.freshTemp();
+        this.emit("  " + dd + " = call %MochaDict* @mocha_dict_new()");
+        var di: int = 0;
+        while (di + 1 < node.children.length) {
+            var dkn: ASTNode = node.children[di];
+            var dvn: ASTNode = node.children[di + 1];
+            var dkr: str = this.exprReg(this.genExpr(dkn));
+            var dvres: str = this.genExpr(dvn);
+            var dvr: str = this.exprReg(dvres);
+            var dvt: str = this.exprType(dvres);
+            if (dvt == "i1") { dvr = this.coerceToType(dvr, "i1", "i8"); dvt = "i8"; };
+            if (dvt == "i32") {
+                this.emit("  call void @mocha_dict_set_int(%MochaDict* " + dd + ", i8* " + dkr + ", i32 " + dvr + ")");
+            } else if (dvt == "double") {
+                this.emit("  call void @mocha_dict_set_float(%MochaDict* " + dd + ", i8* " + dkr + ", double " + dvr + ")");
+            } else if (dvt == "i8") {
+                this.emit("  call void @mocha_dict_set_bool(%MochaDict* " + dd + ", i8* " + dkr + ", i8 " + dvr + ")");
+            } else if (dvt == "i64") {
+                this.emit("  call void @mocha_dict_set_vast(%MochaDict* " + dd + ", i8* " + dkr + ", i64 " + dvr + ")");
+            } else if (dvt == "%MochaDict*") {
+                if (this.isBorrowedKind(dvn.kind)) {
+                    this.emit("  call void @mocha_dict_retain(%MochaDict* " + dvr + ")");
+                };
+                this.emit("  call void @mocha_dict_set_dict(%MochaDict* " + dd + ", i8* " + dkr + ", %MochaDict* " + dvr + ")");
+            } else if (dvt.contains("%struct.")) {
+                var dcast: str = this.freshTemp();
+                this.emit("  " + dcast + " = bitcast " + dvt + " " + dvr + " to i8*");
+                this.emit("  call void @mocha_dict_set_object(%MochaDict* " + dd + ", i8* " + dkr + ", i8* " + dcast + ")");
+            } else if (dvt == "%MochaArray*") {
+                var damt: str = this.inferMochaType(dvn);
+                this.keep.push(damt);
+                var dsetter: str = this.dictArraySetter(damt);
+                if (dsetter == "") {
+                    mocha_error("MochaCodeGenError", "Cannot store this array in a dict: its element type is unknown or unsupported (got '" + damt + "'). Supported: int[], float[], str[], bool[], vast[].");
+                } else {
+                    this.emit("  call void @" + dsetter + "(%MochaDict* " + dd + ", i8* " + dkr + ", %MochaArray* " + dvr + ")");
+                };
+            } else {
+                this.emit("  call void @mocha_dict_set_str(%MochaDict* " + dd + ", i8* " + dkr + ", i8* " + dvr + ")");
+            };
+            di = di + 2;
+        };
+        return this.exprResult(dd, "%MochaDict*");
+    };
+
+    function genDictMethodCall(d_reg: str, member: str, node: ASTNode) -> str {
+        var dmt: str = this.freshTemp();
+        if (member == "has") {
+            var hargs: str[] = this.collectArgs(node);
+            this.emit("  " + dmt + " = call i8 @mocha_dict_has(%MochaDict* " + d_reg + ", i8* " + this.exprReg(hargs[0]) + ")");
+            return this.exprResult(dmt, "i8");
+        };
+        if (member == "remove") {
+            var rargs: str[] = this.collectArgs(node);
+            this.emit("  call void @mocha_dict_remove(%MochaDict* " + d_reg + ", i8* " + this.exprReg(rargs[0]) + ")");
+            return this.exprResult("void", "void");
+        };
+        if (member == "clean") {
+            this.emit("  call void @mocha_dict_clean(%MochaDict* " + d_reg + ")");
+            return this.exprResult("void", "void");
+        };
+        if (member == "allKeys") {
+            this.emit("  " + dmt + " = call %MochaArray* @mocha_dict_allkeys(%MochaDict* " + d_reg + ")");
+            return this.exprResult(dmt, "%MochaArray*");
+        };
+        if (member == "allValues") {
+            this.emit("  " + dmt + " = call %MochaArray* @mocha_dict_allvalues(%MochaDict* " + d_reg + ")");
+            return this.exprResult(dmt, "%MochaArray*");
+        };
+        if (member == "jsonify") {
+            this.emit("  " + dmt + " = call i8* @mocha_dict_jsonify(%MochaDict* " + d_reg + ")");
+            return this.exprResult(dmt, "i8*");
+        };
+        if (member == "merge") {
+            var movr: int = 0;
+            var mnamed: ASTNode = this.findNamedArg(node, "override");
+            if (mnamed != null) {
+                if (mnamed.kind == "BoolLiteral") {
+                    if (mnamed.bool_val) { movr = 1; };
+                };
+            };
+            var margs: str[] = this.collectArgs(node);
+            this.emit("  " + dmt + " = call %MochaDict* @mocha_dict_merge(%MochaDict* " + d_reg + ", %MochaDict* " + this.exprReg(margs[0]) + ", i8 " + str(movr) + ")");
+            return this.exprResult(dmt, "%MochaDict*");
+        };
+        if (member == "copy") {
+            this.emit("  " + dmt + " = call %MochaDict* @mocha_dict_copy(%MochaDict* " + d_reg + ")");
+            return this.exprResult(dmt, "%MochaDict*");
+        };
+        mocha_error("MochaCodeGenError", "Unknown dict method '" + member + "'");
+        return this.exprResult("void", "void");
+    };
+
+    function setTypeTag(llvm: str) -> int {
+        if (llvm.contains("%struct.")) { return 5; };
+        if (llvm == "double") { return 1; };
+        if (llvm == "i8*")    { return 2; };
+        if (llvm == "i8")     { return 3; };
+        if (llvm == "i64")    { return 4; };
+        return 0;
+    };
+
+    function emitSetInsert(s_reg: str, val_reg: str, val_llvm: str) -> null {
+        var sslot: str = this.allocaAtEntry(val_llvm);
+        this.emit("  store " + val_llvm + " " + val_reg + ", " + val_llvm + "* " + sslot);
+        var scast: str = this.freshTemp();
+        this.emit("  " + scast + " = bitcast " + val_llvm + "* " + sslot + " to i8*");
+        this.emit("  call void @mocha_set_insert(%MochaSet* " + s_reg + ", i8* " + scast + ")");
+    };
+
+    function genSetLiteral(node: ASTNode) -> str {
+        var stag: int = 0;
+        var first_res: str = "";
+        var first_reg: str = "";
+        var first_llvm: str = "i32";
+        if (node.children.length > 0) {
+            first_res = this.genExpr(node.children[0]);
+            first_reg = this.exprReg(first_res);
+            first_llvm = this.exprType(first_res);
+            if (first_llvm == "i1") { first_reg = this.coerceToType(first_reg, "i1", "i8"); first_llvm = "i8"; };
+            stag = this.setTypeTag(first_llvm);
+        };
+        var ss: str = this.freshTemp();
+        this.emit("  " + ss + " = call %MochaSet* @mocha_set_new(i32 " + str(stag) + ")");
+        if (node.children.length > 0) {
+            this.emitSetInsert(ss, first_reg, first_llvm);
+        };
+        var sli: int = 1;
+        while (sli < node.children.length) {
+            var sres: str = this.genExpr(node.children[sli]);
+            var sreg: str = this.exprReg(sres);
+            var sllvm: str = this.exprType(sres);
+            if (sllvm == "i1") { sreg = this.coerceToType(sreg, "i1", "i8"); sllvm = "i8"; };
+            this.emitSetInsert(ss, sreg, sllvm);
+            sli = sli + 1;
+        };
+        return this.exprResult(ss, "%MochaSet*");
+    };
+
+    function genSetMethodCall(s_reg: str, member: str, node: ASTNode, obj_name: str) -> str {
+        var smt: str = this.freshTemp();
+        if (member == "insert") {
+            var iargs: str[] = this.collectArgs(node);
+            var ireg: str = this.exprReg(iargs[0]);
+            var itype: str = this.exprType(iargs[0]);
+            if (itype == "i1") { ireg = this.coerceToType(ireg, "i1", "i8"); itype = "i8"; };
+            this.emitSetInsert(s_reg, ireg, itype);
+            return this.exprResult("void", "void");
+        };
+        if (member == "delete") {
+            var dargs: str[] = this.collectArgs(node);
+            var dreg: str = this.exprReg(dargs[0]);
+            var dtype: str = this.exprType(dargs[0]);
+            if (dtype == "i1") { dreg = this.coerceToType(dreg, "i1", "i8"); dtype = "i8"; };
+            var dbox: str = this.boxTemp(dreg, dtype);
+            this.emit("  call void @mocha_set_delete(%MochaSet* " + s_reg + ", i8* " + dbox + ")");
+            return this.exprResult("void", "void");
+        };
+        if (member == "has") {
+            var hargs2: str[] = this.collectArgs(node);
+            var hreg: str = this.exprReg(hargs2[0]);
+            var htype: str = this.exprType(hargs2[0]);
+            if (htype == "i1") { hreg = this.coerceToType(hreg, "i1", "i8"); htype = "i8"; };
+            var hbox: str = this.boxTemp(hreg, htype);
+            this.emit("  " + smt + " = call i8 @mocha_set_has(%MochaSet* " + s_reg + ", i8* " + hbox + ")");
+            return this.exprResult(smt, "i8");
+        };
+        if (member == "clean") {
+            this.emit("  call void @mocha_set_clean(%MochaSet* " + s_reg + ")");
+            return this.exprResult("void", "void");
+        };
+        if (member == "negate") {
+            this.emit("  call void @mocha_set_negate(%MochaSet* " + s_reg + ")");
+            return this.exprResult("void", "void");
+        };
+        if (member == "retype") {
+            var rnew: str = "int";
+            var rtag: int = 0;
+            var rai: int = 0;
+            while (rai < node.args.length) {
+                if (node.args[rai].kind == "Identifier") { rnew = node.args[rai].value; };
+                rai = rai + 1;
+            };
+            if (rnew == "int")    { rtag = 0; }
+            else if (rnew == "float")  { rtag = 1; }
+            else if (rnew == "str")    { rtag = 2; }
+            else if (rnew == "bool")   { rtag = 3; }
+            else if (rnew == "vast")   { rtag = 4; }
+            else if (rnew == "object") { rtag = 5; }
+            else { mocha_error("MochaCodeGenError", "retype(): unknown type '" + rnew + "'. Valid types: int, float, str, bool, vast, object."); };
+            this.emit("  call void @mocha_set_retype(%MochaSet* " + s_reg + ", i32 " + str(rtag) + ")");
+            if (obj_name != "") {
+                var rnt: str = "set<" + rnew + ">";
+                this.keep.push(rnt);
+                this.local_mocha_types.put(obj_name, rnt);
+            };
+            return this.exprResult("void", "void");
+        };
+        if (member == "union") {
+            var uargs: str[] = this.collectArgs(node);
+            this.emit("  " + smt + " = call %MochaSet* @mocha_set_union(%MochaSet* " + s_reg + ", %MochaSet* " + this.exprReg(uargs[0]) + ")");
+            return this.exprResult(smt, "%MochaSet*");
+        };
+        if (member == "intersect" || member == "xor" || member == "rel_diff") {
+            var sm_a: str[] = this.collectArgs(node);
+            this.emit("  " + smt + " = call %MochaSet* @mocha_set_" + member + "(%MochaSet* " + s_reg + ", %MochaSet* " + this.exprReg(sm_a[0]) + ")");
+            return this.exprResult(smt, "%MochaSet*");
+        };
+        if (member == "jaccard" || member == "dice" || member == "overlap") {
+            var sd_a: str[] = this.collectArgs(node);
+            this.emit("  " + smt + " = call double @mocha_set_" + member + "(%MochaSet* " + s_reg + ", %MochaSet* " + this.exprReg(sd_a[0]) + ")");
+            return this.exprResult(smt, "double");
+        };
+        if (member == "subset") {
+            var ss_a: str[] = this.collectArgs(node);
+            this.emit("  " + smt + " = call i8 @mocha_set_subset(%MochaSet* " + s_reg + ", %MochaSet* " + this.exprReg(ss_a[0]) + ")");
+            return this.exprResult(smt, "i8");
+        };
+        if (member == "superset") {
+            var sp_a: str[] = this.collectArgs(node);
+            this.emit("  " + smt + " = call i8 @mocha_set_subset(%MochaSet* " + this.exprReg(sp_a[0]) + ", %MochaSet* " + s_reg + ")");
+            return this.exprResult(smt, "i8");
+        };
+        if (member == "min" || member == "max") {
+            var mm_t: str = this.inferMochaType(node.left.left);
+            this.keep.push(mm_t);
+            if (mm_t == "" && obj_name != "") {
+                if (this.global_mocha_types.has(obj_name)) {
+                    mm_t = this.global_mocha_types.get(obj_name); this.keep.push(mm_t);
+                };
+            };
+            if (mm_t.contains("set<") == false) {
+                mocha_error("MochaCodeGenError", "Cannot determine the element type of this set for " + member + "(). Store the set in a variable declared as set<type> first.");
+                return this.exprResult("void", "void");
+            };
+            var mm_inner: str = mm_t.substring(4, mm_t.length - 2);
+            var mm_suffix: str = "";
+            var mm_ret: str = "";
+            if (mm_inner == "int")   { mm_suffix = "int";   mm_ret = "i32"; };
+            if (mm_inner == "float") { mm_suffix = "float"; mm_ret = "double"; };
+            if (mm_inner == "vast")  { mm_suffix = "vast";  mm_ret = "i64"; };
+            if (mm_inner == "str")   { mm_suffix = "str";   mm_ret = "i8*"; };
+            if (mm_suffix == "") {
+                mocha_error("MochaCodeGenError", member + "() is not supported on set<" + mm_inner + ">. Supported element types: int, float, vast, str.");
+                return this.exprResult("void", "void");
+            };
+            this.emit("  " + smt + " = call " + mm_ret + " @mocha_set_" + member + "_" + mm_suffix + "(%MochaSet* " + s_reg + ")");
+            return this.exprResult(smt, mm_ret);
+        };
+        mocha_error("MochaCodeGenError", "Set method '" + member + "' is not ported yet");
+        return this.exprResult("void", "void");
+    };
+
     function genListComprehension(node: ASTNode) -> str {
-        var tmp: str = this.freshTemp();
-        this.emit("  " + tmp + " = call %MochaArray* @mocha_array_new(i32 0, i32 8, i32 0)");
-        return this.exprResult(tmp, "%MochaArray*");
+        // element types (the parser does not set them, so infer)
+        var lc_iter_mt: str = this.inferMochaType(node.right);
+        this.keep.push(lc_iter_mt);
+        var lc_sb: int = lc_iter_mt.length - 1;
+        while (lc_sb >= 0) {
+            if (lc_iter_mt.charAt(lc_sb) == "[") { break; };
+            lc_sb = lc_sb - 1;
+        };
+        var lc_src_mt: str = "int";
+        if (lc_sb > 0) { lc_src_mt = lc_iter_mt.substring(0, lc_sb - 1); };
+        var lc_src_llvm: str = this.toLLVMType(lc_src_mt);
+
+        // iterable (evaluated before the loop variable exists)
+        var lc_it: str = this.genExpr(node.right);
+        var lc_iter_reg: str = this.exprReg(lc_it);
+
+        // loop variable, shadowing any outer local of the same name
+        var lc_had: bool = this.hasLocal(node.value);
+        var lc_old_p: str = "";
+        var lc_old_t: str = "";
+        var lc_old_m: str = "";
+        if (lc_had) {
+            lc_old_p = this.getLocalPtr(node.value);       this.keep.push(lc_old_p);
+            lc_old_t = this.getLocalType(node.value);      this.keep.push(lc_old_t);
+            lc_old_m = this.getLocalMochaType(node.value); this.keep.push(lc_old_m);
+        };
+        var lc_elem_ptr: str = this.allocaAtEntry(lc_src_llvm);
+        this.declareLocal(node.value, lc_elem_ptr, lc_src_llvm, lc_src_mt);
+
+        var lc_elem_mt: str = this.inferMochaType(node.left);
+        this.keep.push(lc_elem_mt);
+        if (lc_elem_mt == "" || lc_elem_mt == "unknown") { lc_elem_mt = lc_src_mt; };
+        var lc_elem_llvm: str = this.toLLVMType(lc_elem_mt);
+        if (lc_elem_llvm == "i1") { lc_elem_llvm = "i8"; };
+        var lc_size: int = 8;
+        if (lc_elem_llvm == "i32") { lc_size = 4; };
+        if (lc_elem_llvm == "i8")  { lc_size = 1; };
+
+        var lc_has_else: bool = false;
+        if (node.condition != null) {
+            if (node.else_body.length > 0) { lc_has_else = true; };
+        };
+
+        // result array in a stack slot
+        var lc_res: str = this.freshTemp();
+        this.emit("  " + lc_res + " = call %MochaArray* @mocha_array_new(i32 0, i32 " + str(lc_size) + ", i32 0)");
+        var lc_arr_ptr: str = this.allocaAtEntry("%MochaArray*");
+        this.emit("  store %MochaArray* " + lc_res + ", %MochaArray** " + lc_arr_ptr);
+
+        var lc_len: str = this.freshTemp();
+        this.emit("  " + lc_len + " = call i32 @mocha_array_length(%MochaArray* " + lc_iter_reg + ")");
+        var lc_idx_ptr: str = this.allocaAtEntry("i32");
+        this.emit("  store i32 0, i32* " + lc_idx_ptr);
+
+        var lc_n: int = this.temp_count;
+        this.temp_count = this.temp_count + 1;
+        var lc_loop: str = "lc_loop_" + str(lc_n);
+        var lc_body: str = "lc_body_" + str(lc_n);
+        var lc_end:  str = "lc_end_" + str(lc_n);
+
+        this.emit("  br label %" + lc_loop);
+        this.emit(lc_loop + ":");
+        var lc_idx: str = this.freshTemp();
+        this.emit("  " + lc_idx + " = load i32, i32* " + lc_idx_ptr);
+        var lc_cmp: str = this.freshTemp();
+        this.emit("  " + lc_cmp + " = icmp slt i32 " + lc_idx + ", " + lc_len);
+        this.emit("  br i1 " + lc_cmp + ", label %" + lc_body + ", label %" + lc_end);
+        this.emit(lc_body + ":");
+
+        // load the element into the loop variable
+        var lc_raw: str = this.allocaAtEntry(lc_src_llvm);
+        var lc_rawc: str = this.freshTemp();
+        this.emit("  " + lc_rawc + " = bitcast " + lc_src_llvm + "* " + lc_raw + " to i8*");
+        this.emit("  call void @mocha_array_get(%MochaArray* " + lc_iter_reg + ", i32 " + lc_idx + ", i8* " + lc_rawc + ")");
+        var lc_ld: str = this.freshTemp();
+        this.emit("  " + lc_ld + " = load " + lc_src_llvm + ", " + lc_src_llvm + "* " + lc_raw);
+        this.emit("  store " + lc_src_llvm + " " + lc_ld + ", " + lc_src_llvm + "* " + lc_elem_ptr);
+
+        var lc_val: str = "";
+        if (node.condition != null) {
+            var lc_cr: str = this.genExpr(node.condition);
+            var lc_ci1: str = this.boolToI1(this.exprReg(lc_cr), this.exprType(lc_cr));
+            if (lc_has_else) {
+                var lc_then: str  = "lc_then_" + str(lc_n);
+                var lc_else: str  = "lc_else_" + str(lc_n);
+                var lc_merge: str = "lc_merge_" + str(lc_n);
+                var lc_slot: str = this.allocaAtEntry(lc_elem_llvm);
+                this.emit("  br i1 " + lc_ci1 + ", label %" + lc_then + ", label %" + lc_else);
+                this.emit(lc_then + ":");
+                var lc_tr: str = this.genExpr(node.left);
+                var lc_treg: str = this.coerceToType(this.exprReg(lc_tr), this.exprType(lc_tr), lc_elem_llvm);
+                this.emit("  store " + lc_elem_llvm + " " + lc_treg + ", " + lc_elem_llvm + "* " + lc_slot);
+                this.emit("  br label %" + lc_merge);
+                this.emit(lc_else + ":");
+                var lc_er: str = this.genExpr(node.else_body[0]);
+                var lc_ereg: str = this.coerceToType(this.exprReg(lc_er), this.exprType(lc_er), lc_elem_llvm);
+                this.emit("  store " + lc_elem_llvm + " " + lc_ereg + ", " + lc_elem_llvm + "* " + lc_slot);
+                this.emit("  br label %" + lc_merge);
+                this.emit(lc_merge + ":");
+                lc_val = this.freshTemp();
+                this.emit("  " + lc_val + " = load " + lc_elem_llvm + ", " + lc_elem_llvm + "* " + lc_slot);
+            } else {
+                var lc_skip:   str = "lc_skip_" + str(lc_n);
+                var lc_append: str = "lc_append_" + str(lc_n);
+                this.emit("  br i1 " + lc_ci1 + ", label %" + lc_append + ", label %" + lc_skip);
+                this.emit(lc_append + ":");
+                var lc_fr: str = this.genExpr(node.left);
+                lc_val = this.coerceToType(this.exprReg(lc_fr), this.exprType(lc_fr), lc_elem_llvm);
+            };
+        } else {
+            var lc_pr: str = this.genExpr(node.left);
+            lc_val = this.coerceToType(this.exprReg(lc_pr), this.exprType(lc_pr), lc_elem_llvm);
+        };
+
+        // box (stack slot) and append
+        var lc_box: str = this.allocaAtEntry(lc_elem_llvm);
+        this.emit("  store " + lc_elem_llvm + " " + lc_val + ", " + lc_elem_llvm + "* " + lc_box);
+        var lc_boxed: str = this.freshTemp();
+        this.emit("  " + lc_boxed + " = bitcast " + lc_elem_llvm + "* " + lc_box + " to i8*");
+        var lc_arr_ld: str = this.freshTemp();
+        this.emit("  " + lc_arr_ld + " = load %MochaArray*, %MochaArray** " + lc_arr_ptr);
+        this.emit("  call void @mocha_array_push(%MochaArray* " + lc_arr_ld + ", i8* " + lc_boxed + ")");
+
+        if (node.condition != null) {
+            if (lc_has_else == false) {
+                this.emit("  br label %lc_skip_" + str(lc_n));
+                this.emit("lc_skip_" + str(lc_n) + ":");
+            };
+        };
+
+        var lc_next: str = this.freshTemp();
+        this.emit("  " + lc_next + " = add i32 " + lc_idx + ", 1");
+        this.emit("  store i32 " + lc_next + ", i32* " + lc_idx_ptr);
+        this.emit("  br label %" + lc_loop);
+        this.emit(lc_end + ":");
+
+        // put the shadowed outer local back
+        if (lc_had) {
+            this.declareLocal(node.value, lc_old_p, lc_old_t, lc_old_m);
+        };
+
+        var lc_final: str = this.freshTemp();
+        this.emit("  " + lc_final + " = load %MochaArray*, %MochaArray** " + lc_arr_ptr);
+        return this.exprResult(lc_final, "%MochaArray*");
     };
 
     // --------------------------------------------------------

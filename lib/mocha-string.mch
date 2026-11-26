@@ -1,3 +1,58 @@
+"""
+mocha-string — String, Regex, CSV and Tokenizer Utilities for Mocha
+
+Section 1: String Methods (extend str)
+  Conversion     .toInt() .toFloat()    (non-numeric text gives 0 / 0.0)
+  Searching      .startsWith(p) .endsWith(s) .indexOf(sub) (-1 if absent)
+                 .contains(sub) .occurs(sub) (non-overlapping count)
+  Editing        .reverse() .repeat(n) .toUpper() .toLower()
+                 .replace(old, new, n) (first n occurrences)
+                 .replaceAll(old, new)
+  Trimming       .trimLeft() .trimRight() .rip() (both sides)
+                 whitespace = space, tab, newline, carriage return
+  Slicing        .substring(a, b)  both ends INCLUSIVE, like Lua
+                 ("hippo".substring(0, 2) == "hip")
+  Splitting      .split(delim) -> str[]   (delimiter must not be empty)
+  Padding        .padLeft(width, fill) .padRight(width, fill)
+                 (fill must be exactly one character)
+  Checks         .isAlpha() .isNumeric() .isAlphaNumeric()
+                 .isPalindrome() (case-sensitive)
+
+Section 2: String Arrays (extend str[])
+  .join(delim)
+
+Section 3: CSV Reading (extend File)
+  .readCsvRecord()   one record as str[]; quoted fields may contain commas,
+                     doubled quotes and line breaks
+  .readCsv()         whole numeric CSV as float[][]: skips the header line
+                     and blank lines; every row must match the header width
+
+Section 4: Regex (methods on str, Tier 1 engine)
+  .regex_match(p)         does the pattern match anywhere?
+  .regex_full(p)          does it match the whole string?
+  .regex_find(p)          first match, "" if none
+  .regex_find_all(p)      all non-overlapping matches
+  .regex_replace_all(p, r)
+  .regex_split(p)
+  Supported: . * + ? ^ $ [abc] [a-z] [^abc] \d \w \s \D \W \S and escaped
+  literals. Quantifiers are greedy. Not supported: alternation |, groups (),
+  counted repeats {n,m}, lazy quantifiers, escapes inside [...].
+
+Section 5: Tokenizer
+  Tokenizer()   .fit(texts) builds the vocabulary (lowercase, split on
+                spaces); .encode(text) -> int[] wrapped in [CLS] ... [SEP]
+                (unknown words become [UNK]); .decode(ids); .find(word);
+                .word(id); .size()
+                Ids 0-3 are reserved: [PAD] [UNK] [CLS] [SEP]
+
+Misuse (empty search strings, bad padding, out-of-range indexes) stops with
+a MochaLibError (mocha-string).
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
+
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
 local function mocha_str_toupper_ffi(s: str) -> str native mocha_str_toupper;
@@ -90,6 +145,11 @@ extend str {
     };
 
     function occurs(sub: str) -> int {
+        if (sub.length == 0) {
+            c_print_err("MochaLibError (mocha-string): occurs() called with an empty search string.");
+            c_exit(2);
+            return 0;
+        };
         var total: int = 0;
         var i: int = 0;
         var subLen: int = sub.length;
@@ -119,7 +179,7 @@ extend str {
         var tLen: int = this.length;
         while (i < tLen) {
             var c: str = str(this.charAt(i));
-            if (c != " " && c != "\t" && c != "\n") {
+            if (c != " " && c != "\t" && c != "\n" && c != "\r") {
                 break;
             };
             i = i + 1;
@@ -136,7 +196,7 @@ extend str {
         var i: int = this.length - 1;
         while (i >= 0) {
             var c: str = str(this.charAt(i));
-            if (c != " " && c != "\t" && c != "\n") {
+            if (c != " " && c != "\t" && c != "\n" && c != "\r") {
                 break;
             };
             i = i - 1;
@@ -147,7 +207,7 @@ extend str {
         };
         var result: str = "";
         var j: int = 0;
-        while (j < i) {  // ← CHANGE FROM <= TO <
+        while (j < i) {
             result = result + str(this.charAt(j));
             j = j + 1;
         };
@@ -165,6 +225,12 @@ extend str {
     ~~ So, hippo.substring(0,2) = "hip"
     function substring(startIdx: int, endIdx: int) -> str {
         var result: str = "";
+        if (endIdx < startIdx) { return ""; };
+        if (startIdx < 0 || endIdx >= this.length) {
+            c_print_err("MochaLibError (mocha-string): substring() index out of range.");
+            c_exit(2);
+            return "";
+        };
         var i: int = startIdx;
         while (i <= endIdx) {
             result = result + str(this.charAt(i));
@@ -174,6 +240,11 @@ extend str {
     };
 
     function replace(oldStr: str, newStr: str, occur: int) -> str {
+        if (oldStr.length == 0) {
+            c_print_err("MochaLibError (mocha-string): replace() called with an empty search string.");
+            c_exit(2);
+            return this;
+        };
         var result: str = "";
         var i: int = 0;
         var tLen: int = this.length;
@@ -201,8 +272,7 @@ extend str {
                     result = result + str(this.charAt(i));
                     i = i + 1;
                 };
-            };
-            if (replaced >= occur) {
+            } else {
                 result = result + str(this.charAt(i));
                 i = i + 1;
             };
@@ -211,6 +281,11 @@ extend str {
     };
 
     function replaceAll(oldStr: str, newStr: str) -> str {
+        if (oldStr.length == 0) {
+            c_print_err("MochaLibError (mocha-string): replaceAll() called with an empty search string.");
+            c_exit(2);
+            return this;
+        };
         var result: str = "";
         var i: int = 0;
         var tLen: int = this.length;
@@ -248,6 +323,11 @@ extend str {
     };
 
     function split(delim: str) -> str[] {
+        if (delim.length == 0) {
+            c_print_err("MochaLibError (mocha-string): split() called with an empty delimiter.");
+            c_exit(2);
+            return [];
+        };
         var result: str[] = [];
         var current: str = "";
         var i: int = 0;
@@ -293,12 +373,22 @@ extend str {
     };
 
     function padLeft(width: int, fill: str) -> str {
+        if (fill.length != 1) {
+            c_print_err("MochaLibError (mocha-string): padLeft() fill must be exactly one character.");
+            c_exit(2);
+            return this;
+        };
         if (this.length >= width) { return this; };
         var pad: str = fill.repeat(width - this.length);
         return pad + this;
     };
 
     function padRight(width: int, fill: str) -> str {
+        if (fill.length != 1) {
+            c_print_err("MochaLibError (mocha-string): padRight() fill must be exactly one character.");
+            c_exit(2);
+            return this;
+        };
         if (this.length >= width) { return this; };
         var pad: str = fill.repeat(width - this.length);
         return this + pad;
@@ -637,14 +727,13 @@ local function regex_match_here(pat: str, text: str, pi: int, ti: int) -> int {
         return -1;
     };
 
-    // ── ? — zero or one ──
+    // ── ? — zero or one (greedy: try one first) ──
     if (quantifier == "?") {
-        var result3: int = regex_match_here(pat, text, next_pi + 1, ti);
-        if (result3 != -1) { return result3; };
         if (ti < tlen && regex_match_char(pat, pi, str(text.charAt(ti)))) {
-            return regex_match_here(pat, text, next_pi + 1, ti + 1);
+            var one: int = regex_match_here(pat, text, next_pi + 1, ti + 1);
+            if (one != -1) { return one; };
         };
-        return -1;
+        return regex_match_here(pat, text, next_pi + 1, ti);
     };
 
     // ── no quantifier — match exactly one ──
@@ -657,12 +746,11 @@ local function regex_match_here(pat: str, text: str, pi: int, ti: int) -> int {
 // returns end position of match, or -1
 local function regex_match_at(pat: str, text: str, ti: int) -> int {
     var plen: int = pat.length;
-    var p0: str = str(pat.charAt(0));
-
-    // anchor ^ — only try at position 0
-    if (plen > 0 && p0 == "^") {
-        if (ti != 0) { return -1; };
-        return regex_match_here(pat, text, 1, ti);
+    if (plen > 0) {
+        if (str(pat.charAt(0)) == "^") {
+            if (ti != 0) { return -1; };
+            return regex_match_here(pat, text, 1, ti);
+        };
     };
     return regex_match_here(pat, text, 0, ti);
 };
@@ -686,22 +774,7 @@ local function regex_find_span(pat: str, text: str) -> int[] {
         return result;
     };
 
-    // $ anchored — match must end at tlen
-    if (plen > 0 && str(pat.charAt(plen - 1)) == "$") {
-        var i: int = 0;
-        while (i <= tlen) {
-            var end2: int = regex_match_at(pat, text, i);
-            if (end2 != -1 && end2 == tlen) {
-                result[0] = i;
-                result[1] = end2;
-                return result;
-            };
-            i++;
-        };
-        return result;
-    };
-
-    // unanchored — return first match
+    // unanchored — a trailing $ is handled by regex_match_here itself
     var i: int = 0;
     while (i <= tlen) {
         var end2: int = regex_match_at(pat, text, i);
@@ -749,6 +822,11 @@ class Tokenizer {
 
     ~~ Get the word for a token ID
     function word(i: int) -> str {
+        if (i < 0 || i >= this.vocab_size) {
+            c_print_err("MochaLibError (mocha-string): Tokenizer.word() id out of range.");
+            c_exit(2);
+            return "";
+        };
         return this.vocab[i];
     };
 

@@ -1,24 +1,75 @@
-"""
-    mocha-meteoro v0.1
-    Professional Meteorology Library for Mocha
-    
-    Sections:
-        1.  Thermodynamics
-        2.  Humidity
-        3.  Pressure & Altitude
-        4.  Wind
-        5.  Precipitation
-        6.  Severe Weather Indices
-        7.  Visibility, Fog & AQI
-        8.  Solar & Radiation
-        9.  Climate Statistics
-        10. Large-Scale Climate Indices
-    
-    Default units: Celsius, km/h, mb, meters
-    Dependencies: mocha-math
-"""
-
 // mocha-lib-deps: mocha-math
+
+"""
+mocha-meteoro v0.1 — Meteorology Library for Mocha
+
+Section 1:  Thermodynamics
+            dew point, wet bulb, heat index, wind chill, feels-like,
+            potential / equivalent potential / virtual temperature, LCL,
+            lapse rate and stability, frost point, unit conversions
+Section 2:  Humidity
+            vapour pressure and deficit, RH conversions, absolute and
+            specific humidity, mixing ratio, humidex, WBGT, precipitable
+            water, saturation deficit
+Section 3:  Pressure & Altitude
+            pressure and density altitude, QNH / QFE, ISA atmosphere,
+            altimeter setting, thickness, scale height, MSLP, tendency
+Section 4:  Wind
+            u / v components, crosswind and headwind, Beaufort scale,
+            wind rose, wind power density, gust factor, wind shear and
+            LLWS alert, direction helpers
+Section 5:  Precipitation
+            rainfall intensity, precipitation type, radar dBZ <-> rain
+            rate, snow (SWE, density, load), hail, accumulation,
+            antecedent precipitation index, SCS runoff, Hargreaves ET,
+            drought index, return period
+Section 6:  Severe Weather Indices
+            CAPE / CIN / LFC / EL from a sounding, K-index, Showalter,
+            lifted index, Total-Totals, SWEAT, SRH, EHI, SCP, BRN,
+            composite risk
+Section 7:  Visibility, Fog & Air Quality
+            visibility and extinction, RVR, IFR / LIFR flags, fog risk,
+            cloud base, icing, freezing level, Fosberg fire weather,
+            mixing depth, ventilation index; Indian AQI (CPCB breakpoints)
+            with sub-indices, categories, advisories, PM2.5 visibility
+Section 8:  Solar & Radiation
+            solar geometry, sunrise / sunset / daylight, extraterrestrial
+            and clear-sky radiation, net radiation (FAO-56), PAR, UV
+            index, solar panel output
+Section 9:  Climate Statistics
+            degree days (HDD / CDD / GDD), anomalies, SPI approximation,
+            percentile rank, extreme-event counts, diurnal range,
+            Thornthwaite PET, simple Koppen classification
+Section 10: Large-Scale Climate Indices & Cyclones
+            ENSO (ONI, SOI), IOD, PDO, AMO, NAO, SAM phases and impacts;
+            Saffir-Simpson, JMA and IMD cyclone scales, storm surge risk
+
+Default units:
+  temperature  Celsius        (_f variants take and return Fahrenheit)
+  wind speed   km/h           (_ms and _knots variants where useful)
+  pressure     mb (= hPa)     (inHg, Pa and atm converters provided)
+  length       meters         (_ft variants where useful)
+  Also: mixing ratio and specific humidity in g/kg, radiation in
+  MJ/m2/day, equivalent potential temperature in KELVIN, wind direction in
+  meteorological degrees (0-360), sunrise and sunset in decimal hours UTC.
+
+Input checks:
+  Temperature must be in -90..60 C, surface pressure in 870..1084 mb
+  (upper-air functions accept 1..1084 mb), humidity in 0..100. Invalid
+  input stops with a MochaLibError. Indices that only make sense in a
+  limited range (heat index, wind chill, humidex) print a warning and
+  return the actual temperature instead.
+
+Return types:
+  Classifications come back as tags (BeaufortScale, RainfallIntensity,
+  PrecipType, SevereWeatherRisk, FogRisk, IcingRisk, AQICategory,
+  UVCategory, ENSOPhase, IODPhase, CycloneScale), or as short strings and
+  ints where noted on each function.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 ~~ ── C runtime math helpers ──
 local function c_exit(code: int) -> null native mocha_exit;
@@ -157,11 +208,11 @@ function heat_index(t_c: float, rh: float) -> float {
     validate_temp_c(t_c);
     validate_rh(rh);
     if (t_c < 27.0) {
-        c_print_err("MeteroWarning: Heat index is not meaningful below 27C. Returning actual temperature.");
+        c_print_err("##WARNING (mocha-meteoro): Heat index is not meaningful below 27C. Returning actual temperature.");
         return t_c;
     };
     if (rh < 40.0) {
-        c_print_err("MeteroWarning: Heat index is not meaningful below 40% RH. Returning actual temperature.");
+        c_print_err("##WARNING (mocha-meteoro): Heat index is not meaningful below 40% RH. Returning actual temperature.");
         return t_c;
     };
     return c_heat_index(t_c, rh);
@@ -2402,7 +2453,7 @@ function standardised_anomaly(observed: float, mean: float, std_dev: float) -> f
 function percentile_rank(value: float, climatology: float[]) -> float {
     var n: int = climatology.length;
     if (n == 0) {
-        c_print_err("MeteroError: Climatology array cannot be empty.");
+        c_print_err("MochaLibError (mocha-meteoro): Climatology array cannot be empty.");
         c_exit(2);
     };
     var below: int = 0;

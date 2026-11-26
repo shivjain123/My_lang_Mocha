@@ -1395,11 +1395,12 @@ class Parser {
                 };
                 var bracket_first: ASTNode = this.parse_expression();
                 var has_if: bool = false;
-                var cond_expr: ASTNode = this.make_node("NullLiteral");
+                var cond_expr: ASTNode = this.make_node("NullLiteral"); var pre_else: ASTNode = this.make_node("NullLiteral"); var has_pre_else: bool = false;
                 if (this.check(TokenType.IF)) {
                     this.advance();
                     cond_expr = this.parse_expression();
                     has_if = true;
+                    if (this.check(TokenType.ELSE)) { this.advance(); pre_else = this.parse_expression(); has_pre_else = true; };
                 };
                 if (this.check(TokenType.FOR)) {
                     this.advance();
@@ -1414,13 +1415,9 @@ class Parser {
                     lc_node.right = iter_expr;
                     if (has_if) {
                         lc_node.condition = cond_expr;
-                        // check for else branch
-                        if (this.check(TokenType.ELSE)) {
-                            this.advance();
-                            var else_expr: ASTNode = this.parse_expression();
-                            lc_node.else_body.push(else_expr);
-                        };
+                        if (has_pre_else) { lc_node.else_body.push(pre_else); };
                     };
+                    return lc_node;
                 };
                 var arr_node: ASTNode = this.make_node("ArrayLiteral");
                 arr_node.children.push(bracket_first);

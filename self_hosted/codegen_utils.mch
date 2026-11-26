@@ -71,6 +71,8 @@ class CodeGen {
     var try_loop_ids:     str[];
     var try_loop_n:       int;
     var try_depth:        int;
+    var cap_names:        str[];
+    var cap_params:       str[];
 
     function constructor() -> null {
         this.output               = [];
@@ -108,6 +110,8 @@ class CodeGen {
         this.try_loop_ids         = [];
         this.try_loop_n           = 0;
         this.try_depth            = 0;
+        this.cap_names            = [];
+        this.cap_params           = [];
         this.break_label          = "";
         this.continue_label          = "";
         this.is_lib         = false;

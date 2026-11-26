@@ -432,6 +432,41 @@ extend CodeGen {
         return "";
     };
 
+    function emitDictSet(d_reg: str, key_reg: str, val_reg: str, val_type: str, val_node: ASTNode) -> null {
+        var ds_reg: str = val_reg;
+        var ds_type: str = val_type;
+        if (ds_type == "i1") { ds_reg = this.coerceToType(ds_reg, "i1", "i8"); ds_type = "i8"; };
+        if (ds_type == "i32") {
+            this.emit("  call void @mocha_dict_set_int(%MochaDict* " + d_reg + ", i8* " + key_reg + ", i32 " + ds_reg + ")");
+        } else if (ds_type == "double") {
+            this.emit("  call void @mocha_dict_set_float(%MochaDict* " + d_reg + ", i8* " + key_reg + ", double " + ds_reg + ")");
+        } else if (ds_type == "i8") {
+            this.emit("  call void @mocha_dict_set_bool(%MochaDict* " + d_reg + ", i8* " + key_reg + ", i8 " + ds_reg + ")");
+        } else if (ds_type == "i64") {
+            this.emit("  call void @mocha_dict_set_vast(%MochaDict* " + d_reg + ", i8* " + key_reg + ", i64 " + ds_reg + ")");
+        } else if (ds_type == "%MochaDict*") {
+            if (this.isBorrowedKind(val_node.kind)) {
+                this.emit("  call void @mocha_dict_retain(%MochaDict* " + ds_reg + ")");
+            };
+            this.emit("  call void @mocha_dict_set_dict(%MochaDict* " + d_reg + ", i8* " + key_reg + ", %MochaDict* " + ds_reg + ")");
+        } else if (ds_type.contains("%struct.")) {
+            var ds_cast: str = this.freshTemp();
+            this.emit("  " + ds_cast + " = bitcast " + ds_type + " " + ds_reg + " to i8*");
+            this.emit("  call void @mocha_dict_set_object(%MochaDict* " + d_reg + ", i8* " + key_reg + ", i8* " + ds_cast + ")");
+        } else if (ds_type == "%MochaArray*") {
+            var ds_amt: str = this.inferMochaType(val_node);
+            this.keep.push(ds_amt);
+            var ds_setter: str = this.dictArraySetter(ds_amt);
+            if (ds_setter == "") {
+                mocha_error("MochaCodeGenError", "Cannot store this array in a dict: its element type is unknown or unsupported (got '" + ds_amt + "'). Supported: int[], float[], str[], bool[], vast[].");
+            } else {
+                this.emit("  call void @" + ds_setter + "(%MochaDict* " + d_reg + ", i8* " + key_reg + ", %MochaArray* " + ds_reg + ")");
+            };
+        } else {
+            this.emit("  call void @mocha_dict_set_str(%MochaDict* " + d_reg + ", i8* " + key_reg + ", i8* " + ds_reg + ")");
+        };
+    };
+
     function genAssignment(node: ASTNode) -> null {
         this.expected_assign_type = this.assignTargetType(node.left);
         var val_result: str = this.genExpr(node.right);
@@ -477,6 +512,7 @@ extend CodeGen {
             var arr_reg:    str = this.exprReg(arr_result);
             var idx_result: str = this.genExpr(node.left.right);
             var idx_reg:    str = this.exprReg(idx_result);
+            if (this.exprType(arr_result) == "%MochaDict*") { this.emitDictSet(arr_reg, idx_reg, val_reg, val_type, node.right); return; };
             var slot:       str = this.allocaAtEntry(val_type);
             this.emit("  store " + val_type + " " + val_reg + ", " + val_type + "* " + slot);
             var cast: str = this.freshTemp();

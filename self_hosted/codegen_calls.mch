@@ -9,6 +9,14 @@ extend CodeGen {
     // Box a value to i8* for array/HashTable storage
     // --------------------------------------------------------
 
+    function boxTemp(val_reg: str, val_type: str) -> str {
+        var slot: str = this.allocaAtEntry(val_type);
+        var cast: str = this.freshTemp();
+        this.emit("  store " + val_type + " " + val_reg + ", " + val_type + "* " + slot);
+        this.emit("  " + cast + " = bitcast " + val_type + "* " + slot + " to i8*");
+        return cast;
+    };
+
     function boxValue(val_reg: str, val_type: str) -> str {
         var bsize: int = 8;
         if (val_type == "i32") { bsize = 4; };
@@ -141,6 +149,52 @@ extend CodeGen {
     // Array method calls
     // --------------------------------------------------------
 
+    function genSortCall(arr_reg: str, recv: ASTNode, obj_name: str, lam: ASTNode) -> str {
+        var sort_type: str = "";
+        if (obj_name != "") {
+            if (this.local_mocha_types.has(obj_name)) {
+                sort_type = this.local_mocha_types.get(obj_name); this.keep.push(sort_type);
+            } else if (this.global_mocha_types.has(obj_name)) {
+                sort_type = this.global_mocha_types.get(obj_name); this.keep.push(sort_type);
+            };
+        };
+        if (sort_type == "") {
+            sort_type = this.inferMochaType(recv); this.keep.push(sort_type);
+        };
+        var sort_b: int = sort_type.length - 1;
+        while (sort_b >= 0) {
+            if (sort_type.charAt(sort_b) == "[") { break; };
+            sort_b = sort_b - 1;
+        };
+        var sort_elem: str = "";
+        if (sort_b > 0) { sort_elem = sort_type.substring(0, sort_b - 1); };
+        var sort_fn: str = "";
+        var sort_env_fn: str = "";
+        if (sort_elem == "int")   { sort_fn = "mocha_sort_int";   sort_env_fn = "mocha_sort_int_cmp_env"; };
+        if (sort_elem == "float") { sort_fn = "mocha_sort_float"; sort_env_fn = "mocha_sort_float_cmp_env"; };
+        if (sort_elem == "str")   { sort_fn = "mocha_sort_str";   sort_env_fn = "mocha_sort_str_cmp_env"; };
+        if (sort_elem == "vast")  { sort_fn = "mocha_sort_vast"; };
+        if (sort_elem == "bool")  { sort_fn = "mocha_sort_bool"; };
+        if (sort_fn == "") {
+            mocha_error("MochaCodeGenError", "sort() cannot determine a supported element type for this argument (supported: int[], float[], str[], vast[], bool[]); assign it to a typed variable first");
+            return this.exprResult("void", "void");
+        };
+        if (lam != null) {
+            if (sort_env_fn == "") {
+                mocha_error("MochaCodeGenError", "sort() with a comparator is only supported for int[], float[] and str[]");
+                return this.exprResult("void", "void");
+            };
+            var sort_lam: str = this.genExpr(lam);
+            var sort_bundle: str = this.exprReg(sort_lam);
+            var sort_cast: str = this.freshTemp();
+            this.emit("  " + sort_cast + " = bitcast i8* " + sort_bundle + " to %MochaClosureBundle*");
+            this.emit("  call void @" + sort_env_fn + "(%MochaArray* " + arr_reg + ", %MochaClosureBundle* " + sort_cast + ")");
+        } else {
+            this.emit("  call void @" + sort_fn + "(%MochaArray* " + arr_reg + ")");
+        };
+        return this.exprResult("void", "void");
+    };
+
     function genArrayMethodCall(arr_reg: str, member: str, node: ASTNode, obj_name: str) -> str {
         var tmp: str = this.freshTemp();
 
@@ -168,7 +222,7 @@ extend CodeGen {
             var val_result: str = this.genExpr(val_arg);
             var val_reg:    str = this.exprReg(val_result);
             var val_type:   str = this.exprType(val_result);
-            var cast:       str = this.boxValue(val_reg, val_type);
+            var cast:       str = this.boxTemp(val_reg, val_type);
             var fn: str = "mocha_array_push";
             if (use_start) { fn = "mocha_array_push_front"; };
             this.emit("  call void @" + fn + "(%MochaArray* " + arr_reg + ", i8* " + cast + ")");
@@ -189,9 +243,17 @@ extend CodeGen {
             var oval_result: str = this.genExpr(node.args[0]);
             var oval_reg:    str = this.exprReg(oval_result);
             var oval_type:   str = this.exprType(oval_result);
-            var ocast:       str = this.boxValue(oval_reg, oval_type);
+            var ocast:       str = this.boxTemp(oval_reg, oval_type);
             this.emit("  " + tmp + " = call i32 @mocha_array_occs(%MochaArray* " + arr_reg + ", i8* " + ocast + ")");
             return this.exprResult(tmp, "i32");
+        };
+
+        if (member == "sort") {
+            var sort_lam_node: ASTNode = null;
+            if (node.args.length > 0) {
+                if (node.args[0].kind == "LambdaExpr") { sort_lam_node = node.args[0]; };
+            };
+            return this.genSortCall(arr_reg, node.left.left, obj_name, sort_lam_node);
         };
 
         // Extension method
@@ -237,7 +299,7 @@ extend CodeGen {
             var key_reg: str = this.exprReg(args[0]);
             var val_reg: str = this.exprReg(args[1]);
             var val_type: str = this.exprType(args[1]);
-            var cast: str = this.boxValue(val_reg, val_type);
+            var cast: str = this.boxTemp(val_reg, val_type);
             this.emit("  call void @mocha_ht_put(%struct.MochaHashTable* " + ht_reg + ", i8* " + key_reg + ", i8* " + cast + ")");
             return this.exprResult("void", "void");
         };
@@ -332,6 +394,136 @@ extend CodeGen {
     // genMemberCall — dispatch method calls on objects
     // --------------------------------------------------------
 
+    function genArray2DMethodCall(arr_reg: str, member: str, node: ASTNode, obj_name: str) -> str {
+        var a2t: str = this.freshTemp();
+        if (member == "resize") {
+            var rz_rows: str = this.exprReg(this.genExpr(node.args[0]));
+            var rz_cols: str = this.exprReg(this.genExpr(node.args[1]));
+            var rz_mt: str = "";
+            if (obj_name != "") {
+                if (this.local_mocha_types.has(obj_name)) {
+                    rz_mt = this.local_mocha_types.get(obj_name); this.keep.push(rz_mt);
+                };
+            };
+            var rz_b: int = 0;
+            while (rz_b < rz_mt.length) {
+                if (rz_mt.charAt(rz_b) == "[") { break; };
+                rz_b = rz_b + 1;
+            };
+            var rz_elem: str = rz_mt;
+            if (rz_b > 0 && rz_b < rz_mt.length) { rz_elem = rz_mt.substring(0, rz_b - 1); };
+            var rz_size: int = 4;
+            if (rz_elem == "vast" || rz_elem == "float" || rz_elem == "str") { rz_size = 8; };
+            if (rz_elem == "bool") { rz_size = 1; };
+            this.emit("  call void @mocha_array2d_resize(%MochaArray2D* " + arr_reg + ", i32 " + rz_rows + ", i32 " + rz_cols + ", i32 " + str(rz_size) + ")");
+            return this.exprResult("void", "void");
+        };
+        if (member == "drop") {
+            var dp_row: ASTNode = this.findNamedArg(node, "row");
+            var dp_col: ASTNode = this.findNamedArg(node, "col");
+            if (dp_row != null) {
+                var dp_rr: str = this.exprReg(this.genExpr(dp_row));
+                this.emit("  call void @mocha_array2d_drop_row(%MochaArray2D* " + arr_reg + ", i32 " + dp_rr + ")");
+            } else if (dp_col != null) {
+                var dp_cr: str = this.exprReg(this.genExpr(dp_col));
+                this.emit("  call void @mocha_array2d_drop_col(%MochaArray2D* " + arr_reg + ", i32 " + dp_cr + ")");
+            } else {
+                mocha_error("MochaCodeGenError", "'drop' on 2D array requires a 'row=' or 'col=' argument");
+            };
+            return this.exprResult("void", "void");
+        };
+        if (member == "occs") {
+            var oc_pos: str[] = this.collectArgs(node);
+            if (oc_pos.length == 0) {
+                mocha_error("MochaCodeGenError", "'occs' requires a value argument");
+                return this.exprResult("void", "void");
+            };
+            var oc_reg: str = this.exprReg(oc_pos[0]);
+            var oc_typ: str = this.exprType(oc_pos[0]);
+            if (oc_typ == "i1") { oc_reg = this.coerceToType(oc_reg, "i1", "i8"); oc_typ = "i8"; };
+            var oc_cast: str = this.boxTemp(oc_reg, oc_typ);
+            var oc_row: ASTNode = this.findNamedArg(node, "row");
+            var oc_col: ASTNode = this.findNamedArg(node, "col");
+            var oc_row_arr: bool = false;
+            var oc_col_arr: bool = false;
+            if (oc_row != null) { if (oc_row.kind == "ArrayLiteral") { oc_row_arr = true; }; };
+            if (oc_col != null) { if (oc_col.kind == "ArrayLiteral") { oc_col_arr = true; }; };
+            if (oc_row_arr) {
+                var oc_s1: str = this.exprReg(this.genExpr(oc_row.children[0]));
+                var oc_e1: str = this.exprReg(this.genExpr(oc_row.children[1]));
+                this.emit("  " + a2t + " = call i32 @mocha_array2d_occs_rowrange(%MochaArray2D* " + arr_reg + ", i8* " + oc_cast + ", i32 " + oc_s1 + ", i32 " + oc_e1 + ")");
+            } else if (oc_row != null) {
+                var oc_r1: str = this.exprReg(this.genExpr(oc_row));
+                this.emit("  " + a2t + " = call i32 @mocha_array2d_occs_row(%MochaArray2D* " + arr_reg + ", i8* " + oc_cast + ", i32 " + oc_r1 + ")");
+            } else if (oc_col_arr) {
+                var oc_s2: str = this.exprReg(this.genExpr(oc_col.children[0]));
+                var oc_e2: str = this.exprReg(this.genExpr(oc_col.children[1]));
+                this.emit("  " + a2t + " = call i32 @mocha_array2d_occs_colrange(%MochaArray2D* " + arr_reg + ", i8* " + oc_cast + ", i32 " + oc_s2 + ", i32 " + oc_e2 + ")");
+            } else if (oc_col != null) {
+                var oc_c1: str = this.exprReg(this.genExpr(oc_col));
+                this.emit("  " + a2t + " = call i32 @mocha_array2d_occs_col(%MochaArray2D* " + arr_reg + ", i8* " + oc_cast + ", i32 " + oc_c1 + ")");
+            } else {
+                this.emit("  " + a2t + " = call i32 @mocha_array2d_occs(%MochaArray2D* " + arr_reg + ", i8* " + oc_cast + ")");
+            };
+            return this.exprResult(a2t, "i32");
+        };
+        if (member == "push") {
+            var pu_col: ASTNode = this.findNamedArg(node, "col");
+            var pu_pos: str[] = this.collectArgs(node);
+            if (pu_pos.length == 0) {
+                mocha_error("MochaCodeGenError", "'push' on 2D array requires a data argument");
+                return this.exprResult("void", "void");
+            };
+            var pu_data: str = this.exprReg(pu_pos[0]);
+            var pu_is_col: bool = false;
+            if (pu_col != null) {
+                if (pu_col.kind == "BoolLiteral") {
+                    if (pu_col.bool_val) { pu_is_col = true; };
+                };
+            };
+            if (pu_is_col) {
+                this.emit("  call void @mocha_array2d_push_col(%MochaArray2D* " + arr_reg + ", %MochaArray* " + pu_data + ")");
+            } else {
+                this.emit("  call void @mocha_array2d_push_row(%MochaArray2D* " + arr_reg + ", %MochaArray* " + pu_data + ")");
+            };
+            return this.exprResult("void", "void");
+        };
+
+        // extension methods
+        var ex_type: str = "int[][]";
+        if (obj_name != "") {
+            if (this.local_mocha_types.has(obj_name)) {
+                ex_type = this.local_mocha_types.get(obj_name); this.keep.push(ex_type);
+            };
+        };
+        var ex_args: str = "%MochaArray2D* " + arr_reg;
+        var ex_i: int = 0;
+        while (ex_i < node.args.length) {
+            if (node.args[ex_i].kind == "NamedArg") {
+                mocha_error("MochaCodeGenError", "named arguments are not supported on 2D array method '" + member + "' yet");
+                return this.exprResult("void", "void");
+            };
+            var ex_res: str = this.genExpr(node.args[ex_i]);
+            ex_args = ex_args + ", " + this.exprType(ex_res) + " " + this.exprReg(ex_res);
+            ex_i = ex_i + 1;
+        };
+        var ex_key: str = "mocha_ext_" + this.sanitizeTypeName(ex_type) + "_" + member;
+        if (this.method_return_types.has(ex_key) == false) {
+            ex_key = "mocha_ext_" + ex_type + "_" + member;
+        };
+        if (this.method_return_types.has(ex_key)) {
+            var ex_ret: str = this.method_return_types.get(ex_key); this.keep.push(ex_ret);
+            if (ex_ret == "void") {
+                this.emit("  call void @" + ex_key + "(" + ex_args + ")");
+                return this.exprResult("void", "void");
+            };
+            this.emit("  " + a2t + " = call " + ex_ret + " @" + ex_key + "(" + ex_args + ")");
+            return this.exprResult(a2t, ex_ret);
+        };
+        mocha_error("MochaCodeGenError", "Unknown 2D array method '" + member + "' on type '" + ex_type + "'");
+        return this.exprResult("void", "void");
+    };
+
     function genMemberCall(node: ASTNode) -> str {
         var obj:    ASTNode = node.left.left;
         var member: str     = node.left.value;
@@ -340,6 +532,12 @@ extend CodeGen {
         var obj_result: str = this.genExpr(obj);
         var obj_reg:    str = this.exprReg(obj_result);
         var obj_type:   str = this.exprType(obj_result);
+
+        if (obj_type == "%MochaArray2D*") {
+            var a2_name: str = "";
+            if (obj.kind == "Identifier") { a2_name = obj.value; };
+            return this.genArray2DMethodCall(obj_reg, member, node, a2_name);
+        };
 
         // Array methods
         if (obj_type == "%MochaArray*") {
@@ -351,6 +549,15 @@ extend CodeGen {
         // String methods
         if (obj_type == "i8*") {
             return this.genStrMethodCall(obj_reg, member, node);
+        };
+
+        if (obj_type == "%MochaDict*") {
+            return this.genDictMethodCall(obj_reg, member, node);
+        };
+        if (obj_type == "%MochaSet*") {
+            var set_oname: str = "";
+            if (obj.kind == "Identifier") { set_oname = obj.value; };
+            return this.genSetMethodCall(obj_reg, member, node, set_oname);
         };
 
         // HashTable methods
@@ -488,9 +695,93 @@ extend CodeGen {
     // genDirectCall — plain function calls
     // --------------------------------------------------------
 
+    function genLambdaCall(node: ASTNode, func_name: str) -> str {
+        var want: str = this.expected_assign_type;
+        var lptr: str = this.getLocalPtr(func_name); this.keep.push(lptr);
+        var bundle:  str = this.freshTemp();
+        var slot0:   str = this.freshTemp();
+        var fn_ptr:  str = this.freshTemp();
+        var slot1:   str = this.freshTemp();
+        var env_ptr: str = this.freshTemp();
+        this.emit("  " + bundle + " = load i8*, i8** " + lptr);
+        this.emit("  " + slot0 + " = bitcast i8* " + bundle + " to i8**");
+        this.emit("  " + fn_ptr + " = load i8*, i8** " + slot0);
+        this.emit("  " + slot1 + " = getelementptr i8*, i8** " + slot0 + ", i32 1");
+        this.emit("  " + env_ptr + " = load i8*, i8** " + slot1);
+
+        var largs:  str[] = this.collectArgs(node);
+        var boxed:  str[] = [];
+        var atypes: str[] = [];
+        var li: int = 0;
+        while (li < largs.length) {
+            var a_reg: str = this.exprReg(largs[li]);
+            var a_typ: str = this.exprType(largs[li]);
+            boxed.push(this.boxTemp(a_reg, a_typ));
+            atypes.push(a_typ);
+            li = li + 1;
+        };
+
+        var call_ret: str = "i8";
+        var is_pred: bool = func_name == "pred" || func_name == "predicate" || func_name == "condition" || func_name == "filter" || func_name == "test";
+        var is_xform: bool = func_name == "transform" || func_name == "mapper" || func_name == "fn" || func_name == "func" || func_name == "f";
+        if (want == "float") {
+            call_ret = "double";
+        } else if (want == "str") {
+            call_ret = "i8*";
+        } else if (want == "bool") {
+            call_ret = "i8";
+        } else if (want == "int" || want == "vast") {
+            call_ret = "i32";
+        } else if (is_pred) {
+            call_ret = "i8";
+        } else if (is_xform) {
+            if (atypes.length == 1) { call_ret = atypes[0]; };
+        } else {
+            if (atypes.length == 1) {
+                if (atypes[0] == "double") { call_ret = "double"; };
+                if (atypes[0] == "i8*")    { call_ret = "i8*"; };
+            } else if (atypes.length >= 2) {
+                call_ret = atypes[0];
+            };
+        };
+
+        var boxed_str: str = "";
+        var ptypes:    str = "";
+        var bi: int = 0;
+        while (bi < boxed.length) {
+            boxed_str = boxed_str + "i8* " + boxed[bi] + ", ";
+            ptypes = ptypes + "i8*, ";
+            bi = bi + 1;
+        };
+        boxed_str = boxed_str + "i8* " + env_ptr;
+        ptypes = ptypes + "i8*";
+
+        var fn_typed: str = this.freshTemp();
+        var result:   str = this.freshTemp();
+        this.emit("  " + fn_typed + " = bitcast i8* " + fn_ptr + " to " + call_ret + " (" + ptypes + ")*");
+        this.emit("  " + result + " = call " + call_ret + " " + fn_typed + "(" + boxed_str + ")");
+        return this.exprResult(result, call_ret);
+    };
+
     function genDirectCall(node: ASTNode) -> str {
+        if (this.hasLocal(node.left.value)) {
+            var lc_mt: str = this.getLocalMochaType(node.left.value); this.keep.push(lc_mt);
+            if (lc_mt == "lambda") { return this.genLambdaCall(node, node.left.value); };
+        };
         var func_name: str = node.left.value;
         var tmp:       str = this.freshTemp();
+
+        if (func_name == "sort") {
+            var sortf_arr: str = this.genExpr(node.args[0]);
+            var sortf_reg: str = this.exprReg(sortf_arr);
+            var sortf_name: str = "";
+            if (node.args[0].kind == "Identifier") { sortf_name = node.args[0].value; };
+            var sortf_lam: ASTNode = null;
+            if (node.args.length > 1) {
+                if (node.args[1].kind == "LambdaExpr") { sortf_lam = node.args[1]; };
+            };
+            return this.genSortCall(sortf_reg, node.args[0], sortf_name, sortf_lam);
+        };
 
         // Built-in: print
         if (func_name == "print") {

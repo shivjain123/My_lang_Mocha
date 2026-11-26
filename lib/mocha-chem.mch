@@ -1,9 +1,28 @@
-~~ mocha-chem: Section 1 — Stoichiometry & Real Gases
-~~ Mole/mass conversions, concentration units, yield,
-~~ effusion, and real gas behavior via van der Waals.
-~~ Ideal gas law excluded by design; PV = nRT does not model reality.
-
 // mocha-lib-deps: mocha-math
+
+"""
+mocha-chem — Chemistry Library for Mocha
+
+Section 1: Stoichiometry & Real Gases
+Section 2: Thermodynamics
+Section 3: Chemical Kinetics
+Section 4: Equilibrium & Acid-Base
+Section 5: Electrochemistry
+Section 6: Nuclear Chemistry
+Section 7: Quantum & Atomic Structure
+Section 8: Solutions & Colligative Properties
+Section 9: Inorganic / Solid State
+Section 10: Organic-Adjacent Calculations
+Section 11: Spectroscopy
+
+Design note: the ideal gas law is excluded on purpose. PV = nRT does not model
+real gases, so gas behaviour goes through van der Waals
+(van_der_waals_pressure, van_der_waals_molar_volume).
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;

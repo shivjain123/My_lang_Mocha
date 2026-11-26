@@ -1,12 +1,37 @@
-"""
-mocha-space — Astronomy & Astrophysics Library for Mocha
-Section 1: Orbital Mechanics
-Functions: 25 + atan2 helper
-Reference: Bate/Mueller/White "Fundamentals of Astrodynamics";
-           Curtis "Orbital Mechanics for Engineering Students"
-"""
+// mocha-lib-deps: mocha-math
 
-from "mocha-math" import *;
+"""
+mocha-space v0.2 — Astronomy & Astrophysics Library for Mocha
+
+Section 1: Orbital Mechanics (Kepler's laws, vis-viva, anomalies, Hohmann
+           transfers, SOI / Hill / Roche radii, OrbitType tag)
+Section 2: Stellar Physics & Photometry (Stefan-Boltzmann, Wien, parallax,
+           magnitudes, main sequence, Schwarzschild radius, photon energy)
+Section 3: Planetary Atmospheres & Habitability (equilibrium temperature,
+           insolation, scale height, surface gravity, Jeans parameter)
+Section 4: Celestial Coordinates (equatorial, horizontal, ecliptic and galactic
+           conversions, separation, proper motion, refraction, precession)
+Section 5: Time Systems (Julian / Modified Julian Date, GMST / LST, Unix,
+           UTC / TT, Besselian and Julian epochs)
+
+Notes: Units are SI (m, kg, s, K, W, Pa) unless a function says otherwise.
+Anomalies and flight path angles are in radians, while celestial coordinates and
+inclination changes are in degrees. Invalid input stops with a MochaLibError.
+Physical and astronomical constants (GM, masses, radii, AU, parsec and so on)
+are exported alongside the functions, and the RADIUS_* values are MEAN radii.
+Very large or small values go through raw IEEE math (unsafe_*), so they skip
+fixed-point drift protection. The Kepler solver is elliptical only (0 <= e < 1),
+uses Newton's method, and stops if it has not converged in 50 iterations. True
+anomaly comes back in (-pi, pi]. The habitable zone is a first-pass estimate
+and precession is a linear approximation, best under ~100 years. GMST is valid
+within 200 years of J2000, and julian_date is Gregorian only. utc_to_tt and
+tt_to_utc use a fixed 69.184 s offset, valid from 2017-01-01 to about 2037;
+if a leap second is ever inserted, update TT_MINUS_UTC and the upper bound.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
@@ -65,7 +90,6 @@ const OBLIQUITY_J2000: float = 23.4392911;        // degrees, mean obliquity of 
 const GALACTIC_POLE_RA: float = 192.859508;        // degrees, North Galactic Pole RA (J2000)
 const GALACTIC_POLE_DEC: float = 27.128336;        // degrees, North Galactic Pole Dec (J2000)
 const GALACTIC_NODE: float = 122.932;              // degrees, position angle of galactic node (J2000)
-const PRECESSION_RATE: float = 50.290966;          // arcsec/year, general precession in longitude (IAU 1976)
 const PRECESSION_M_ARCSEC: float = 46.124;         // arcsec/year, equatorial precession term m (J2000)
 const PRECESSION_N_ARCSEC: float = 20.043;         // arcsec/year, equatorial precession term n (J2000)
 const ARCSEC_TO_DEG: float = 0.0002777777777777778; // 1/3600
@@ -1293,8 +1317,8 @@ function julian_date(year: int, month: int, day: float) -> float {
         c_print_err("MochaLibError (mocha-space): Day must be in (0, 32) — includes fractional day-of-month.");
         c_exit(2);
     };
-    if (year < 1582) {
-        c_print_err("MochaLibError (mocha-space): Gregorian calendar only — year must be >= 1582.");
+    if (year < 1582 || (year == 1582 && (month < 10 || (month == 10 && day < 15.0)))) {
+        c_print_err("MochaLibError (mocha-space): Gregorian calendar only — date must be 1582-10-15 or later.");
         c_exit(2);
     };
     var y: int = year;
@@ -1375,6 +1399,7 @@ function julian_date_to_unix(jd: float) -> float {
     return (jd - JD_UNIX_EPOCH) * SECONDS_PER_DAY;
 };
 
+~~ Convert a Julian Date in UTC to Terrestrial Time (TT).
 ~~ Uses a fixed offset of 69.184 s (TAI-UTC = 37 s since 2017-01-01, plus TT-TAI = 32.184 s).
 ~~ Still correct as of IERS Bulletin C 72 (6 July 2026), which announced no leap second for December 2026.
 ~~ If a leap second is ever inserted, the TT_MINUS_UTC constant and the upper bound below must be updated.

@@ -220,7 +220,7 @@ class EmitError(Exception):
 
 
 def quote(s: str) -> str:
-    s = re.sub(r'\\(?!\$)', r'\\\\', s).replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")   # '\$' is Mocha's escape for a literal dollar: keep it single
+    s = re.sub(r'\\(?!\$)', r'\\\\', s).replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")   # '\$' is Mocha's escape for a literal dollar: keep it single
     return f'"{s}"'
 
 
@@ -2205,6 +2205,17 @@ def emit_function(fn, g):
 
     loop_stack = []                    # (header, end, continue-target) of the loops we are inside
 
+    def record_sc_reads(ind):
+        """An and/or inside a plain statement (a call argument, an assignment) never goes through settle: record the array reads of every right-hand side before the expression is rendered."""
+        for rb_ in sc_right_blocks:
+            for i_ in fn.blocks[rb_].instrs:
+                cm_ = CALL_RE.match(i_.text) if i_.op == "call" else None
+                if cm_ and cm_.group(2) in ARRAY_CALLS and cm_.group(2).endswith("_get"):
+                    tk_ = [a.split()[-1] for a in split_top_level(cm_.group(3))]
+                    sl_ = slot_for(tk_[-1])
+                    if sl_ is not None and sl_ not in got:
+                        do_array(cm_.group(2), tk_, state["cur"], ind)
+
     def settle(label, ind, skip=0):
         """Process a block; if it ends in an and/or branch, follow it to the block with the real branch."""
         process_block(label, ind, skip)
@@ -2479,6 +2490,7 @@ def emit_function(fn, g):
                 label = emit_try(try_site[label], ind)
                 continue
             if label in sc_branch:             # and/or: the right side is rendered inside the expression
+                record_sc_reads(ind)
                 label = sc_branch[label]
                 continue
             term = fn.blocks[label].instrs[-1]

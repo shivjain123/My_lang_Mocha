@@ -3,8 +3,6 @@ mocha-geo — Geoscience Library for Mocha
 
 Section 1: Seismology
 Section 2: Mineralogy & Crystallography
-Section 1: Seismology
-Section 2: Mineralogy & Crystallography
 Section 3: Structural Geology & Plate Tectonics
 Section 4: Hydrology
 Section 5: Volcanology

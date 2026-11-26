@@ -17,7 +17,7 @@ extend CodeGen {
     // --------------------------------------------------------
 
     function typeDeclSeenBefore(idx: int) -> bool {
-        if (this.type_declarations[idx] == "") { return false; };
+        var tdsl_line: str = this.type_declarations[idx]; if (tdsl_line == "") { return false; }; if (tdsl_line.charAt(0) != "%") { return false; };
         var j: int = 0;
         var seen: bool = false;
         while (j < idx) {

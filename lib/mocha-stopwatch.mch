@@ -1,6 +1,41 @@
 """
-    mocha-stopwatch v0.1
-    Timing and datetime utilities for Mocha
+mocha-stopwatch v0.2 — Timing and Date/Time Utilities for Mocha
+
+Section 1: Raw Timestamps
+  now_ms()       process clock in milliseconds (clock()): CPU time on Linux
+                 and macOS, but elapsed time since program start on Windows
+  wall_ms()      monotonic wall-clock milliseconds, counted from the first
+                 call in the program (the first call returns 0); use it to
+                 measure intervals, not to read the date
+  unix_time()    seconds since 1970-01-01 UTC, as a float (whole seconds)
+
+Section 2: Human-Readable Date & Time
+  datetime_now(), date_now(), time_now(), ampm_now(),
+  day_now(), month_now(), year_now()     all return str
+
+Section 3: Stopwatch
+  Stopwatch()          create one; the default clock is wall time
+  .begin()             start (or restart) timing
+  .end()               stop timing; errors if it was never started
+  .elapsed_ms()        elapsed time in ms, while running (a lap) or after
+                       end(); errors before begin()
+  .elapsed_sec()       the same in seconds
+  .reset()             clear the stopwatch
+  .is_running()        true between begin() and end()
+  .use_wall_time()     time with the wall clock (default)
+  .use_cpu_time()      time with the process clock (see now_ms)
+  .wait(ms)            pause for ms milliseconds (ms >= 0). It busy-waits:
+                       precise, but it keeps one CPU core at 100% while
+                       waiting, so avoid very long waits
+
+Notes:
+  - use_wall_time() and use_cpu_time() can only be called while the
+    stopwatch is NOT running. Switching clears any stored result, because
+    it was measured with the other clock.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
 """
 
 // ── C wrappers ──
@@ -71,8 +106,18 @@ class Stopwatch {
         this.use_wall = 1;  // default to wall time on Windows
     };
 
-    function use_cpu_time() -> null { this.use_wall = 0; };
-    function use_wall_time() -> null { this.use_wall = 1; };
+    private function switch_clock(mode: int) -> null {
+        if (this.running == 1) {
+            c_print_err("MochaStopwatchError: cannot change the clock while the stopwatch is running. Call end() or reset() first.");
+            c_exit(2);
+            return;
+        };
+        this.use_wall = mode;
+        this.reset();   // a stored result was measured with the other clock
+    };
+
+    function use_cpu_time() -> null { this.switch_clock(0); };
+    function use_wall_time() -> null { this.switch_clock(1); };
 
     function begin() -> null {
         if (this.use_wall == 1) {

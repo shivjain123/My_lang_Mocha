@@ -1,18 +1,53 @@
 // mocha-lib-deps: mocha-math, mocha-string
+
 """
-    mocha-ds — Mocha Data Structures Library
-    Sections:=
-    1. Core Value Wrapper
-    2. Singly Linked List
-    3. Doubly Linked List
-    4. Stack
-    5. Queue
-    6. Deque
-    7. Heap
-    8. BST / AVL
-    9. Trie
-    10. Patricia
-    11. Graph
+mocha-ds — Data Structures Library for Mocha
+
+Section 1:  Core Value Wrapper
+            DSValue (INT, FLOAT, STR, BOOL) with ds_int(), ds_float(),
+            ds_str(), ds_bool(), ds_equals(), ds_to_str()
+Section 2:  Singly Linked List        (SinglyLL)
+Section 3:  Doubly Linked List        (DoublyLL)
+Section 4:  Stack                     (Stack)
+Section 5:  Queue                     (Queue)
+Section 6:  Deck — double-ended queue (Deck)
+Section 7:  Heap                      (Heap, HeapKind MIN / MAX, heapify)
+Section 8:  AVL Tree                  (AVLTree)
+Section 9:  Red-Black Tree            (RBTree)
+Section 10: Ball Tree                 (BallTree) — NOT the textbook build:
+            an online ball tree that inserts one point at a time and
+            rebalances locally using an adaptive threshold. Nearest
+            neighbour and range search.
+Section 11: Patricia                  (Patricia) — compressed trie over str
+            keys: insert, get, contains, delete, starts_with,
+            all_with_prefix
+Section 12: Graph                     (Graph)
+            BFS, DFS, Dijkstra, Bellman-Ford; MST totals via Prim, Kruskal
+            and Boruvka; gravity_merge (a spanning-tree heuristic, NOT a
+            minimum spanning tree); degree, closeness, betweenness
+            centrality, clustering coefficient, density, average degree
+Section 13: Bloom Filter              (BloomFilter)
+Section 14: Counting Bloom Filter     (CountingBloomFilter, supports remove)
+
+Values:
+  The sequence and tree containers store DSValue, so one structure can hold
+  ints, floats and strings. The trees and the heap compare keys of the same
+  kind only; mixing kinds, or using BOOL keys, stops with a MochaDSError.
+  Graph nodes are identified by str labels and edges carry float weights.
+
+Hashing:
+  mocha_fnv1a(key) and mocha_djb2(key) are public str -> int hash functions
+  (native). The Bloom filters combine them by double hashing.
+
+Return conventions:
+  Graph shortest paths return -1.0 when a node is missing or unreachable,
+  and Bellman-Ford returns -2.0 when it finds a negative cycle. Empty-graph
+  MST calls return -1.0. Other misuse (pop on an empty container, index out
+  of bounds) stops with MochaDSError (mocha-ds).
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
 """
 
 // FFI
@@ -1077,6 +1112,11 @@ class RBTree {
 
     // Compare two DSValues — returns -1, 0, 1
     function cmp(a: DSValue, b: DSValue) -> int {
+        if (a.kind != b.kind) {
+            c_print_err("MochaDSError (mocha-ds): RBTree cannot compare keys of different kinds (e.g. INT with STR).");
+            c_exit(2);
+            return 0;
+        };
         if (a.kind == DSKind.BOOL) {
             c_print_err("MochaDSError (mocha-ds): RBTree does not support DSKind.BOOL.");
             c_exit(2);
@@ -1334,6 +1374,9 @@ class RBTree {
 
     // Public API
     function insert(key: DSValue) -> null {
+        if (this.contains(key)) {
+            return;    // duplicate: silently ignored, like AVLTree and set.insert()
+        };
         var z: RBNode    = RBNode(key, RBColor.RED, this.nil, this.nil, this.nil);
         var y: RBNode    = this.insert_parent(this.root, this.nil, key);
         z.parent = y;
@@ -1366,6 +1409,8 @@ class RBTree {
             };
         };
         if (z == this.nil) {
+            c_print_err("MochaDSError (mocha-ds): remove() key not found in RBTree.");
+            c_exit(2);
             return;
         };
         var y: RBNode       = this.nil;
@@ -2597,10 +2642,9 @@ class Graph {
             u = u + 1;
         };
 
-        // Sort edges by weight (simple insertion sort)
-        var m: int = edge_w.length;
-        var i: int = 1;
+        // Sort edges by weight
         // Iterative quicksort on edge_u/edge_v/edge_w by weight, ascending
+        var m: int = edge_w.length;
         if (m > 1) {
             var stack_lo: int[] = [0];
             var stack_hi: int[] = [m - 1];

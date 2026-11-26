@@ -224,9 +224,19 @@ def named_loss(s, sl):
     return bool(re.search(r'[(,]\s*(?!newLine\b)[A-Za-z_]\w*\s*=(?!=)', sl)) and norm_named(s) == norm_named(sl)
 
 
+def norm_dollar(s):
+    # a source string with an escaped backslash before a dollar and our single-escape spelling give the same IR constant, and parentheses around a string receiver mean nothing
+    s = s.replace('\\\\$', '\\$')
+    return re.sub(r'\(("(?:[^"\\]|\\.)*")\)\.', r'\1.', s)
+
+
+def dollar_loss(s, sl):
+    return '$' in sl and norm_dollar(s) == norm_dollar(sl)
+
+
 known, other = [], []
 for f, name, items in mismatch_list:
-    lost = all(LOSS_OURS.search(s) or LOSS_SRC.search(re.sub(r'"(?:\\.|[^"\\])*"', '""', sl)) or norm_loss(s) == sl.strip() or default_loss(f, s, sl) or named_loss(s, sl) for _, s, sl in items)
+    lost = all(LOSS_OURS.search(s) or LOSS_SRC.search(re.sub(r'"(?:\\.|[^"\\])*"', '""', sl)) or norm_loss(s) == sl.strip() or default_loss(f, s, sl) or named_loss(s, sl) or dollar_loss(s, sl) for _, s, sl in items)
     (known if lost else other).append((f, name, items))
 print(f"\n🟡 emitted but mismatched:     {len(other)}" + (f"   (+{len(known)} known losses, listed below)" if known else ""))
 

@@ -1,6 +1,32 @@
-~~ Mocha-Lua FFI Library
-~~ Provides bidirectional Lua integration for Mocha programs.
-~~ Use lua_open() to create a Lua state and lua_close() to destroy it.
+"""
+mocha-lua v0.2 — Lua FFI Library for Mocha
+
+Section 1: State Lifecycle (lua_open, lua_close)
+Section 2: Running Code (lua_run, lua_run_file, lua_try)
+Section 3: Globals (lua_get_* and lua_set_* for number, string, bool, int)
+Section 4: Stack (lua_stack_size, lua_clear_stack)
+Section 5: Fixed-Signature Calls (lua_call_* with 0, 1 or 2 arguments)
+Section 6: Generic Calls (lua_begin_call, lua_push_*, lua_end_call_*)
+Section 7: Failure Checks (lua_call_failed, lua_call_error)
+
+Notes: lua_open() returns an opaque state handle that every other function
+takes first. Close it with lua_close; closing twice is safe (the second call
+warns and is ignored). lua_run and lua_run_file return 0 on success, while
+lua_try returns the error message, or an empty string on success. Getters
+return 0, 0.0 or "" for a missing global, except lua_get_bool, which follows
+Lua rules (only nil and false give false). lua_get_int cuts off decimals.
+The fixed-signature calls cover only some argument and return combinations.
+For anything else, use the generic form: lua_begin_call, then one lua_push_*
+per argument in order, then lua_end_call_<type>(lua, nargs) with the same
+count you pushed. A wrong count or a missing begin prints a MochaLuaError and
+fails the call. A failed call still returns 0, 0.0 or "", so check
+lua_call_failed (and lua_call_error for the message) to tell it from a real
+zero. The failure status belongs to the state and is updated by every call.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 ~~ Creates a new Lua state. Returns an opaque handle.
 function lua_open() -> null native mocha_lua_new;
@@ -186,11 +212,8 @@ function lua_call_int_2n(lua: null, func: str, a: float, b: float) -> int native
 ~~ @param b     second string argument
 function lua_call_int_2s(lua: null, func: str, a: str, b: str) -> int native mocha_lua_call2s_int;
 
-~~ ── Generic calls: any number of args, any mix of types ──
-~~ Usage: lua_begin_call(lua, "name"), then one lua_push_* per argument in order,
-~~ then lua_end_call_<return>(lua, number_of_args) to run it and get the result.
-~~ Pass the same count you pushed. A wrong count or a missing begin prints a MochaLuaError
-~~ and makes the call fail (check it with lua_call_failed, see the end of this file).
+~~ Generic calls (any number of args, any types): lua_begin_call, 
+~~ then lua_push_* per argument in order, then lua_end_call_<type> with the same count. Check failures with lua_call_failed.
 
 ~~ Starts a call: selects the Lua function to call.
 ~~ @param lua   the Lua state handle
@@ -237,10 +260,8 @@ function lua_end_call_int(lua: null, nargs: int) -> int native mocha_lua_end_cal
 ~~ @param nargs  how many arguments were pushed
 function lua_end_call_bool(lua: null, nargs: int) -> bool native mocha_lua_end_call_bool;
 
-~~ ── Checking if a call failed ──
-~~ After any lua_call_* or lua_end_call_* you can ask if it failed.
-~~ A failed call still returns 0, 0.0 or "", so use these to tell it apart from a real zero.
-~~ The status belongs to the Lua state and is updated by every call.
+~~ Call failure checks. 
+~~ A failed call still returns 0, 0.0 or "", so use these to tell it from a real zero.
 
 ~~ Did the last lua_call_* or lua_end_call_* fail? Returns true if it did.
 ~~ @param lua  the Lua state handle

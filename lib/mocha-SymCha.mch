@@ -1,12 +1,39 @@
+// mocha-lib-deps: mocha-math
+
 """
-mocha-SymCha v0.7 — Symbolic Mathematics Library
-Pure Mocha (almost)
+mocha-SymCha v0.8 — Symbolic Mathematics Library for Mocha
+
+Section 1: Expression Trees (Expr class, constructors such as num, var_e, add,
+           sub, mul, div_e, pow_e, neg, and sin_e / cos_e / ln_e / exp_e etc.)
+Section 2: Differentiation (sym_diff, sym_grad, sym_partial2)
+Section 3: Printing (sym_print with precedence and Unicode superscripts)
+Section 4: Simplification (sym_simplify, sym_simplify_full, sym_equal)
+Section 5: Evaluation (sym_eval)
+Section 6: Integration (sym_antidv indefinite, sym_integral definite)
+Section 7: Limits (sym_limit with L'Hopital, numerical fallback)
+Section 8: Series & Interpolation (sym_taylor, sym_laurent, sym_fourier,
+           sym_chebyshev, sym_lagrange)
+Section 9: Equation Solving (sym_solve, Newton-Raphson)
+
+Notes: There is no parser; build expressions from the constructors, e.g.
+add(pow_e(var_e("x"), num(2.0)), num(1.0)). Trig functions work in radians.
+sym_diff simplifies its result, and sym_print_antidv adds " + C". The
+simplifier is rule-based, not a full CAS, and its log rules assume positive
+arguments (ln(x^2) becomes 2*ln(x)). Integration covers sums, constant
+multiples, linear chains of the basic functions, and x^n times sin, cos, exp
+or ln by parts (up to degree 2, any degree for ln); anything else makes
+sym_integral fall back to Simpson's rule. sym_limit tries direct evaluation,
+then L'Hopital (5 rounds), then a numerical estimate. sym_solve returns one
+root near the starting guess. Unsupported expression kinds stop sym_eval with
+an error.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
 """
 
-from "mocha-math" import *;
-
-function c_print_err(msg: str) -> null native mocha_print_stderr;
-function c_exit(code: int) -> null native mocha_exit;
+local function c_print_err(msg: str) -> null native mocha_print_stderr;
+local function c_exit(code: int) -> null native mocha_exit;
 // =============================================
 // NODE KIND CONSTANTS
 // =============================================
@@ -393,9 +420,9 @@ function sym_print(e: Expr) -> str {
 
         case POW:
             // base needs parens if ADD/SUB/MUL/DIV
-            var pb: str = sym_print_parens(e.left, 4);
+            var pb: str = sym_print_parens(e.left, 5);
             var pe: str = sym_print(e.right);
-            if (e.right.kind == NUM) {
+            if (e.right.kind == NUM && e.right.value == float(int(e.right.value))) {
                 return pb + to_superscript(pe);
             };
             return pb + "^" + pe;
@@ -974,12 +1001,16 @@ function sym_eval(e: Expr, var_name: str, val: float) -> float {
 // =============================================
 
 // ============= HELPER ============== //
-// Returns the coefficient of var_name if expr is linear (ax or ax+b or a)
-// Returns 0.0 if not linear
+function sym_has_var(e: Expr, var_name: str) -> bool {
+    if (e.kind == NUM) { return false; };
+    if (e.kind == VAR) { return e.name == var_name; };
+    if (sym_has_var(e.left, var_name)) { return true; };
+    if (e.right != null) { return sym_has_var(e.right, var_name); };
+    return false;
+};
+
 function linear_coeff(e: Expr, var_name: str) -> float {
-    // just x → coefficient is 1
     if (e.kind == VAR && e.name == var_name) { return 1.0; };
-    // c*x → coefficient is c
     if (e.kind == MUL) {
         if (e.left.kind == NUM && e.right.kind == VAR && e.right.name == var_name) {
             return e.left.value;
@@ -988,12 +1019,13 @@ function linear_coeff(e: Expr, var_name: str) -> float {
             return e.right.value;
         };
     };
-    // ax + b → coefficient is a
     if (e.kind == ADD || e.kind == SUB) {
-        var lc: float = linear_coeff(e.left, var_name);
-        if (lc != 0.0) { return lc; };
-        var rc: float = linear_coeff(e.right, var_name);
-        if (rc != 0.0) { return rc; };
+        if (!sym_has_var(e.right, var_name)) { return linear_coeff(e.left, var_name); };
+        if (!sym_has_var(e.left, var_name)) {
+            var rc: float = linear_coeff(e.right, var_name);
+            if (e.kind == SUB) { return 0.0 - rc; };
+            return rc;
+        };
     };
     return 0.0;
 };
@@ -1083,7 +1115,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
                     if (ibp_func.kind == SIN) {
                         var sin_arg: Expr = ibp_func.left;
                         var sin_a2: float = linear_coeff(sin_arg, var_name);
-                        if (sin_a2 == 0.0) { sin_a2 = 1.0; };
+                        if (sin_a2 == 0.0) { return mul(e, var_e(var_name)); };
                         // ∫x·sin(ax) = -x·cos(ax)/a + sin(ax)/a²
                         return add(
                             div_e(neg(mul(xv, cos_e(sin_arg))), num(sin_a2)),
@@ -1093,7 +1125,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
                     if (ibp_func.kind == COS) {
                         var cos_arg: Expr = ibp_func.left;
                         var cos_a2: float = linear_coeff(cos_arg, var_name);
-                        if (cos_a2 == 0.0) { cos_a2 = 1.0; };
+                        if (cos_a2 == 0.0) { return mul(e, var_e(var_name)); };
                         // ∫x·cos(ax) = x·sin(ax)/a + cos(ax)/a²
                         return add(
                             div_e(mul(xv, sin_e(cos_arg)), num(cos_a2)),
@@ -1103,7 +1135,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
                     if (ibp_func.kind == EXP) {
                         var exp_arg: Expr = ibp_func.left;
                         var exp_a2: float = linear_coeff(exp_arg, var_name);
-                        if (exp_a2 == 0.0) { exp_a2 = 1.0; };
+                        if (exp_a2 == 0.0) { return mul(e, var_e(var_name)); };
                         // ∫x·e^(ax) = x·e^(ax)/a - e^(ax)/a²
                         return sub(
                             div_e(mul(xv, exp_e(exp_arg)), num(exp_a2)),
@@ -1112,7 +1144,7 @@ function sym_antidv(e: Expr, var_name: str) -> Expr {
                     };
                 };
 
-                if (ibp_degree == 2) {
+                if (ibp_degree == 2 && ibp_func.left.kind == VAR && ibp_func.left.name == var_name) {
                     if (ibp_func.kind == SIN) {
                         // ∫x²·sin(x) = -x²cos(x) + 2xsin(x) + 2cos(x)
                         return add(add(neg(mul(ibp_poly, cos_e(xv))), mul(num(2.0), mul(xv, sin_e(xv)))), mul(num(2.0), cos_e(xv)));
@@ -1527,6 +1559,10 @@ function sym_lagrange(xs: float[], ys: float[], n: int, var_name: str) -> Expr {
             if (j != i) {
                 var num_part: Expr = sub(var_e(var_name), num(xs[j]));
                 var den_part: float = xs[i] - xs[j];
+                if (den_part == 0.0) {
+                    c_print_err("MochaLibError (mocha-SymCha): sym_lagrange needs distinct x values.");
+                    c_exit(2);
+                };
                 basis = mul(basis, div_e(num_part, num(den_part)));
             };
             j = j + 1;

@@ -1,20 +1,40 @@
-"""
-    mocha-society — Sociology, Political Science, Anthropology & Socio-Economics Library for Mocha
-
-    Sections:
-    1. Demography
-    2. Social Stratification & Inequality
-    3. Political Science / Electoral Systems
-    4. Social Network Analysis
-    5. Anthropology / Kinship & Cultural Diversity
-    6. Research Methods & Measurement
-    7. Socio-Economic Development
-
-    Part of the Mocha Scientific Library Ecosystem
-    License: Apache 2.0
-"""
-
 // mocha-lib-deps: mocha-math
+
+"""
+mocha-society v0.2 — Sociology, Political Science, Anthropology & Socio-Economics Library for Mocha
+
+Section 1: Demography (growth rates, birth / death / migration rates,
+           dependency ratios, projection)
+Section 2: Social Stratification & Inequality (Gini, Theil, Atkinson, poverty
+           measures, Palma ratio)
+Section 3: Political Science / Electoral Systems (turnout, D'Hondt and
+           Sainte-Lague, effective parties, Gallagher, Banzhaf and
+           Shapley-Shubik for 3 players)
+Section 4: Social Network Analysis (degree, density, clustering, shortest path,
+           closeness, betweenness, homophily)
+Section 5: Anthropology / Kinship & Cultural Diversity (relationship and
+           inbreeding coefficients, Simpson and Shannon diversity, cultural
+           distance)
+Section 6: Research Methods & Measurement (Cronbach's alpha, Cohen's kappa,
+           standard errors, confidence interval, sample size, Cohen's d,
+           Pearson correlation)
+Section 7: Socio-Economic Development (HDI and its sub-indices, GDP growth,
+           elasticity, Engel's coefficient, employment, PPP, misery index)
+
+Notes: Rates are per 1000 unless the name or comment says percent. Growth
+rates are continuous (exponential), not annual compounding. Invalid input
+stops with a MochaLibError. gini_coefficient needs incomes sorted ascending.
+Graph functions take a symmetric 0/1 adjacency matrix (int[][]) for an
+undirected, unweighted graph; closeness needs a connected graph, and betweenness
+is raw, not normalised. The power indices cover exactly 3 players, and the
+confidence interval is the Wald interval, which is poor for proportions near
+0 or 1. Vote and seat shares are fractions for effective_number_of_parties but
+percentages for gallagher_index. The validate_* helpers are exported too.
+
+Part of the Mocha Scientific Library Ecosystem
+License: Apache 2.0
+
+"""
 
 local function c_print_err(msg: str) -> null native mocha_print_stderr;
 local function c_exit(code: int) -> null native mocha_exit;
@@ -425,6 +445,7 @@ function voter_turnout_rate(votes_cast: float, eligible_voters: float) -> float 
 ~~ Seat allocation via D'Hondt highest-averages method.
 ~~ votes = non-empty array of non-negative party vote totals, total_seats >= 0.
 ~~ Returns array of seats per party (same order as input). Divisor sequence: 1,2,3,...
+~~ Ties go to the party that appears first in the array.
 function dhondt_apportionment(votes: float[], total_seats: int) -> int[] {
     var n: int = votes.length;
     if (n == 0) {
@@ -477,6 +498,7 @@ function dhondt_apportionment(votes: float[], total_seats: int) -> int[] {
 ~~ Seat allocation via Sainte-Laguë highest-averages method.
 ~~ votes = non-empty array of non-negative party vote totals, total_seats >= 0.
 ~~ Returns array of seats per party (same order). Divisor sequence: 1,3,5,7,...
+~~ Ties go to the party that appears first in the array.
 function sainte_lague_apportionment(votes: float[], total_seats: int) -> int[] {
     var n: int = votes.length;
     if (n == 0) {
@@ -571,6 +593,16 @@ function gallagher_index(vote_shares: float[], seat_shares: float[]) -> float {
     };
     if (n == 0) {
         c_print_err("MochaLibError (mocha-society): Input arrays cannot be empty.");
+        c_exit(2);
+    };
+    var share_total: float = 0.0;
+    var k: int = 0;
+    while (k < n) {
+        share_total = share_total + vote_shares[k];
+        k++;
+    };
+    if (share_total < 1.5) {
+        c_print_err("MochaLibError (mocha-society): Gallagher shares must be percentages summing to about 100 — did you pass fractions?");
         c_exit(2);
     };
     var sum_sq: float = 0.0;
@@ -722,12 +754,11 @@ function validate_adjacency(adjacency: int[][]) -> int {
 };
 
 ~~ Validates node_index is within bounds.
-function validate_node_index(node_index: int, n: int) -> int {
+function validate_node_index(node_index: int, n: int) -> null {
     if (node_index < 0 || node_index >= n) {
         c_print_err("MochaLibError (mocha-society): Node index out of bounds for this graph.");
         c_exit(2);
     };
-    return node_index;
 };
 
 ~~ Degree of a node — number of edges connected to it.
@@ -862,7 +893,8 @@ function shortest_path_length(adjacency: int[][], source: int, target: int) -> i
     return dist[target];
 };
 
-~~ Closeness centrality — how close a node is to all others. Requires connected graph (n >= 2).
+~~ Closeness centrality — how close a node is to all others.
+~~ Works on disconnected graphs; unreachable pairs are skipped.
 ~~ C(v) = (n-1) / Σ(shortest_path_length(v, i)). Errors if any node is unreachable.
 function closeness_centrality(adjacency: int[][], node_index: int) -> float {
     var n: int = validate_adjacency(adjacency);
