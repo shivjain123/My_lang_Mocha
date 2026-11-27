@@ -36,7 +36,7 @@ function seat_vote_deviation(vote_share: float, seat_share: float) -> float;
 function banzhaf_power_index_3player(w1: float, w2: float, w3: float, quota: float) -> (float, 3);
 function shapley_shubik_power_index_3player(w1: float, w2: float, w3: float, quota: float) -> (float, 3);
 function validate_adjacency(adjacency: int[][]) -> int;
-function validate_node_index(node_index: int, n: int) -> int;
+function validate_node_index(node_index: int, n: int) -> null;
 function node_degree(adjacency: int[][], node_index: int) -> int;
 function degree_centrality(adjacency: int[][], node_index: int) -> float;
 function network_density(adjacency: int[][]) -> float;

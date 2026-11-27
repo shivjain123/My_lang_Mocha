@@ -72,7 +72,6 @@ function sym_has_var(e: Expr, var_name: str) -> bool;
 function linear_coeff(e: Expr, var_name: str) -> float;
 function sym_antidv(e: Expr, var_name: str) -> Expr;
 function sym_print_antidv(e: Expr, var_name: str) -> str;
-function sym_antidv_valid(f: Expr, anti: Expr, var_name: str, a: float, b: float) -> bool;
 function sym_integral(e: Expr, var_name: str, a: float, b: float) -> float;
 function sym_has_div(e: Expr) -> bool;
 function sym_lhopital(orig: Expr, lh_num: Expr, lh_den: Expr, var_name: str, point: float, iter: int) -> float;
